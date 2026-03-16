@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.agents
+.agent
+req.csv
+database.txt
+*.log
