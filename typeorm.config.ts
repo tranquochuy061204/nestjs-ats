@@ -10,6 +10,7 @@ const config: DataSourceOptions = {
   synchronize: false,
   migrationsRun: true,
   migrationsTableName: 'migrations',
+  logging: ['query', 'error'], // Thuật toán bật log query
 };
 
 export const dataSource = new DataSource(config);

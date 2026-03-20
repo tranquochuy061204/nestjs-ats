@@ -61,25 +61,54 @@ export class CandidatesService {
 
   async getProfile(userId: number, reqCandidateId?: number) {
     const where = reqCandidateId ? { id: reqCandidateId } : { userId };
+
+    // 1. Phân tách lấy gốc (Chỉ Join các bảng 1-1 / N-1 để tránh nổ RAM)
     const candidate = await this.candidateRepository.findOne({
       where,
-      relations: [
-        'workExperiences',
-        'educations',
-        'projects',
-        'certificates',
-        'skills',
-        'skills.skillMetadata',
-        'jobCategories',
-        'jobCategories.jobCategory',
-        'jobType',
-      ],
-      relationLoadStrategy: 'query',
+      relations: ['jobType'],
     });
 
     if (!candidate) {
       throw new NotFoundException('Candidate profile not found');
     }
+
+    const [
+      workExperiences,
+      educations,
+      projects,
+      certificates,
+      skills,
+      jobCategories,
+    ] = await Promise.all([
+      this.workExperienceRepository.find({
+        where: { candidateId: candidate.id },
+      }),
+      this.educationRepository.find({
+        where: { candidateId: candidate.id },
+      }),
+      this.projectRepository.find({
+        where: { candidateId: candidate.id },
+      }),
+      this.certificateRepository.find({
+        where: { candidateId: candidate.id },
+      }),
+      this.skillTagRepository.find({
+        where: { candidateId: candidate.id },
+        relations: ['skillMetadata'],
+      }),
+      this.candidateJobCategoryRepository.find({
+        where: { candidateId: candidate.id },
+        relations: ['jobCategory'],
+      }),
+    ]);
+
+    // 3. Gắn Data trả về
+    candidate.workExperiences = workExperiences;
+    candidate.educations = educations;
+    candidate.projects = projects;
+    candidate.certificates = certificates;
+    candidate.skills = skills;
+    candidate.jobCategories = jobCategories;
 
     return candidate;
   }
