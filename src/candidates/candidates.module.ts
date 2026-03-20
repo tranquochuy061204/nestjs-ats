@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CandidatesController } from './candidates.controller';
-import { CandidatesService } from './candidates.service';
+import { CandidateProfileService } from './services/candidate-profile.service';
+import { CandidateExperienceService } from './services/candidate-experience.service';
+import { CandidateSkillsService } from './services/candidate-skills.service';
+import { CandidateCertificatesService } from './services/candidate-certificates.service';
 import { CandidateEntity } from './entities/candidate.entity';
 import { WorkExperienceEntity } from './entities/work-experience.entity';
 import { EducationEntity } from './entities/education.entity';
@@ -33,6 +36,11 @@ import { JobTypeMetadataEntity } from '../metadata/job-types/job-type.entity';
     StorageModule,
   ],
   controllers: [CandidatesController],
-  providers: [CandidatesService],
+  providers: [
+    CandidateProfileService,
+    CandidateExperienceService,
+    CandidateSkillsService,
+    CandidateCertificatesService,
+  ],
 })
 export class CandidatesModule {}

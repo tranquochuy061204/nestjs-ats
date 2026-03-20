@@ -10,7 +10,10 @@ const CreateProjectSchema = z.object({
 });
 
 export class CreateProjectDto extends createZodDto(CreateProjectSchema) {
-  @ApiProperty({ description: 'Tên dự án', example: 'Hệ thống quản lý tuyển dụng' })
+  @ApiProperty({
+    description: 'Tên dự án',
+    example: 'Hệ thống quản lý tuyển dụng',
+  })
   name: string;
 
   @ApiPropertyOptional({

@@ -23,7 +23,10 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
-import { CandidatesService } from './candidates.service';
+import { CandidateProfileService } from './services/candidate-profile.service';
+import { CandidateExperienceService } from './services/candidate-experience.service';
+import { CandidateSkillsService } from './services/candidate-skills.service';
+import { CandidateCertificatesService } from './services/candidate-certificates.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { CreateWorkExperienceDto } from './dto/create-work-experience.dto';
 import { UpdateWorkExperienceDto } from './dto/update-work-experience.dto';
@@ -39,7 +42,12 @@ import type { Request } from 'express';
 
 @Controller('candidates')
 export class CandidatesController {
-  constructor(private readonly candidatesService: CandidatesService) {}
+  constructor(
+    private readonly profileService: CandidateProfileService,
+    private readonly experienceService: CandidateExperienceService,
+    private readonly skillsService: CandidateSkillsService,
+    private readonly certificatesService: CandidateCertificatesService,
+  ) {}
 
   // ─── Profile ────────────────────────────────────────────────
 
@@ -51,7 +59,7 @@ export class CandidatesController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
   getProfile(@Req() req: Request) {
     const user = req.user as { id: number; candidateId?: number };
-    return this.candidatesService.getProfile(user.id, user.candidateId);
+    return this.profileService.getProfile(user.id, user.candidateId);
   }
 
   @ApiTags('Candidates - Profile')
@@ -65,7 +73,7 @@ export class CandidatesController {
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
     const user = req.user as { id: number; email: string; role: string };
-    return this.candidatesService.updateProfile(user.id, updateProfileDto);
+    return this.profileService.updateProfile(user.id, updateProfileDto);
   }
 
   @ApiTags('Candidates - Profile')
@@ -106,7 +114,7 @@ export class CandidatesController {
     file: Express.Multer.File,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.uploadCv(user.id, file);
+    return this.profileService.uploadCv(user.id, file);
   }
 
   // ─── Work Experiences ───────────────────────────────────────
@@ -118,7 +126,7 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Danh sách kinh nghiệm làm việc' })
   getWorkExperiences(@Req() req: Request) {
     const user = req.user as { id: number };
-    return this.candidatesService.getWorkExperiences(user.id);
+    return this.experienceService.getWorkExperiences(user.id);
   }
 
   @ApiTags('Candidates - Work Experiences')
@@ -132,7 +140,7 @@ export class CandidatesController {
     @Body() dto: CreateWorkExperienceDto,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.createWorkExperience(user.id, dto);
+    return this.experienceService.createWorkExperience(user.id, dto);
   }
 
   @ApiTags('Candidates - Work Experiences')
@@ -149,7 +157,7 @@ export class CandidatesController {
     @Body() dto: UpdateWorkExperienceDto,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.updateWorkExperience(user.id, id, dto);
+    return this.experienceService.updateWorkExperience(user.id, id, dto);
   }
 
   @ApiTags('Candidates - Work Experiences')
@@ -165,7 +173,7 @@ export class CandidatesController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.deleteWorkExperience(user.id, id);
+    return this.experienceService.deleteWorkExperience(user.id, id);
   }
 
   // ─── Educations ─────────────────────────────────────────────
@@ -177,7 +185,7 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Danh sách học vấn' })
   getEducations(@Req() req: Request) {
     const user = req.user as { id: number };
-    return this.candidatesService.getEducations(user.id);
+    return this.experienceService.getEducations(user.id);
   }
 
   @ApiTags('Candidates - Educations')
@@ -188,7 +196,7 @@ export class CandidatesController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
   createEducation(@Req() req: Request, @Body() dto: CreateEducationDto) {
     const user = req.user as { id: number };
-    return this.candidatesService.createEducation(user.id, dto);
+    return this.experienceService.createEducation(user.id, dto);
   }
 
   @ApiTags('Candidates - Educations')
@@ -205,7 +213,7 @@ export class CandidatesController {
     @Body() dto: UpdateEducationDto,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.updateEducation(user.id, id, dto);
+    return this.experienceService.updateEducation(user.id, id, dto);
   }
 
   @ApiTags('Candidates - Educations')
@@ -218,7 +226,7 @@ export class CandidatesController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy học vấn' })
   deleteEducation(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
     const user = req.user as { id: number };
-    return this.candidatesService.deleteEducation(user.id, id);
+    return this.experienceService.deleteEducation(user.id, id);
   }
 
   // ─── Projects ─────────────────────────────────────────────
@@ -230,7 +238,7 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Danh sách dự án' })
   getProjects(@Req() req: Request) {
     const user = req.user as { id: number };
-    return this.candidatesService.getProjects(user.id);
+    return this.experienceService.getProjects(user.id);
   }
 
   @ApiTags('Candidates - Projects')
@@ -241,7 +249,7 @@ export class CandidatesController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
   createProject(@Req() req: Request, @Body() dto: CreateProjectDto) {
     const user = req.user as { id: number };
-    return this.candidatesService.createProject(user.id, dto);
+    return this.experienceService.createProject(user.id, dto);
   }
 
   @ApiTags('Candidates - Projects')
@@ -258,7 +266,7 @@ export class CandidatesController {
     @Body() dto: UpdateProjectDto,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.updateProject(user.id, id, dto);
+    return this.experienceService.updateProject(user.id, id, dto);
   }
 
   @ApiTags('Candidates - Projects')
@@ -271,7 +279,7 @@ export class CandidatesController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy dự án' })
   deleteProject(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
     const user = req.user as { id: number };
-    return this.candidatesService.deleteProject(user.id, id);
+    return this.experienceService.deleteProject(user.id, id);
   }
 
   // ─── Certificates ───────────────────────────────────────────
@@ -283,7 +291,7 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Danh sách chứng chỉ' })
   getCertificates(@Req() req: Request) {
     const user = req.user as { id: number };
-    return this.candidatesService.getCertificates(user.id);
+    return this.certificatesService.getCertificates(user.id);
   }
 
   @ApiTags('Candidates - Certificates')
@@ -323,7 +331,7 @@ export class CandidatesController {
     file?: Express.Multer.File,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.createCertificate(user.id, dto, file);
+    return this.certificatesService.createCertificate(user.id, dto, file);
   }
 
   @ApiTags('Candidates - Certificates')
@@ -365,7 +373,7 @@ export class CandidatesController {
     file?: Express.Multer.File,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.updateCertificate(user.id, id, dto, file);
+    return this.certificatesService.updateCertificate(user.id, id, dto, file);
   }
 
   @ApiTags('Candidates - Certificates')
@@ -381,7 +389,7 @@ export class CandidatesController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.deleteCertificate(user.id, id);
+    return this.certificatesService.deleteCertificate(user.id, id);
   }
 
   // ─── Skills ─────────────────────────────────────────────────
@@ -393,7 +401,7 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Danh sách skills' })
   getSkills(@Req() req: Request) {
     const user = req.user as { id: number };
-    return this.candidatesService.getSkills(user.id);
+    return this.skillsService.getSkills(user.id);
   }
 
   @ApiTags('Candidates - Skills')
@@ -406,7 +414,7 @@ export class CandidatesController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
   addSkills(@Req() req: Request, @Body() dto: AddSkillsDto) {
     const user = req.user as { id: number };
-    return this.candidatesService.addSkills(user.id, dto);
+    return this.skillsService.addSkills(user.id, dto);
   }
 
   @ApiTags('Candidates - Skills')
@@ -419,7 +427,7 @@ export class CandidatesController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy skill' })
   deleteSkill(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
     const user = req.user as { id: number };
-    return this.candidatesService.deleteSkill(user.id, id);
+    return this.skillsService.deleteSkill(user.id, id);
   }
 
   // ─── Job Categories ─────────────────────────────────────────
@@ -431,7 +439,7 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Danh sách ngành nghề' })
   getJobCategories(@Req() req: Request) {
     const user = req.user as { id: number };
-    return this.candidatesService.getJobCategories(user.id);
+    return this.skillsService.getJobCategories(user.id);
   }
 
   @ApiTags('Candidates - Job Categories')
@@ -443,7 +451,7 @@ export class CandidatesController {
   @ApiResponse({ status: 201, description: 'Thêm thành công' })
   addJobCategories(@Req() req: Request, @Body() dto: UpdateJobCategoriesDto) {
     const user = req.user as { id: number };
-    return this.candidatesService.addJobCategories(user.id, dto);
+    return this.skillsService.addJobCategories(user.id, dto);
   }
 
   @ApiTags('Candidates - Job Categories')
@@ -459,7 +467,7 @@ export class CandidatesController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     const user = req.user as { id: number };
-    return this.candidatesService.deleteJobCategory(user.id, id);
+    return this.skillsService.deleteJobCategory(user.id, id);
   }
 
   // ─── Job Types ──────────────────────────────────────────────
@@ -469,6 +477,6 @@ export class CandidatesController {
   @ApiOperation({ summary: 'Lấy filter hình thức làm việc' })
   @ApiResponse({ status: 200, description: 'Danh sách hình thức làm việc' })
   getJobTypes() {
-    return this.candidatesService.getJobTypes();
+    return this.skillsService.getJobTypes();
   }
 }
