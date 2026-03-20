@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CandidatesModule } from './candidates/candidates.module';
+import { MetadataModule } from './metadata/metadata.module';
 import config from '../typeorm.config';
 
 @Module({
@@ -15,6 +16,7 @@ import config from '../typeorm.config';
     AuthModule,
     UsersModule,
     CandidatesModule,
+    MetadataModule,
   ],
   controllers: [AppController],
   providers: [AppService],

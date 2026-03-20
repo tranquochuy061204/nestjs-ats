@@ -17,6 +17,9 @@ import { CreateWorkExperienceDto } from './dto/create-work-experience.dto';
 import { UpdateWorkExperienceDto } from './dto/update-work-experience.dto';
 import { CreateEducationDto } from './dto/create-education.dto';
 import { UpdateEducationDto } from './dto/update-education.dto';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { AddSkillsDto } from './dto/add-skills.dto';
 import type { Request } from 'express';
 
 @Controller('candidates')
@@ -149,5 +152,96 @@ export class CandidatesController {
   deleteEducation(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
     const user = req.user as { id: number };
     return this.candidatesService.deleteEducation(user.id, id);
+  }
+
+  // ─── Projects ─────────────────────────────────────────────
+
+  @ApiTags('Candidates - Projects')
+  @Get('projects')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Lấy danh sách dự án' })
+  @ApiResponse({ status: 200, description: 'Danh sách dự án' })
+  getProjects(@Req() req: Request) {
+    const user = req.user as { id: number };
+    return this.candidatesService.getProjects(user.id);
+  }
+
+  @ApiTags('Candidates - Projects')
+  @Post('projects')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Thêm dự án mới' })
+  @ApiResponse({ status: 201, description: 'Tạo thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
+  createProject(@Req() req: Request, @Body() dto: CreateProjectDto) {
+    const user = req.user as { id: number };
+    return this.candidatesService.createProject(user.id, dto);
+  }
+
+  @ApiTags('Candidates - Projects')
+  @Put('projects/:id')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Cập nhật dự án' })
+  @ApiParam({ name: 'id', description: 'ID dự án' })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền sửa' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy dự án' })
+  updateProject(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateProjectDto,
+  ) {
+    const user = req.user as { id: number };
+    return this.candidatesService.updateProject(user.id, id, dto);
+  }
+
+  @ApiTags('Candidates - Projects')
+  @Delete('projects/:id')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Xóa dự án' })
+  @ApiParam({ name: 'id', description: 'ID dự án' })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền xóa' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy dự án' })
+  deleteProject(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    const user = req.user as { id: number };
+    return this.candidatesService.deleteProject(user.id, id);
+  }
+
+  // ─── Skills ─────────────────────────────────────────────────
+
+  @ApiTags('Candidates - Skills')
+  @Get('skills')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Lấy danh sách skills của mình' })
+  @ApiResponse({ status: 200, description: 'Danh sách skills' })
+  getSkills(@Req() req: Request) {
+    const user = req.user as { id: number };
+    return this.candidatesService.getSkills(user.id);
+  }
+
+  @ApiTags('Candidates - Skills')
+  @Post('skills')
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Thêm skills (hỗn hợp ID + string, AI format cho string)',
+  })
+  @ApiResponse({ status: 201, description: 'Thêm thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
+  addSkills(@Req() req: Request, @Body() dto: AddSkillsDto) {
+    const user = req.user as { id: number };
+    return this.candidatesService.addSkills(user.id, dto);
+  }
+
+  @ApiTags('Candidates - Skills')
+  @Delete('skills/:id')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Xóa 1 skill' })
+  @ApiParam({ name: 'id', description: 'ID của candidate_skill_tag' })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền xóa' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy skill' })
+  deleteSkill(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    const user = req.user as { id: number };
+    return this.candidatesService.deleteSkill(user.id, id);
   }
 }

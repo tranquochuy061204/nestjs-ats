@@ -1,0 +1,87 @@
+# API Skills — 2-Phase Approach (v4)
+
+## Tổng quan
+
+```mermaid
+flowchart TD
+    subgraph "Phase 1: Suggestion (khi user đang gõ)"
+        A[User gõ 'Java'] --> B["GET /metadata/skills/search?q=Java"]
+        B --> C["DB: exact + fuzzy"]
+        C --> D["Dropdown: Java, JavaScript"]
+        D --> E["User chọn → có sẵn ID"]
+    end
+
+    subgraph "Phase 2: Submission (khi user nhấn Lưu)"
+        F["POST /candidates/skills<br/>{ skills: [1, 2, 'Typescrist'] }"]
+        F --> G{Số hay Chuỗi?}
+        G -- "Số (ID)" --> H[Lưu trực tiếp, use_count++]
+        G -- "Chuỗi" --> I[Batch gọi AI Gemini]
+        I --> J[Upsert skill_metadata]
+        J --> H2[Lưu candidate_skill_tag]
+        H --> H2
+    end
+```
+
+## Database
+
+### `skill_metadata` (MỚI)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| [id](file:///d:/Workspace/Projects/NestJs-ATS/src/auth/auth.service.ts#63-74) | int PK | Auto-increment |
+| `canonical_name` | varchar(100) UNIQUE | `TypeScript` |
+| `slug` | varchar(100) UNIQUE | `typescript` |
+| `aliases` | jsonb DEFAULT '[]' | `["TS", "Typescript"]` |
+| `type` | enum(`hard`, `soft`) | Phân loại |
+| `use_count` | int DEFAULT 0 | Số lần được chọn |
+| `created_at` | timestamp | |
+
+### `candidate_skill_tag` (đổi schema: `tag_name` → FK)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| [id](file:///d:/Workspace/Projects/NestJs-ATS/src/auth/auth.service.ts#63-74) | int PK | |
+| `candidate_id` | FK → candidate.id | |
+| `skill_metadata_id` | FK → skill_metadata.id | **Thay `tag_name`** |
+
+---
+
+## Proposed Changes
+
+### Module: `metadata` (MỚI — extensible cho các loại metadata khác)
+
+```
+src/metadata/
+├── metadata.module.ts
+├── skills/
+│   ├── skill-metadata.entity.ts
+│   ├── skills-metadata.service.ts    (search, AI format, upsert)
+│   └── skills-metadata.controller.ts (GET /metadata/skills/search)
+```
+
+- `GET /metadata/skills/search?q=...` — autocomplete (public)
+- Sau này có thể thêm `metadata/job-types/`, `metadata/provinces/`...
+
+---
+
+### Module: `candidates` (cập nhật)
+
+#### [NEW] `src/candidates/entities/candidate-skill-tag.entity.ts`
+`candidate_id` + `skill_metadata_id` (FK)
+
+#### [NEW] `src/candidates/dto/add-skills.dto.ts`
+`{ skills: [1, 2, "Typescrist"] }` — mixed ID + string
+
+#### [MODIFY] [candidates.service.ts](file:///d:/Workspace/Projects/NestJs-ATS/src/candidates/candidates.service.ts) / [candidates.controller.ts](file:///d:/Workspace/Projects/NestJs-ATS/src/candidates/candidates.controller.ts)
+3 endpoints: GET, POST, DELETE skills
+
+---
+
+### Config
+- Install `@google/generative-ai`
+- [.env](file:///d:/Workspace/Projects/NestJs-ATS/.env): `GEMINI_API_KEY=...`
+
+## Verification
+- Build OK, migration OK
+- `GET /metadata/skills/search?q=type` → `[{ id, canonicalName, type }]`
+- `POST /candidates/skills { skills: [1, "typescrist"] }` → ID lưu thẳng, string gọi AI

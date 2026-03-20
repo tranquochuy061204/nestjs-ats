@@ -8,11 +8,17 @@ import { Repository } from 'typeorm';
 import { CandidateEntity } from './entities/candidate.entity';
 import { WorkExperienceEntity } from './entities/work-experience.entity';
 import { EducationEntity } from './entities/education.entity';
+import { ProjectEntity } from './entities/project.entity';
+import { CandidateSkillTagEntity } from './entities/candidate-skill-tag.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { CreateWorkExperienceDto } from './dto/create-work-experience.dto';
 import { UpdateWorkExperienceDto } from './dto/update-work-experience.dto';
 import { CreateEducationDto } from './dto/create-education.dto';
 import { UpdateEducationDto } from './dto/update-education.dto';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { AddSkillsDto } from './dto/add-skills.dto';
+import { SkillsMetadataService } from '../metadata/skills/skills-metadata.service';
 
 @Injectable()
 export class CandidatesService {
@@ -23,6 +29,11 @@ export class CandidatesService {
     private readonly workExperienceRepository: Repository<WorkExperienceEntity>,
     @InjectRepository(EducationEntity)
     private readonly educationRepository: Repository<EducationEntity>,
+    @InjectRepository(ProjectEntity)
+    private readonly projectRepository: Repository<ProjectEntity>,
+    @InjectRepository(CandidateSkillTagEntity)
+    private readonly skillTagRepository: Repository<CandidateSkillTagEntity>,
+    private readonly skillsMetadataService: SkillsMetadataService,
   ) {}
 
   async updateProfile(userId: number, updateProfileDto: UpdateProfileDto) {
@@ -163,6 +174,188 @@ export class CandidatesService {
 
     await this.educationRepository.remove(education);
     return { message: 'Education deleted successfully' };
+  }
+
+  // ─── Projects CRUD ──────────────────────────────────────────
+
+  async getProjects(userId: number) {
+    const candidate = await this.findCandidateByUserId(userId);
+    return this.projectRepository.find({
+      where: { candidateId: candidate.id },
+      order: { startDate: 'DESC' },
+    });
+  }
+
+  async createProject(userId: number, dto: CreateProjectDto) {
+    const candidate = await this.findCandidateByUserId(userId);
+    const project = this.projectRepository.create({
+      ...dto,
+      candidateId: candidate.id,
+    });
+    return this.projectRepository.save(project);
+  }
+
+  async updateProject(
+    userId: number,
+    projectId: number,
+    dto: UpdateProjectDto,
+  ) {
+    const candidate = await this.findCandidateByUserId(userId);
+    const project = await this.projectRepository.findOne({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (project.candidateId !== candidate.id) {
+      throw new ForbiddenException(
+        'You do not have permission to update this project',
+      );
+    }
+
+    Object.assign(project, dto);
+    return this.projectRepository.save(project);
+  }
+
+  async deleteProject(userId: number, projectId: number) {
+    const candidate = await this.findCandidateByUserId(userId);
+    const project = await this.projectRepository.findOne({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (project.candidateId !== candidate.id) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this project',
+      );
+    }
+
+    await this.projectRepository.remove(project);
+    return { message: 'Project deleted successfully' };
+  }
+
+  // ─── Skills CRUD ───────────────────────────────────────────
+
+  async getSkills(userId: number) {
+    const candidate = await this.findCandidateByUserId(userId);
+    return this.skillTagRepository.find({
+      where: { candidateId: candidate.id },
+      relations: ['skillMetadata'],
+    });
+  }
+
+  async addSkills(userId: number, dto: AddSkillsDto) {
+    const candidate = await this.findCandidateByUserId(userId);
+    const results: CandidateSkillTagEntity[] = [];
+
+    // Tách IDs và raw strings
+    const ids = dto.skills.filter((s): s is number => typeof s === 'number');
+    const rawStrings = dto.skills.filter(
+      (s): s is string => typeof s === 'string',
+    );
+
+    // Xử lý IDs: lưu trực tiếp + use_count++
+    for (const skillId of ids) {
+      const exists = await this.skillsMetadataService.findById(skillId);
+      if (!exists) continue;
+
+      await this.skillsMetadataService.incrementUseCount(skillId);
+
+      const tag = await this.saveSkillTag(candidate.id, skillId);
+      if (tag) results.push(tag);
+    }
+
+    // Xử lý raw strings: fuzzy search trước → AI fallback
+    const unknowns: string[] = [];
+
+    for (const raw of rawStrings) {
+      const found = await this.skillsMetadataService.findByFuzzy(raw);
+      if (found) {
+        await this.skillsMetadataService.incrementUseCount(found.id);
+        // Thêm alias nếu cách viết khác
+        if (
+          raw.trim() !== found.canonicalName &&
+          !found.aliases.includes(raw.trim())
+        ) {
+          found.aliases = [...found.aliases, raw.trim()];
+          await this.skillsMetadataService.upsertSkill(
+            found.canonicalName,
+            found.type,
+            raw.trim(),
+          );
+        }
+        const tag = await this.saveSkillTag(candidate.id, found.id);
+        if (tag) results.push(tag);
+      } else {
+        unknowns.push(raw);
+      }
+    }
+
+    // Batch gọi AI cho unknowns
+    if (unknowns.length > 0) {
+      const formatted = await this.skillsMetadataService.formatWithAI(unknowns);
+
+      for (let i = 0; i < formatted.length; i++) {
+        const { name, type } = formatted[i];
+        const skill = await this.skillsMetadataService.upsertSkill(
+          name,
+          type,
+          unknowns[i].trim(),
+        );
+        const tag = await this.saveSkillTag(candidate.id, skill.id);
+        if (tag) results.push(tag);
+      }
+    }
+
+    // Load relations cho kết quả
+    return this.skillTagRepository.find({
+      where: { candidateId: candidate.id },
+      relations: ['skillMetadata'],
+    });
+  }
+
+  async deleteSkill(userId: number, skillTagId: number) {
+    const candidate = await this.findCandidateByUserId(userId);
+    const tag = await this.skillTagRepository.findOne({
+      where: { id: skillTagId },
+    });
+
+    if (!tag) {
+      throw new NotFoundException('Skill tag not found');
+    }
+
+    if (tag.candidateId !== candidate.id) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this skill',
+      );
+    }
+
+    await this.skillTagRepository.remove(tag);
+    return { message: 'Skill deleted successfully' };
+  }
+
+  /**
+   * Helper: lưu candidate_skill_tag, bỏ qua nếu trùng (composite unique).
+   */
+  private async saveSkillTag(
+    candidateId: number,
+    skillMetadataId: number,
+  ): Promise<CandidateSkillTagEntity | null> {
+    const existing = await this.skillTagRepository.findOne({
+      where: { candidateId, skillMetadataId },
+    });
+    if (existing) return existing;
+
+    const tag = this.skillTagRepository.create({
+      candidateId,
+      skillMetadataId,
+    });
+    return this.skillTagRepository.save(tag);
   }
 
   // ─── Helpers ────────────────────────────────────────────────
