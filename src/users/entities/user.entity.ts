@@ -7,7 +7,8 @@ import {
   OneToOne,
 } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { CandidateEntity } from './candidate.entity';
+
+import { CandidateEntity } from '../../candidates/entities/candidate.entity';
 
 export enum UserRole {
   ADMIN = 'admin',

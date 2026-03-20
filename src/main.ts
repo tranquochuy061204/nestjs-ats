@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ZodValidationPipe } from 'nestjs-zod';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -10,6 +11,17 @@ async function bootstrap() {
 
   // Áp dụng ZodValidationPipe toàn cục để tự động validate schema
   app.useGlobalPipes(new ZodValidationPipe());
+
+  // Cấu hình Swagger
+  const config = new DocumentBuilder()
+    .setTitle('NestJS ATS API')
+    .setDescription('API documentation for the Applicant Tracking System')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(process.env.PORT ?? 3000);
 }

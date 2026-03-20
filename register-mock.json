@@ -1,0 +1,8 @@
+{
+  "email": "candidate.test@example.com",
+  "password": "password123",
+  "firstName": "Huy",
+  "lastName": "Trần",
+  "phone": "0987654321",
+  "provinceId": 1
+}
