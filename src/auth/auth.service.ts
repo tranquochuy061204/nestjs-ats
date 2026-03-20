@@ -61,7 +61,10 @@ export class AuthService {
   }
 
   async validateUser({ email, password }: LoginDto) {
-    const user = await this.userRepository.findOne({ where: { email } });
+    const user = await this.userRepository.findOne({
+      where: { email },
+      relations: ['candidate'],
+    });
     if (!user) {
       return null;
     }
@@ -77,6 +80,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       role: user.role,
+      ...(user.candidate ? { candidateId: user.candidate.id } : {}),
     });
     return {
       access_token: token,

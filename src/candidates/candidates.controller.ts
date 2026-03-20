@@ -8,8 +8,20 @@ import {
   Post,
   Put,
   Req,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipeBuilder,
+  HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { CandidatesService } from './candidates.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -19,7 +31,10 @@ import { CreateEducationDto } from './dto/create-education.dto';
 import { UpdateEducationDto } from './dto/update-education.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { CreateCertificateDto } from './dto/create-certificate.dto';
+import { UpdateCertificateDto } from './dto/update-certificate.dto';
 import { AddSkillsDto } from './dto/add-skills.dto';
+import { UpdateJobCategoriesDto } from './dto/update-job-categories.dto';
 import type { Request } from 'express';
 
 @Controller('candidates')
@@ -27,6 +42,17 @@ export class CandidatesController {
   constructor(private readonly candidatesService: CandidatesService) {}
 
   // ─── Profile ────────────────────────────────────────────────
+
+  @ApiTags('Candidates - Profile')
+  @Get('profile')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Lấy toàn bộ hồ sơ ứng viên' })
+  @ApiResponse({ status: 200, description: 'Toàn bộ hồ sơ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
+  getProfile(@Req() req: Request) {
+    const user = req.user as { id: number; candidateId?: number };
+    return this.candidatesService.getProfile(user.id, user.candidateId);
+  }
 
   @ApiTags('Candidates - Profile')
   @Put('profile')
@@ -40,6 +66,47 @@ export class CandidatesController {
   ) {
     const user = req.user as { id: number; email: string; role: string };
     return this.candidatesService.updateProfile(user.id, updateProfileDto);
+  }
+
+  @ApiTags('Candidates - Profile')
+  @Post('cv')
+  @ApiAuth()
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload CV (PDF) Ứng viên' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'File CV dạng PDF',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Upload CV thành công' })
+  @ApiResponse({ status: 400, description: 'File không hợp lệ' })
+  uploadCv(
+    @Req() req: Request,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({
+          fileType: 'pdf',
+        })
+        .addMaxSizeValidator({
+          maxSize: 5 * 1024 * 1024, // 5MB limit
+        })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const user = req.user as { id: number };
+    return this.candidatesService.uploadCv(user.id, file);
   }
 
   // ─── Work Experiences ───────────────────────────────────────
@@ -207,6 +274,116 @@ export class CandidatesController {
     return this.candidatesService.deleteProject(user.id, id);
   }
 
+  // ─── Certificates ───────────────────────────────────────────
+
+  @ApiTags('Candidates - Certificates')
+  @Get('certificates')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Lấy danh sách chứng chỉ' })
+  @ApiResponse({ status: 200, description: 'Danh sách chứng chỉ' })
+  getCertificates(@Req() req: Request) {
+    const user = req.user as { id: number };
+    return this.candidatesService.getCertificates(user.id);
+  }
+
+  @ApiTags('Candidates - Certificates')
+  @Post('certificates')
+  @ApiAuth()
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Thêm chứng chỉ mới (có thể upload ảnh)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: 'Ảnh chứng chỉ (jpeg, png)',
+        },
+      },
+      required: ['name'],
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Tạo thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
+  createCertificate(
+    @Req() req: Request,
+    @Body() dto: CreateCertificateDto,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({ fileType: /(jpg|jpeg|png)$/ })
+        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          fileIsRequired: false,
+        }),
+    )
+    file?: Express.Multer.File,
+  ) {
+    const user = req.user as { id: number };
+    return this.candidatesService.createCertificate(user.id, dto, file);
+  }
+
+  @ApiTags('Candidates - Certificates')
+  @Put('certificates/:id')
+  @ApiAuth()
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Cập nhật chứng chỉ (có thể upload lại ảnh)' })
+  @ApiParam({ name: 'id', description: 'ID chứng chỉ' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: 'Ảnh chứng chỉ (jpeg, png)',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền sửa' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy chứng chỉ' })
+  updateCertificate(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateCertificateDto,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({ fileType: /(jpg|jpeg|png)$/ })
+        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          fileIsRequired: false,
+        }),
+    )
+    file?: Express.Multer.File,
+  ) {
+    const user = req.user as { id: number };
+    return this.candidatesService.updateCertificate(user.id, id, dto, file);
+  }
+
+  @ApiTags('Candidates - Certificates')
+  @Delete('certificates/:id')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Xóa chứng chỉ' })
+  @ApiParam({ name: 'id', description: 'ID chứng chỉ' })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền xóa' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy chứng chỉ' })
+  deleteCertificate(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const user = req.user as { id: number };
+    return this.candidatesService.deleteCertificate(user.id, id);
+  }
+
   // ─── Skills ─────────────────────────────────────────────────
 
   @ApiTags('Candidates - Skills')
@@ -243,5 +420,55 @@ export class CandidatesController {
   deleteSkill(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
     const user = req.user as { id: number };
     return this.candidatesService.deleteSkill(user.id, id);
+  }
+
+  // ─── Job Categories ─────────────────────────────────────────
+
+  @ApiTags('Candidates - Job Categories')
+  @Get('job-categories')
+  @ApiAuth()
+  @ApiOperation({ summary: 'Lấy danh sách các ngành nghề ứng viên đã chọn' })
+  @ApiResponse({ status: 200, description: 'Danh sách ngành nghề' })
+  getJobCategories(@Req() req: Request) {
+    const user = req.user as { id: number };
+    return this.candidatesService.getJobCategories(user.id);
+  }
+
+  @ApiTags('Candidates - Job Categories')
+  @Post('job-categories')
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Thêm ngành nghề cho ứng viên',
+  })
+  @ApiResponse({ status: 201, description: 'Thêm thành công' })
+  addJobCategories(@Req() req: Request, @Body() dto: UpdateJobCategoriesDto) {
+    const user = req.user as { id: number };
+    return this.candidatesService.addJobCategories(user.id, dto);
+  }
+
+  @ApiTags('Candidates - Job Categories')
+  @Delete('job-categories/:id')
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Xóa 1 ngành nghề (truyền ID của bảng candidate_job_category)',
+  })
+  @ApiParam({ name: 'id', description: 'ID' })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  deleteJobCategory(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const user = req.user as { id: number };
+    return this.candidatesService.deleteJobCategory(user.id, id);
+  }
+
+  // ─── Job Types ──────────────────────────────────────────────
+
+  @ApiTags('Candidates - Job Types')
+  @Get('job-types')
+  @ApiOperation({ summary: 'Lấy filter hình thức làm việc' })
+  @ApiResponse({ status: 200, description: 'Danh sách hình thức làm việc' })
+  getJobTypes() {
+    return this.candidatesService.getJobTypes();
   }
 }

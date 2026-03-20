@@ -3,9 +3,18 @@ import {
   Column,
   Entity,
   JoinColumn,
+  ManyToOne,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { CertificateEntity } from './certificate.entity';
+import { CandidateJobCategoryEntity } from './candidate-job-category.entity';
+import { JobTypeMetadataEntity } from '../../metadata/job-types/job-type.entity';
+import { WorkExperienceEntity } from './work-experience.entity';
+import { EducationEntity } from './education.entity';
+import { ProjectEntity } from './project.entity';
+import { CandidateSkillTagEntity } from './candidate-skill-tag.entity';
 
 @Entity('candidate')
 export class CandidateEntity {
@@ -60,10 +69,32 @@ export class CandidateEntity {
   @Column({ name: 'job_type_id', type: 'int', nullable: true })
   jobTypeId: number;
 
+  @ManyToOne(() => JobTypeMetadataEntity)
+  @JoinColumn({ name: 'job_type_id' })
+  jobType: JobTypeMetadataEntity;
+
   @Column({ name: 'year_working_experience', type: 'int', nullable: true })
   yearWorkingExperience: number;
 
   @OneToOne(() => UserEntity, (user) => user.candidate, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: UserEntity;
+
+  @OneToMany(() => CertificateEntity, (cert) => cert.candidate)
+  certificates: CertificateEntity[];
+
+  @OneToMany(() => CandidateJobCategoryEntity, (cjc) => cjc.candidate)
+  jobCategories: CandidateJobCategoryEntity[];
+
+  @OneToMany(() => WorkExperienceEntity, (we) => we.candidate)
+  workExperiences: WorkExperienceEntity[];
+
+  @OneToMany(() => EducationEntity, (edu) => edu.candidate)
+  educations: EducationEntity[];
+
+  @OneToMany(() => ProjectEntity, (proj) => proj.candidate)
+  projects: ProjectEntity[];
+
+  @OneToMany(() => CandidateSkillTagEntity, (skill) => skill.candidate)
+  skills: CandidateSkillTagEntity[];
 }

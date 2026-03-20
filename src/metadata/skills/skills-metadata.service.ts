@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SkillMetadataEntity, SkillType } from './skill-metadata.entity';
@@ -87,22 +87,23 @@ export class SkillsMetadataService {
 
     try {
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-flash',
       });
 
-      const prompt = `You are a skill name standardizer for a job recruitment system.
-Given these raw skill names, return a JSON array with the corrected/standardized name and type (hard or soft).
+      const prompt = `You are a skill name standardizer for an ATS (Applicant Tracking System).
+Your task is to correct typos, normalize casing, and standardize the given raw skill names into their official, widely-accepted canonical forms.
 
 Rules:
-- Fix typos (e.g., "typescrist" -> "TypeScript", "nodejs" -> "Node.js", "react js" -> "React")
-- Use the most common official/canonical name
-- Trim whitespace
-- Classify as "hard" (technical) or "soft" (interpersonal: communication, teamwork, etc.)
+1. STRICTLY fix typographical errors (e.g., "javaspit" -> "JavaScript", "typescrist" -> "TypeScript", "nodejs" -> "Node.js", "comunication" -> "Communication").
+2. Use the exact official capitalization (e.g., "JavaScript", "Node.js", "Python", "React", "Vue.js", "C++").
+3. Classify each skill strictly as "hard" (technical skills) or "soft" (interpersonal skills).
+4. You must output exactly the same number of skills as the input.
 
-Input: ${JSON.stringify(rawSkills)}
+Input array of raw skills:
+${JSON.stringify(rawSkills)}
 
-Return ONLY a valid JSON array, no markdown, no explanation:
-[{"name": "TypeScript", "type": "hard"}]`;
+Return ONLY a valid JSON array, no markdown blocks (\`\`\`json) and no explanation. Example:
+[{"name": "JavaScript", "type": "hard"}]`;
 
       const result = await model.generateContent(prompt);
       const text = result.response.text().trim();
@@ -186,6 +187,26 @@ Return ONLY a valid JSON array, no markdown, no explanation:
    */
   async findById(id: number) {
     return this.skillMetadataRepository.findOne({ where: { id } });
+  }
+
+  /**
+   * Find multiple by IDs.
+   */
+  async findByIds(ids: number[]) {
+    if (!ids || ids.length === 0) return [];
+    return this.skillMetadataRepository.find({ where: { id: In(ids) } });
+  }
+
+  /**
+   * Tăng use_count cho nhiều skills.
+   */
+  async incrementUseCountBulk(ids: number[]) {
+    if (!ids || ids.length === 0) return;
+    await this.skillMetadataRepository.increment(
+      { id: In(ids) },
+      'useCount',
+      1,
+    );
   }
 
   /**

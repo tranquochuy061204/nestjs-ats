@@ -15,7 +15,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   // Passport decode token xong → truyền payload vào đây
   // Giá trị return sẽ được gắn vào req.user
-  validate(payload: { id: number; email: string; role: string }) {
-    return { id: payload.id, email: payload.email, role: payload.role };
+  validate(payload: {
+    id: number;
+    email: string;
+    role: string;
+    candidateId?: number;
+  }) {
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+      candidateId: payload.candidateId,
+    };
   }
 }
