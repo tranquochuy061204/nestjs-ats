@@ -1,5 +1,11 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Query, Param } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiParam,
+} from '@nestjs/swagger';
 import { ProvincesService } from './provinces.service';
 
 @ApiTags('Metadata - Provinces')
@@ -28,5 +34,18 @@ export class ProvincesController {
       return this.provincesService.findAll();
     }
     return this.provincesService.search(q);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Lấy thông tin một tỉnh / thành phố theo ID' })
+  @ApiParam({
+    name: 'id',
+    description: 'Mã tỉnh / thành phố (code)',
+    example: '01',
+  })
+  @ApiResponse({ status: 200, description: 'Thông tin tỉnh / thành phố' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy tỉnh / thành phố' })
+  findOne(@Param('id') id: string) {
+    return this.provincesService.findOne(id);
   }
 }

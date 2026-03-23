@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProvinceMetadataEntity } from './province.entity';
@@ -28,5 +28,15 @@ export class ProvincesService {
       .orWhere('LOWER(province.slug) LIKE :q', { q: `%${trimmed}%` })
       .orderBy('province.name', 'ASC')
       .getMany();
+  }
+
+  async findOne(id: string): Promise<ProvinceMetadataEntity> {
+    const province = await this.provinceRepository.findOne({
+      where: { code: id },
+    });
+    if (!province) {
+      throw new NotFoundException(`Province with ID ${id} not found`);
+    }
+    return province;
   }
 }
