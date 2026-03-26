@@ -12,6 +12,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { RegisterEmployerDto } from './dto/register-employer.dto';
 import { LoginDto } from './dto/login.dto';
 import { LocalAuthGuard } from './guards/local.guard';
 import { UseGuards } from '@nestjs/common';
@@ -29,6 +30,15 @@ export class AuthController {
   @ApiResponse({ status: 409, description: 'Email đã được sử dụng' })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @Post('employer/register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Đăng ký tài khoản Nhà tuyển dụng (HR)' })
+  @ApiResponse({ status: 201, description: 'Đăng ký thành công' })
+  @ApiResponse({ status: 409, description: 'Email đã được sử dụng' })
+  async registerEmployer(@Body() dto: RegisterEmployerDto) {
+    return this.authService.registerEmployer(dto);
   }
 
   @Post('login')

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity, UserRole } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
+import { RegisterEmployerDto } from './dto/register-employer.dto';
 import { CandidateEntity } from '../candidates/entities/candidate.entity';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
@@ -56,6 +57,34 @@ export class AuthService {
         fullName: candidate.fullName,
         phone: candidate.phone,
         provinceId: candidate.provinceId,
+      },
+    };
+  }
+
+  async registerEmployer(dto: RegisterEmployerDto) {
+    const { email, password } = dto;
+
+    const existingUser = await this.userRepository.findOne({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('Email đã được sử dụng');
+    }
+
+    const user = this.userRepository.create({
+      email,
+      password,
+      role: UserRole.EMPLOYER,
+    });
+    const savedUser = await this.userRepository.save(user);
+
+    return {
+      message: 'Tài khoản Employer được tạo thành công',
+      user: {
+        id: savedUser.id,
+        email: savedUser.email,
+        role: savedUser.role,
       },
     };
   }

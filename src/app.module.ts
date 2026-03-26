@@ -8,6 +8,8 @@ import { UsersModule } from './users/users.module';
 import { CandidatesModule } from './candidates/candidates.module';
 import { MetadataModule } from './metadata/metadata.module';
 import { StorageModule } from './storage/storage.module';
+import { EmployersModule } from './employers/employers.module';
+import { CompaniesModule } from './companies/companies.module';
 import config from '../typeorm.config';
 
 @Module({
@@ -19,6 +21,8 @@ import config from '../typeorm.config';
     CandidatesModule,
     MetadataModule,
     StorageModule,
+    EmployersModule,
+    CompaniesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
