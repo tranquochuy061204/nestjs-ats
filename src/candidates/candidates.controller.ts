@@ -117,6 +117,41 @@ export class CandidatesController {
     return this.profileService.uploadCv(user.id, file);
   }
 
+  @ApiTags('Candidates - Profile')
+  @Post('avatar')
+  @ApiAuth()
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload ảnh đại diện (Avatar) Ứng viên' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Ảnh đại diện (jpg, jpeg, png)',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Upload avatar thành công' })
+  @ApiResponse({ status: 400, description: 'File không hợp lệ' })
+  uploadAvatar(
+    @Req() req: Request,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({ fileType: /(jpg|jpeg|png)$/ })
+        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 })
+        .build({ errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const user = req.user as { id: number };
+    return this.profileService.uploadAvatar(user.id, file);
+  }
+
   // ─── Work Experiences ───────────────────────────────────────
 
   @ApiTags('Candidates - Work Experiences')

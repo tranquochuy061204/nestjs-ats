@@ -132,6 +132,45 @@ export class CandidateProfileService {
     }
   }
 
+  async uploadAvatar(userId: number, file: Express.Multer.File) {
+    const candidate = await this.findCandidateByUserId(userId);
+
+    const ext = file.originalname.split('.').pop() ?? 'jpg';
+    const filePath = `candidates/${userId}/avatar_${Date.now()}.${ext}`;
+    const publicUrl = await this.supabaseService.uploadFile(file, filePath);
+
+    try {
+      const oldAvatarUrl = candidate.avatarUrl;
+      candidate.avatarUrl = publicUrl;
+      await this.candidateRepository.save(candidate);
+
+      // Orphan Fix: If save succeeds, try to delete the old avatar
+      if (oldAvatarUrl) {
+        try {
+          const urlParts = oldAvatarUrl.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+          await this.supabaseService.deleteFile(
+            `candidates/${userId}/${fileName}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Error deleting old avatar: ${(error as Error).message}`,
+            (error as Error).stack,
+          );
+        }
+      }
+
+      return { avatarUrl: publicUrl };
+    } catch (dbError) {
+      // Orphan Fix: If save fails, delete the newly uploaded file
+      this.logger.error(
+        `Failed to save candidate, deleting orphaned avatar...`,
+      );
+      await this.supabaseService.deleteFile(filePath).catch(() => null);
+      throw dbError;
+    }
+  }
+
   private async findCandidateByUserId(userId: number) {
     const candidate = await this.candidateRepository.findOne({
       where: { userId },

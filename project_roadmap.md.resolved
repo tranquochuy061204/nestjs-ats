@@ -1,0 +1,57 @@
+# 🗺️ Master Roadmap: Đồ án KLTN_ATS
+
+Dựa trên toàn bộ cấu trúc và tài liệu tham khảo bạn cấp ("Xây dựng ứng dụng Tuyển dụng và Tìm việc làm"), đây là **Bức tranh Toàn cảnh (Master Plan)** cho toàn bộ khóa luận. Lộ trình được chia thành 5 Giai đoạn (Phases) tuân thủ đúng quy trình nghiệp vụ thực tế của một nền tảng ATS (Applicant Tracking System).
+
+---
+
+## 🟢 Phase 1: Nền tảng & Hệ sinh thái User (Đã/Đang Hoàn Tất)
+Xây dựng gốc rễ dữ liệu và cơ chế Authentication đa luồng.
+
+1. **Authentication:** Đăng ký/Đăng nhập phân quyền Roles (Admin, Candidate, Employer) qua JWT.
+2. **Metadata API:** API Tỉnh/Thành phố, Ngành nghề, Kỹ năng, Hình thức làm việc.
+3. **Quản lý Hồ sơ Ứng Viên (Candidate):** Thông tin cá nhân, Học vấn, Kinh nghiệm, Kỹ năng cứng/mềm, và Upload CV PDF (Supabase).
+4. **Quản lý Thương hiệu (Context Hiện tại):** Setup Company Profile, HR Profile, Upload Logo/Gallery môi trường làm việc.
+
+---
+
+## 🟡 Phase 2: Đăng tin Tuyển dụng & Kiểm duyệt (Sắp làm)
+Đây là giai đoạn kết nối Cầu (Nhà tuyển dụng) đưa thông tin lên Chợ (Job Board).
+
+1. **CRUD Job Post (HR):** Đăng tải tin tuyển dụng (`số lượng`, `trình độ`, `salary_min`, `salary_max`, `kinh nghiệm`, `is_urgent`). Trạng thái ban đầu: `Pending`.
+2. **Moderation (Admin):** Màn hình duyệt tin. Admin duyệt (`Approved`), hoặc từ chối (`Rejected` - kèm lý do vi phạm tiêu chuẩn cộng đồng).
+3. **Public Job Board (Candidate):** Trang chủ chứa các Tin đã được duyệt. Xây dựng công cụ Tìm kiếm / Lọc (Filter by Category, Province, Mức lương).
+
+---
+
+## 🟠 Phase 3: Tracking Hồ sơ & Ứng tuyển (Core Business)
+Tính năng cốt lõi nhất của hệ thống: Mang CV của Ứng viên tới tận tay Nhà Tuyển Dụng.
+
+1. **Apply to Job (Candidate):** Ứng viên bấm "Nộp đơn". Hành động này tạo một Record vào bảng `job_applications` (Đính kèm file CV PDF hoặc CV Online tạo từ web tải lên).
+2. **Tracking Board (Employer):** UI dạng Bảng Kanban (`Trạng thái: Mới nộp, Đã Xem, Hẹn Phỏng Vấn, Loại, Đã Tuyển`), giúp HR kéo thả đánh giá hồ sơ.
+3. **My Applications (Candidate):** Màn hình để Ứng viên biết CV của mình đã được phía Công ty mở ra xem hay chưa.
+
+---
+
+## 🔴 Phase 4: Sàng lọc Tự động & AI (Điểm Nhấn Khóa Luận)
+Giai đoạn tăng cường giá trị công nghệ, thể hiện rõ tính chất của 1 hệ thống ATS chứ không phải trang rao vặt.
+
+1. **Auto-Scoring (Chấm điểm CV cơ bản):** Viết script matching các Keyword kỹ năng cứng của CV Ứng viên so với Yêu cầu của Job.
+2. **AI Strict Filter (Nếu đồ án có yêu cầu NLP):** Flag `is_ai_strict_filter`. Gọi external API (như Gemini or OpenAI) phân tích nội dung Text trong PDF CV để đưa ra % độ phù hợp (Match Percentage).
+3. **Schedule Interview:** Tích hợp tính năng set Lịch phỏng vấn (tạo link Meet, gửi Email cho ứng viên bằng Nodemailer/Resend).
+
+---
+
+## 🟣 Phase 5: Thời gian Thực, Thống kê & Báo Cáo
+Giai đoạn làm "Đẹp" và "Mượt" trải nghiệm người dùng cuối.
+
+1. **Real-time Notifications:** Dùng Socket.io (hoặc Server-Sent Events). 
+   - *Báo cho Ứng viên khi HR thay đổi trạng thái hồ sơ.*
+   - *Báo cho HR khi có người mới Apply.*
+2. **Dashboard (Admin & Employer):** Chart báo cáo:
+   - *Biểu đồ số lượng Tin tuyển dụng.*
+   - *Biểu đồ lượng ứng viên Apply theo tháng.*
+   - *Tỉ lệ trúng tuyển.*
+3. **Favorite / Lưu Tin (Ứng viên):** Tính năng Bookmark lưu lại các cơ hội việc làm để nộp sau.
+
+---
+> **Trạng thái hiện tại:** Hệ thống đang đứng vững ở chóp cuối của **Phase 1** và hoàn toàn sẵn sàng tiến vào **Phase 2 (Đăng tin)**. Bạn thấy lộ trình này đã bao phủ đủ yêu cầu của giáo viên hướng dẫn chưa?
