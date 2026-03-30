@@ -10,6 +10,7 @@ import { MetadataModule } from './metadata/metadata.module';
 import { StorageModule } from './storage/storage.module';
 import { EmployersModule } from './employers/employers.module';
 import { CompaniesModule } from './companies/companies.module';
+import { JobsModule } from './jobs/jobs.module';
 import config from '../typeorm.config';
 
 @Module({
@@ -23,6 +24,7 @@ import config from '../typeorm.config';
     StorageModule,
     EmployersModule,
     CompaniesModule,
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
