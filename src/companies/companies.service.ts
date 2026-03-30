@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,6 +13,7 @@ import { SupabaseService } from '../storage/supabase.service';
 
 @Injectable()
 export class CompaniesService {
+  private readonly logger = new Logger(CompaniesService.name);
   constructor(
     @InjectRepository(CompanyEntity)
     private readonly companyRepo: Repository<CompanyEntity>,
@@ -51,13 +53,31 @@ export class CompaniesService {
     const company = await this.getCompanyByUser(userId);
 
     const originalName = file.originalname.replace(/\s+/g, '_');
-    const path = `companies/logos/${company.id}-${Date.now()}-${originalName}`;
-    const logoUrl = await this.supabaseService.uploadFile(file, path);
+    const filePath = `companies/logos/${company.id}-${Date.now()}-${originalName}`;
+    const logoUrl = await this.supabaseService.uploadFile(file, filePath);
 
-    company.logoUrl = logoUrl;
-    await this.companyRepo.save(company);
+    try {
+      const oldLogoUrl = company.logoUrl;
+      company.logoUrl = logoUrl;
+      await this.companyRepo.save(company);
 
-    return { message: 'Upload logo thành công', logoUrl };
+      // Orphan Fix: delete old logo after successful save
+      if (oldLogoUrl) {
+        const fileName = oldLogoUrl.split('/').pop();
+        await this.supabaseService
+          .deleteFile(`companies/logos/${fileName}`)
+          .catch((e: Error) =>
+            this.logger.error(`Error deleting old logo: ${e.message}`),
+          );
+      }
+
+      return { message: 'Upload logo thành công', logoUrl };
+    } catch (dbError) {
+      // Orphan Fix: DB failed → delete newly uploaded file
+      this.logger.error(`Failed to save company, deleting orphaned logo...`);
+      await this.supabaseService.deleteFile(filePath).catch(() => null);
+      throw dbError;
+    }
   }
 
   async uploadBanner(userId: number, file: Express.Multer.File) {
@@ -65,13 +85,31 @@ export class CompaniesService {
     const company = await this.getCompanyByUser(userId);
 
     const originalName = file.originalname.replace(/\s+/g, '_');
-    const path = `companies/banners/${company.id}-${Date.now()}-${originalName}`;
-    const bannerUrl = await this.supabaseService.uploadFile(file, path);
+    const filePath = `companies/banners/${company.id}-${Date.now()}-${originalName}`;
+    const bannerUrl = await this.supabaseService.uploadFile(file, filePath);
 
-    company.bannerUrl = bannerUrl;
-    await this.companyRepo.save(company);
+    try {
+      const oldBannerUrl = company.bannerUrl;
+      company.bannerUrl = bannerUrl;
+      await this.companyRepo.save(company);
 
-    return { message: 'Upload banner thành công', bannerUrl };
+      // Orphan Fix: delete old banner after successful save
+      if (oldBannerUrl) {
+        const fileName = oldBannerUrl.split('/').pop();
+        await this.supabaseService
+          .deleteFile(`companies/banners/${fileName}`)
+          .catch((e: Error) =>
+            this.logger.error(`Error deleting old banner: ${e.message}`),
+          );
+      }
+
+      return { message: 'Upload banner thành công', bannerUrl };
+    } catch (dbError) {
+      // Orphan Fix: DB failed → delete newly uploaded file
+      this.logger.error(`Failed to save company, deleting orphaned banner...`);
+      await this.supabaseService.deleteFile(filePath).catch(() => null);
+      throw dbError;
+    }
   }
 
   async uploadCompanyImages(userId: number, files: Express.Multer.File[]) {
@@ -81,17 +119,34 @@ export class CompaniesService {
     const company = await this.getCompanyByUser(userId);
 
     const uploadedImages = [];
+    // Track all uploaded paths for orphan cleanup if a DB save fails mid-batch
+    const uploadedPaths: string[] = [];
+
     for (const file of files) {
       const originalName = file.originalname.replace(/\s+/g, '_');
-      const path = `companies/images/${company.id}-${Date.now()}-${originalName}`;
-      const imageUrl = await this.supabaseService.uploadFile(file, path);
+      const filePath = `companies/images/${company.id}-${Date.now()}-${originalName}`;
+      const imageUrl = await this.supabaseService.uploadFile(file, filePath);
+      uploadedPaths.push(filePath);
 
-      const newImage = this.companyImageRepo.create({
-        companyId: company.id,
-        imageUrl,
-      });
-      const savedImage = await this.companyImageRepo.save(newImage);
-      uploadedImages.push(savedImage);
+      try {
+        const newImage = this.companyImageRepo.create({
+          companyId: company.id,
+          imageUrl,
+        });
+        const savedImage = await this.companyImageRepo.save(newImage);
+        uploadedImages.push(savedImage);
+      } catch (dbError) {
+        // Orphan Fix: DB failed → delete ALL files uploaded in this batch
+        this.logger.error(
+          `Failed to save image record, deleting ${uploadedPaths.length} orphaned file(s)...`,
+        );
+        await Promise.all(
+          uploadedPaths.map((p) =>
+            this.supabaseService.deleteFile(p).catch(() => null),
+          ),
+        );
+        throw dbError;
+      }
     }
 
     return {

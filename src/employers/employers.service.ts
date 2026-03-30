@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -14,6 +15,7 @@ import { SupabaseService } from '../storage/supabase.service';
 
 @Injectable()
 export class EmployersService {
+  private readonly logger = new Logger(EmployersService.name);
   constructor(
     @InjectRepository(EmployerEntity)
     private readonly employerRepo: Repository<EmployerEntity>,
@@ -119,15 +121,30 @@ export class EmployersService {
     }
 
     const originalName = file.originalname.replace(/\s+/g, '_');
-    const path = `employers/avatars/${userId}-${Date.now()}-${originalName}`;
-    const avatarUrl = await this.supabaseService.uploadFile(file, path);
+    const filePath = `employers/avatars/${userId}-${Date.now()}-${originalName}`;
+    const avatarUrl = await this.supabaseService.uploadFile(file, filePath);
 
-    employer.avatarUrl = avatarUrl;
-    await this.employerRepo.save(employer);
+    try {
+      const oldAvatarUrl = employer.avatarUrl;
+      employer.avatarUrl = avatarUrl;
+      await this.employerRepo.save(employer);
 
-    return {
-      message: 'Cập nhật ảnh đại diện thành công',
-      avatarUrl,
-    };
+      // Orphan Fix: delete old avatar after successful save
+      if (oldAvatarUrl) {
+        const fileName = oldAvatarUrl.split('/').pop();
+        await this.supabaseService
+          .deleteFile(`employers/avatars/${fileName}`)
+          .catch((e: Error) =>
+            this.logger.error(`Error deleting old avatar: ${e.message}`),
+          );
+      }
+
+      return { message: 'Cập nhật ảnh đại diện thành công', avatarUrl };
+    } catch (dbError) {
+      // Orphan Fix: DB failed → delete newly uploaded file
+      this.logger.error(`Failed to save employer, deleting orphaned avatar...`);
+      await this.supabaseService.deleteFile(filePath).catch(() => null);
+      throw dbError;
+    }
   }
 }
