@@ -17,7 +17,9 @@ import { JobSkillTagEntity } from './job-skill-tag.entity';
 
 export enum JobStatus {
   DRAFT = 'draft',
+  PENDING = 'pending',
   PUBLISHED = 'published',
+  REJECTED = 'rejected',
   CLOSED = 'closed',
 }
 
@@ -70,6 +72,9 @@ export class JobEntity {
 
   @Column({ type: 'int', nullable: true })
   slots: number;
+
+  @Column({ name: 'rejection_reason', type: 'text', nullable: true })
+  rejectionReason: string | null;
 
   @Column({ type: 'timestamp', nullable: true })
   deadline: Date;

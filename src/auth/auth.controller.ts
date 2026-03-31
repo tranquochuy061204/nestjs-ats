@@ -57,6 +57,17 @@ export class AuthController {
     }
     return this.authService.login(user);
   }
+  @Post('admin/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đăng nhập Quản trị viên (Dedicated Endpoint)' })
+  @ApiResponse({ status: 200, description: 'Đăng nhập thành công' })
+  @ApiResponse({
+    status: 401,
+    description: 'Không có quyền truy cập hoặc sai thông tin',
+  })
+  async adminLogin(@Body() loginDto: LoginDto) {
+    return this.authService.loginAdmin(loginDto);
+  }
 
   @Get('status')
   @ApiAuth()

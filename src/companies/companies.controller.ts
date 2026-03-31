@@ -134,4 +134,29 @@ export class CompaniesController {
     const user = req.user as { id: number };
     return this.companiesService.deleteCompanyImage(user.id, id);
   }
+
+  @Post('business-license')
+  @ApiAuth(UserRole.EMPLOYER)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload Giấy phép kinh doanh để xác thực công ty' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  uploadBusinessLicense(
+    @Req() req: Request,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({ fileType: /(jpg|jpeg|png|pdf)$/ })
+        .addMaxSizeValidator({ maxSize: 10 * 1024 * 1024 })
+        .build({ errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const user = req.user as { id: number };
+    return this.companiesService.uploadBusinessLicense(user.id, file);
+  }
 }

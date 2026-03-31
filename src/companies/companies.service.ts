@@ -171,4 +171,94 @@ export class CompaniesService {
     await this.companyImageRepo.remove(image);
     return { message: 'Xóa hình ảnh thành công' };
   }
+
+  // -----------------------
+  // BUSINESS LICENSE & VERIFICATION
+  // -----------------------
+
+  async uploadBusinessLicense(userId: number, file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Vui lòng chọn file giấy phép kinh doanh');
+    }
+    const company = await this.getCompanyByUser(userId);
+
+    const originalName = file.originalname.replace(/\s+/g, '_');
+    const filePath = `companies/licenses/${company.id}-${Date.now()}-${originalName}`;
+    const licenseUrl = await this.supabaseService.uploadFile(file, filePath);
+
+    try {
+      const oldLicenseUrl = company.businessLicenseUrl;
+      company.businessLicenseUrl = licenseUrl;
+      company.isVerified = false; // Reset verification if new license uploaded
+      await this.companyRepo.save(company);
+
+      // Orphan Fix: delete old license after successful save
+      if (oldLicenseUrl) {
+        const fileName = oldLicenseUrl.split('/').pop();
+        await this.supabaseService
+          .deleteFile(`companies/licenses/${fileName}`)
+          .catch((e: Error) =>
+            this.logger.error(`Error deleting old license: ${e.message}`),
+          );
+      }
+
+      return {
+        message:
+          'Tải lên giấy phép kinh doanh thành công. Vui lòng chờ Admin duyệt.',
+        licenseUrl,
+      };
+    } catch (dbError) {
+      // Orphan Fix: DB failed → delete newly uploaded file
+      this.logger.error(
+        'Failed to save license record, deleting orphaned file...',
+      );
+      await this.supabaseService.deleteFile(filePath).catch(() => null);
+      throw dbError;
+    }
+  }
+
+  async getPendingVerifications(page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+
+    const qb = this.companyRepo
+      .createQueryBuilder('company')
+      .where('company.businessLicenseUrl IS NOT NULL')
+      .andWhere('company.isVerified = :isVerified', { isVerified: false });
+
+    qb.orderBy('company.updatedAt', 'DESC').skip(skip).take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
+  }
+
+  async verifyCompany(id: number) {
+    const company = await this.companyRepo.findOne({ where: { id } });
+    if (!company) throw new NotFoundException('Không tìm thấy công ty');
+
+    await this.companyRepo.update(id, {
+      isVerified: true,
+      verifiedAt: new Date(),
+    });
+
+    return { message: 'Công ty đã được xác nhận thực thành công' };
+  }
+
+  async rejectVerification(id: number, reason: string) {
+    const company = await this.companyRepo.findOne({ where: { id } });
+    if (!company) throw new NotFoundException('Không tìm thấy công ty');
+
+    // Reset status but keep the license URL so they can see what was rejected
+    // unless they upload a new one. In a real app we might store the rejection reason.
+    await this.companyRepo.update(id, {
+      isVerified: false,
+    });
+
+    return { message: `Đã từ chối xác thực. Lý do: ${reason}` };
+  }
 }

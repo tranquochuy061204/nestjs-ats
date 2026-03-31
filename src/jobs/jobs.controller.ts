@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Body,
   Param,
   Query,
@@ -15,6 +16,7 @@ import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { JobFilterDto } from './dto/job-filter.dto';
+import { RejectJobDto } from './dto/reject-job.dto';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { UserRole } from '../users/entities/user.entity';
 
@@ -78,5 +80,36 @@ export class JobsController {
   getEmployerJobs(@Req() req: Request, @Query() filterDto: JobFilterDto) {
     const user = req.user as { id: number };
     return this.jobsService.getEmployerJobs(user.id, filterDto);
+  }
+
+  // -----------------------
+  // ADMIN APIs
+  // -----------------------
+
+  @ApiTags('Jobs - Quản trị Hệ thống')
+  @Patch('admin/:id/approve')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Duyệt tin tuyển dụng (Admin)' })
+  approveJob(@Param('id', ParseIntPipe) id: number) {
+    return this.jobsService.approveJob(id);
+  }
+
+  @ApiTags('Jobs - Quản trị Hệ thống')
+  @Patch('admin/:id/reject')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Từ chối tin tuyển dụng (Admin)' })
+  rejectJob(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() rejectJobDto: RejectJobDto,
+  ) {
+    return this.jobsService.rejectJob(id, rejectJobDto.reason);
+  }
+
+  @ApiTags('Jobs - Quản trị Hệ thống')
+  @Get('admin/all')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Lấy tất cả tin tuyển dụng trong hệ thống (Admin)' })
+  getAdminJobs(@Query() filterDto: JobFilterDto) {
+    return this.jobsService.getAdminJobs(filterDto);
   }
 }

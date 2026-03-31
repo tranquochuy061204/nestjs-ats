@@ -103,7 +103,6 @@ export class AuthService {
     }
     return user;
   }
-
   login(user: UserEntity) {
     const token = this.jwtService.sign({
       id: user.id,
@@ -119,5 +118,26 @@ export class AuthService {
         role: user.role,
       },
     };
+  }
+
+  async loginAdmin(dto: LoginDto) {
+    // 1. Tìm user theo email
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    // 2. Chặn sớm nếu không phải Admin hoặc không tồn tại (Security Requirement)
+    if (!user || user.role !== UserRole.ADMIN) {
+      throw new ConflictException('Tài khoản không có quyền quản trị');
+    }
+
+    // 3. So khớp password (chỉ dành cho Admin)
+    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+    if (!isPasswordValid) {
+      throw new ConflictException('Mật khẩu không chính xác');
+    }
+
+    // 4. Trả về Token Admin
+    return this.login(user);
   }
 }

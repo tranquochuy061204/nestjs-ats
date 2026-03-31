@@ -31,7 +31,7 @@ export class JobsService {
         'Bạn phải tham gia vào một công ty trước khi đăng tin tuyển dụng',
       );
     }
-    
+
     if (!employer.isAdminCompany) {
       throw new ForbiddenException(
         'Bạn không có quyền đăng tin (Yêu cầu tài khoản HR Admin)',
@@ -67,7 +67,7 @@ export class JobsService {
 
       await queryRunner.commitTransaction();
       return { id: savedJob.id, message: 'Đã tạo bản nháp tin tuyển dụng' };
-    } catch (err) {
+    } catch {
       await queryRunner.rollbackTransaction();
       throw new BadRequestException(
         'Không thể tạo tin tuyển dụng. Vui lòng kiểm tra lại thông tin.',
@@ -93,11 +93,29 @@ export class JobsService {
         'Không tìm thấy tin tuyển dụng hoặc bạn không có quyền chỉnh sửa',
       );
     }
-    
+
     if (!employer.isAdminCompany) {
       throw new ForbiddenException(
         'Bạn không có quyền chỉnh sửa tin (Yêu cầu tài khoản HR Admin)',
       );
+    }
+
+    // Check if the company is verified for auto-approval
+    const company = await this.jobRepository
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.company', 'company')
+      .where('job.id = :jobId', { jobId })
+      .getOne()
+      .then((j) => j?.company);
+
+    const isCompanyVerified = company?.isVerified || false;
+
+    const { status, ...jobData } = updateJobDto;
+
+    // BUSINESS LOGIC: Employers cannot set status to PUBLISHED directly UNLESS company is verified
+    let finalStatus = status;
+    if (status === JobStatus.PUBLISHED && !isCompanyVerified) {
+      finalStatus = JobStatus.PENDING;
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -105,10 +123,14 @@ export class JobsService {
     await queryRunner.startTransaction();
 
     try {
-      const { skills, ...jobData } = updateJobDto;
+      const { skills, ...otherJobData } = jobData;
 
       // 1. Update Job info
-      await queryRunner.manager.update(JobEntity, { id: jobId }, jobData);
+      await queryRunner.manager.update(
+        JobEntity,
+        { id: jobId },
+        { ...otherJobData, status: finalStatus },
+      );
 
       // 2. Overwrite skills if new list provided
       if (skills) {
@@ -126,13 +148,75 @@ export class JobsService {
       }
 
       await queryRunner.commitTransaction();
-      return { message: 'Cập nhật tin tuyển dụng thành công' };
-    } catch (err) {
+      return {
+        message:
+          finalStatus === JobStatus.PENDING
+            ? 'Tin đã được gửi duyệt. Vui lòng chờ Admin xác nhận.'
+            : 'Cập nhật tin tuyển dụng thành công',
+      };
+    } catch {
       await queryRunner.rollbackTransaction();
       throw new BadRequestException('Lỗi cập nhật. Vui lòng thử lại.');
     } finally {
       await queryRunner.release();
     }
+  }
+
+  // -----------------------
+  // ADMIN SERVICE METHODS
+  // -----------------------
+
+  async approveJob(jobId: number) {
+    const job = await this.jobRepository.findOne({ where: { id: jobId } });
+    if (!job) throw new NotFoundException('Không tìm thấy tin');
+
+    await this.jobRepository.update(jobId, {
+      status: JobStatus.PUBLISHED,
+      rejectionReason: null, // Clear reason if previously rejected
+    });
+
+    return { message: 'Đã duyệt tin tuyển dụng' };
+  }
+
+  async rejectJob(jobId: number, reason: string) {
+    const job = await this.jobRepository.findOne({ where: { id: jobId } });
+    if (!job) throw new NotFoundException('Không tìm thấy tin');
+
+    await this.jobRepository.update(jobId, {
+      status: JobStatus.REJECTED,
+      rejectionReason: reason,
+    });
+
+    return { message: 'Đã từ chối tin tuyển dụng' };
+  }
+
+  async getAdminJobs(filterDto: JobFilterDto) {
+    const { page = 1, limit = 10, keyword, status } = filterDto;
+    const skip = (page - 1) * limit;
+
+    const qb = this.jobRepository
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.company', 'company')
+      .leftJoinAndSelect('job.category', 'category');
+
+    if (keyword) {
+      qb.andWhere('job.title ILIKE :keyword', { keyword: `%${keyword}%` });
+    }
+
+    if (status) {
+      qb.andWhere('job.status = :status', { status });
+    }
+
+    qb.orderBy('job.createdAt', 'DESC').skip(skip).take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   async getEmployerJobs(employerUserId: number, filterDto: JobFilterDto) {
