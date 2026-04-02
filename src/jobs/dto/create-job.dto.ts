@@ -7,9 +7,18 @@ export const CreateJobSchema = z.object({
   title: z.string().min(1, 'Tiêu đề là bắt buộc').max(255),
 
   // Santize rich text inputs
-  description: z.string().min(1, 'Mô tả là bắt buộc').transform(sanitizeRichText),
-  requirements: z.string().optional().transform((val) => val ? sanitizeRichText(val) : undefined),
-  benefits: z.string().optional().transform((val) => val ? sanitizeRichText(val) : undefined),
+  description: z
+    .string()
+    .min(1, 'Mô tả là bắt buộc')
+    .transform(sanitizeRichText),
+  requirements: z
+    .string()
+    .optional()
+    .transform((val) => (val ? sanitizeRichText(val) : undefined)),
+  benefits: z
+    .string()
+    .optional()
+    .transform((val) => (val ? sanitizeRichText(val) : undefined)),
 
   salaryMin: z.number().int().nonnegative().optional(),
   salaryMax: z.number().int().nonnegative().optional(),
@@ -21,12 +30,20 @@ export const CreateJobSchema = z.object({
   jobTypeId: z.number().int().positive().optional(),
 
   slots: z.number().int().positive().optional(),
-  deadline: z.string().optional().transform((val) => val ? new Date(val) : undefined),
+  deadline: z
+    .string()
+    .optional()
+    .transform((val) => (val ? new Date(val) : undefined)),
 
-  skills: z.array(z.object({
-    skillId: z.number().int().positive().optional(),
-    tagText: z.string().max(100).optional()
-  })).optional().default([]),
+  skills: z
+    .array(
+      z.object({
+        skillId: z.number().int().positive().optional(),
+        tagText: z.string().max(100).optional(),
+      }),
+    )
+    .optional()
+    .default([]),
 });
 
 export class CreateJobDto extends createZodDto(CreateJobSchema) {
@@ -72,7 +89,7 @@ export class CreateJobDto extends createZodDto(CreateJobSchema) {
   @ApiPropertyOptional({
     description: 'Danh sách kỹ năng (tag chữ hoặc metadata ID)',
     type: 'array',
-    example: [{ skillId: 1 }, { tagText: 'NestJS' }]
+    example: [{ skillId: 1 }, { tagText: 'NestJS' }],
   })
   skills: { skillId?: number; tagText?: string }[];
 }

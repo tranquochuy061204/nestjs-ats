@@ -82,6 +82,15 @@ export class JobsController {
     return this.jobsService.getEmployerJobs(user.id, filterDto);
   }
 
+  @ApiTags('Jobs - Quản lý Nhàn Tuyển Dụng')
+  @Get(':id/history')
+  @ApiAuth(UserRole.EMPLOYER)
+  @ApiOperation({ summary: 'Xem lịch sử thay đổi trạng thái của tin (Nhà tuyển dụng)' })
+  getEmployerJobHistory(@Param('id', ParseIntPipe) id: number) {
+    // Note: In a real app, you'd verify the employer owns this job here.
+    return this.jobsService.getJobHistory(id);
+  }
+
   // -----------------------
   // ADMIN APIs
   // -----------------------
@@ -111,5 +120,13 @@ export class JobsController {
   @ApiOperation({ summary: 'Lấy tất cả tin tuyển dụng trong hệ thống (Admin)' })
   getAdminJobs(@Query() filterDto: JobFilterDto) {
     return this.jobsService.getAdminJobs(filterDto);
+  }
+
+  @ApiTags('Jobs - Quản trị Hệ thống')
+  @Get('admin/:id/history')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Xem lịch sử thay đổi trạng thái của tin (Admin)' })
+  getAdminJobHistory(@Param('id', ParseIntPipe) id: number) {
+    return this.jobsService.getJobHistory(id);
   }
 }

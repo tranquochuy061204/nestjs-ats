@@ -3,12 +3,27 @@ import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 const JobFilterSchema = z.object({
-  page: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 1)),
-  limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 10)),
+  page: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : 1)),
+  limit: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : 10)),
   keyword: z.string().optional(),
-  provinceId: z.string().optional().transform((val) => (val ? parseInt(val, 10) : undefined)),
-  categoryId: z.string().optional().transform((val) => (val ? parseInt(val, 10) : undefined)),
-  jobTypeId: z.string().optional().transform((val) => (val ? parseInt(val, 10) : undefined)),
+  provinceId: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined)),
+  categoryId: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined)),
+  jobTypeId: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined)),
   status: z.string().optional(),
 });
 
@@ -28,7 +43,9 @@ export class JobFilterDto extends createZodDto(JobFilterSchema) {
   @ApiPropertyOptional({ description: 'Lọc theo danh mục ngành nghề' })
   categoryId: number | undefined;
 
-  @ApiPropertyOptional({ description: 'Lọc theo hình thức (Full-time, Part-time)' })
+  @ApiPropertyOptional({
+    description: 'Lọc theo hình thức (Full-time, Part-time)',
+  })
   jobTypeId: number | undefined;
 
   @ApiPropertyOptional({ description: 'Lọc theo status (dùng cho nội bộ HR)' })

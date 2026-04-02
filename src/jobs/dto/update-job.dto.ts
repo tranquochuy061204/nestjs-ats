@@ -9,7 +9,10 @@ export const UpdateJobSchema = CreateJobSchema.partial().extend({
 });
 
 export class UpdateJobDto extends createZodDto(UpdateJobSchema) {
-  @ApiPropertyOptional({ description: 'Trạng thái bài vêt: draft | published | closed', enum: JobStatus })
+  @ApiPropertyOptional({
+    description: 'Trạng thái bài vêt: draft | published | closed',
+    enum: JobStatus,
+  })
   status?: JobStatus;
 
   // other properties are inherited correctly from CreateJobDto and Swagger will show them as optional

@@ -45,4 +45,12 @@ export class AdminCompaniesController {
   ) {
     return this.companiesService.rejectVerification(id, rejectDto.reason);
   }
+
+  @Get(':id/history')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Xem lịch sử duyệt doanh nghiệp (Admin)' })
+  getCompanyHistory(@Param('id', ParseIntPipe) id: number) {
+    return this.companiesService.getCompanyHistory(id);
+  }
 }
+

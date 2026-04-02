@@ -3,25 +3,57 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { JobEntity, JobStatus } from './entities/job.entity';
-import { JobSkillTagEntity } from './entities/job-skill-tag.entity';
+import { JobStatusHistoryEntity } from './entities/job-status-history.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { JobFilterDto } from './dto/job-filter.dto';
 import { EmployerEntity } from '../employers/entities/employer.entity';
+import { CompanyStatus } from '../companies/entities/company.entity';
+import { JobSkillsService } from './job-skills.service';
+import { SelectQueryBuilder, ObjectLiteral } from 'typeorm';
 
 @Injectable()
 export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
+
   constructor(
     @InjectRepository(JobEntity)
     private readonly jobRepository: Repository<JobEntity>,
     @InjectRepository(EmployerEntity)
     private readonly employerRepository: Repository<EmployerEntity>,
+    @InjectRepository(JobStatusHistoryEntity)
+    private readonly historyRepo: Repository<JobStatusHistoryEntity>,
+    private readonly jobSkillsService: JobSkillsService,
     private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * Cron job runs every hour to close overdue jobs
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleJobDeadlines() {
+    this.logger.log('Checking for overdue jobs...');
+    const now = new Date();
+
+    const result = await this.jobRepository
+      .createQueryBuilder()
+      .update(JobEntity)
+      .set({ status: JobStatus.CLOSED })
+      .where('status = :status', { status: JobStatus.PUBLISHED })
+      .andWhere('deadline IS NOT NULL')
+      .andWhere('deadline < :now', { now })
+      .execute();
+
+    if (result && result.affected && result.affected > 0) {
+      this.logger.log(`Closed ${result.affected} overdue jobs.`);
+    }
+  }
 
   async createJob(employerUserId: number, createJobDto: CreateJobDto) {
     const employer = await this.getCurrentEmployer(employerUserId);
@@ -55,15 +87,12 @@ export class JobsService {
       });
       const savedJob = await queryRunner.manager.save(newJob);
 
-      // 2. Insert Skills if provided
-      if (skills && skills.length > 0) {
-        const skillTags = skills.map((s) => ({
-          jobId: savedJob.id,
-          skillId: s.skillId,
-          tagText: s.tagText,
-        }));
-        await queryRunner.manager.insert(JobSkillTagEntity, skillTags);
-      }
+      // 2. Sync Skills using dedicated service (includes AI normalization)
+      await this.jobSkillsService.syncJobSkills(
+        queryRunner,
+        savedJob.id,
+        skills,
+      );
 
       await queryRunner.commitTransaction();
       return { id: savedJob.id, message: 'Đã tạo bản nháp tin tuyển dụng' };
@@ -108,7 +137,8 @@ export class JobsService {
       .getOne()
       .then((j) => j?.company);
 
-    const isCompanyVerified = company?.isVerified || false;
+    const isCompanyVerified =
+      company?.status === CompanyStatus.APPROVED || false;
 
     const { status, ...jobData } = updateJobDto;
 
@@ -132,19 +162,9 @@ export class JobsService {
         { ...otherJobData, status: finalStatus },
       );
 
-      // 2. Overwrite skills if new list provided
+      // 2. Overwrite skills using service if provided
       if (skills) {
-        // Remove old tags
-        await queryRunner.manager.delete(JobSkillTagEntity, { jobId });
-        // Add new ones
-        if (skills.length > 0) {
-          const skillTags = skills.map((s) => ({
-            jobId: jobId,
-            skillId: s.skillId,
-            tagText: s.tagText,
-          }));
-          await queryRunner.manager.insert(JobSkillTagEntity, skillTags);
-        }
+        await this.jobSkillsService.syncJobSkills(queryRunner, jobId, skills);
       }
 
       await queryRunner.commitTransaction();
@@ -170,10 +190,20 @@ export class JobsService {
     const job = await this.jobRepository.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
+    const oldStatus = job.status;
     await this.jobRepository.update(jobId, {
       status: JobStatus.PUBLISHED,
       rejectionReason: null, // Clear reason if previously rejected
     });
+
+    // Log history
+    await this.historyRepo.save(
+      this.historyRepo.create({
+        jobId,
+        oldStatus,
+        newStatus: JobStatus.PUBLISHED,
+      }),
+    );
 
     return { message: 'Đã duyệt tin tuyển dụng' };
   }
@@ -182,17 +212,34 @@ export class JobsService {
     const job = await this.jobRepository.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
+    const oldStatus = job.status;
     await this.jobRepository.update(jobId, {
       status: JobStatus.REJECTED,
       rejectionReason: reason,
     });
 
+    // Log history
+    await this.historyRepo.save(
+      this.historyRepo.create({
+        jobId,
+        oldStatus,
+        newStatus: JobStatus.REJECTED,
+        reason,
+      }),
+    );
+
     return { message: 'Đã từ chối tin tuyển dụng' };
+  }
+
+  async getJobHistory(jobId: number) {
+    return this.historyRepo.find({
+      where: { jobId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async getAdminJobs(filterDto: JobFilterDto) {
     const { page = 1, limit = 10, keyword, status } = filterDto;
-    const skip = (page - 1) * limit;
 
     const qb = this.jobRepository
       .createQueryBuilder('job')
@@ -207,16 +254,9 @@ export class JobsService {
       qb.andWhere('job.status = :status', { status });
     }
 
-    qb.orderBy('job.createdAt', 'DESC').skip(skip).take(limit);
+    qb.orderBy('job.createdAt', 'DESC');
 
-    const [data, total] = await qb.getManyAndCount();
-
-    return {
-      data,
-      total,
-      page,
-      lastPage: Math.ceil(total / limit),
-    };
+    return this.getPaginatedResult(qb, page, limit);
   }
 
   async getEmployerJobs(employerUserId: number, filterDto: JobFilterDto) {
@@ -225,7 +265,6 @@ export class JobsService {
     if (!employer.companyId) return { data: [], total: 0 };
 
     const { page = 1, limit = 10, keyword, status } = filterDto;
-    const skip = (page - 1) * limit;
 
     const qb = this.jobRepository
       .createQueryBuilder('job')
@@ -240,16 +279,9 @@ export class JobsService {
       qb.andWhere('job.status = :status', { status });
     }
 
-    qb.orderBy('job.createdAt', 'DESC').skip(skip).take(limit);
+    qb.orderBy('job.createdAt', 'DESC');
 
-    const [data, total] = await qb.getManyAndCount();
-
-    return {
-      data,
-      total,
-      page,
-      lastPage: Math.ceil(total / limit),
-    };
+    return this.getPaginatedResult(qb, page, limit);
   }
 
   async getPublicJobs(filterDto: JobFilterDto) {
@@ -261,7 +293,6 @@ export class JobsService {
       categoryId,
       jobTypeId,
     } = filterDto;
-    const skip = (page - 1) * limit;
 
     const qb = this.jobRepository
       .createQueryBuilder('job')
@@ -286,18 +317,9 @@ export class JobsService {
       qb.andWhere('job.jobTypeId = :jobTypeId', { jobTypeId });
     }
 
-    qb.orderBy('job.createdAt', 'DESC') // Using offset pagination limits for now
-      .skip(skip)
-      .take(limit);
+    qb.orderBy('job.createdAt', 'DESC');
 
-    const [data, total] = await qb.getManyAndCount();
-
-    return {
-      data,
-      total,
-      page,
-      lastPage: Math.ceil(total / limit),
-    };
+    return this.getPaginatedResult(qb, page, limit);
   }
 
   async getJobDetail(jobId: number) {
@@ -319,6 +341,22 @@ export class JobsService {
     }
 
     return job;
+  }
+
+  private async getPaginatedResult<T extends ObjectLiteral>(
+    qb: SelectQueryBuilder<T>,
+    page: number,
+    limit: number,
+  ) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   private async getCurrentEmployer(userId: number) {

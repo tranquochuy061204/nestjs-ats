@@ -11,12 +11,14 @@ import { StorageModule } from './storage/storage.module';
 import { EmployersModule } from './employers/employers.module';
 import { CompaniesModule } from './companies/companies.module';
 import { JobsModule } from './jobs/jobs.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import config from '../typeorm.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot(config),
+    ScheduleModule.forRoot(),
     AuthModule,
     UsersModule,
     CandidatesModule,

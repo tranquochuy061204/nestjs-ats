@@ -9,6 +9,13 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+export enum CompanyStatus {
+  IDLE = 'idle',
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+}
+
 @Entity('company')
 export class CompanyEntity {
   @PrimaryGeneratedColumn()
@@ -87,8 +94,15 @@ export class CompanyEntity {
   })
   businessLicenseUrl: string;
 
-  @Column({ name: 'is_verified', default: false })
-  isVerified: boolean;
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: CompanyStatus.IDLE,
+  })
+  status: CompanyStatus;
+
+  @Column({ name: 'rejection_reason', type: 'text', nullable: true })
+  rejectionReason: string | null;
 
   @Column({ name: 'verified_at', type: 'timestamp', nullable: true })
   verifiedAt: Date;

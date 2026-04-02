@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CompanyEntity } from './entities/company.entity';
+import { CompanyEntity, CompanyStatus } from './entities/company.entity';
 import { CompanyImageEntity } from './entities/company-image.entity';
+import { CompanyStatusHistoryEntity } from './entities/company-status-history.entity';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { SupabaseService } from '../storage/supabase.service';
 
@@ -19,6 +20,8 @@ export class CompaniesService {
     private readonly companyRepo: Repository<CompanyEntity>,
     @InjectRepository(CompanyImageEntity)
     private readonly companyImageRepo: Repository<CompanyImageEntity>,
+    @InjectRepository(CompanyStatusHistoryEntity)
+    private readonly historyRepo: Repository<CompanyStatusHistoryEntity>,
     private readonly supabaseService: SupabaseService,
   ) {}
 
@@ -189,7 +192,7 @@ export class CompaniesService {
     try {
       const oldLicenseUrl = company.businessLicenseUrl;
       company.businessLicenseUrl = licenseUrl;
-      company.isVerified = false; // Reset verification if new license uploaded
+      company.status = CompanyStatus.PENDING;
       await this.companyRepo.save(company);
 
       // Orphan Fix: delete old license after successful save
@@ -223,7 +226,7 @@ export class CompaniesService {
     const qb = this.companyRepo
       .createQueryBuilder('company')
       .where('company.businessLicenseUrl IS NOT NULL')
-      .andWhere('company.isVerified = :isVerified', { isVerified: false });
+      .andWhere('company.status = :status', { status: CompanyStatus.PENDING });
 
     qb.orderBy('company.updatedAt', 'DESC').skip(skip).take(limit);
 
@@ -241,10 +244,21 @@ export class CompaniesService {
     const company = await this.companyRepo.findOne({ where: { id } });
     if (!company) throw new NotFoundException('Không tìm thấy công ty');
 
+    const oldStatus = company.status;
     await this.companyRepo.update(id, {
-      isVerified: true,
+      status: CompanyStatus.APPROVED,
       verifiedAt: new Date(),
+      rejectionReason: null,
     });
+
+    // Log history
+    await this.historyRepo.save(
+      this.historyRepo.create({
+        companyId: id,
+        oldStatus,
+        newStatus: CompanyStatus.APPROVED,
+      }),
+    );
 
     return { message: 'Công ty đã được xác nhận thực thành công' };
   }
@@ -253,12 +267,29 @@ export class CompaniesService {
     const company = await this.companyRepo.findOne({ where: { id } });
     if (!company) throw new NotFoundException('Không tìm thấy công ty');
 
-    // Reset status but keep the license URL so they can see what was rejected
-    // unless they upload a new one. In a real app we might store the rejection reason.
+    const oldStatus = company.status;
     await this.companyRepo.update(id, {
-      isVerified: false,
+      status: CompanyStatus.REJECTED,
+      rejectionReason: reason,
     });
 
+    // Log history
+    await this.historyRepo.save(
+      this.historyRepo.create({
+        companyId: id,
+        oldStatus,
+        newStatus: CompanyStatus.REJECTED,
+        reason,
+      }),
+    );
+
     return { message: `Đã từ chối xác thực. Lý do: ${reason}` };
+  }
+
+  async getCompanyHistory(companyId: number) {
+    return this.historyRepo.find({
+      where: { companyId },
+      order: { createdAt: 'DESC' },
+    });
   }
 }
