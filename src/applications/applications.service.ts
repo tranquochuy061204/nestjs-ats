@@ -64,7 +64,7 @@ export class ApplicationsService {
       throw new NotFoundException('Tin tuyển dụng không tồn tại');
     }
 
-    if (job.status !== JobStatus.PUBLISHED) {
+    if (job.status !== (JobStatus.PUBLISHED as string)) {
       throw new BadRequestException(
         'Tin tuyển dụng chưa được phát hành hoặc đã đóng',
       );
