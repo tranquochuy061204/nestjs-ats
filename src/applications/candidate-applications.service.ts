@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   JobApplicationEntity,
   ApplicationStatus,
@@ -26,6 +26,8 @@ import {
 @Injectable()
 export class CandidateApplicationsService {
   private readonly logger = new Logger(CandidateApplicationsService.name);
+  private genAI: GoogleGenerativeAI;
+  private readonly aiModel: string;
 
   constructor(
     @InjectRepository(JobApplicationEntity)
@@ -37,26 +39,24 @@ export class CandidateApplicationsService {
     @InjectRepository(JobEntity)
     private readonly jobRepo: Repository<JobEntity>,
     private readonly configService: ConfigService,
+    private readonly dataSource: DataSource,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
     }
+    this.aiModel = this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash');
   }
-
-  private genAI: GoogleGenerativeAI;
 
   async apply(userId: number, jobId: number, dto: ApplyJobDto) {
     const candidate = await this.findCandidateByUserId(userId);
 
-    // 1. Kiểm tra CV
     if (!candidate.cvUrl) {
       throw new BadRequestException(
         'Vui lòng tải lên CV trước khi ứng tuyển. Truy cập API POST /api/candidates/cv để upload.',
       );
     }
 
-    // 2. Kiểm tra job
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job) {
       throw new NotFoundException('Tin tuyển dụng không tồn tại');
@@ -72,33 +72,36 @@ export class CandidateApplicationsService {
       throw new BadRequestException('Tin tuyển dụng đã hết hạn nộp hồ sơ');
     }
 
-    // 3. Kiểm tra duplicate
     const existing = await this.applicationRepo.findOne({
       where: { jobId, candidateId: candidate.id },
     });
 
     if (existing) {
       if (existing.status === (ApplicationStatus.WITHDRAWN as string)) {
-        existing.status = ApplicationStatus.APPLIED;
-        existing.cvUrlSnapshot = candidate.cvUrl;
-        existing.coverLetter = dto.coverLetter ?? null;
-        existing.rejectionReason = null;
-        existing.employerNote = null;
-        existing.matchScore = null;
-        existing.matchReasoning = null;
-        existing.cvMatchScore = null;
-        existing.cvMatchReasoning = null;
-        await this.applicationRepo.save(existing);
+        await this.dataSource.transaction(async (manager) => {
+          existing.status = ApplicationStatus.APPLIED;
+          existing.cvUrlSnapshot = candidate.cvUrl;
+          existing.coverLetter = dto.coverLetter ?? null;
+          existing.rejectionReason = null;
+          existing.employerNote = null;
+          existing.matchScore = null;
+          existing.matchReasoning = null;
+          existing.cvMatchScore = null;
+          existing.cvMatchReasoning = null;
 
-        await this.logHistory(
-          existing.id,
-          ApplicationStatus.WITHDRAWN,
-          ApplicationStatus.APPLIED,
-          null,
-          userId,
-        );
+          const savedApp = await manager.save(JobApplicationEntity, existing);
 
-        // Kích hoạt tính điểm AI dưới nền (fire-and-forget)
+          const history = manager.create(ApplicationStatusHistoryEntity, {
+            applicationId: savedApp.id,
+            oldStatus: ApplicationStatus.WITHDRAWN,
+            newStatus: ApplicationStatus.APPLIED,
+            reason: null,
+            changedById: userId,
+          });
+          await manager.save(ApplicationStatusHistoryEntity, history);
+        });
+
+        // Fire and forget AI grading
         this.calculateAiMatchScore(existing.id).catch((err: unknown) => {
           this.logger.error(
             'Error calculating AI match score for re-apply',
@@ -119,27 +122,31 @@ export class CandidateApplicationsService {
       );
     }
 
-    // 4. Tạo đơn ứng tuyển mới
-    const application = this.applicationRepo.create({
-      jobId,
-      candidateId: candidate.id,
-      cvUrlSnapshot: candidate.cvUrl,
-      coverLetter: dto.coverLetter,
-      status: ApplicationStatus.APPLIED,
+    let applicationId: number;
+
+    await this.dataSource.transaction(async (manager) => {
+      const application = manager.create(JobApplicationEntity, {
+        jobId,
+        candidateId: candidate.id,
+        cvUrlSnapshot: candidate.cvUrl,
+        coverLetter: dto.coverLetter,
+        status: ApplicationStatus.APPLIED,
+      });
+      const saved = await manager.save(JobApplicationEntity, application);
+      applicationId = saved.id;
+
+      const history = manager.create(ApplicationStatusHistoryEntity, {
+        applicationId: saved.id,
+        oldStatus: null,
+        newStatus: ApplicationStatus.APPLIED,
+        reason: null,
+        changedById: userId,
+      });
+      await manager.save(ApplicationStatusHistoryEntity, history);
     });
-    const saved = await this.applicationRepo.save(application);
 
-    // 5. Log history
-    await this.logHistory(
-      saved.id,
-      null,
-      ApplicationStatus.APPLIED,
-      null,
-      userId,
-    );
-
-    // Kích hoạt tính điểm AI dưới nền (fire-and-forget)
-    this.calculateAiMatchScore(saved.id).catch((err: unknown) => {
+    // Fire and forget AI grading
+    this.calculateAiMatchScore(applicationId!).catch((err: unknown) => {
       this.logger.error(
         'Error calculating AI match score',
         err instanceof Error ? err.stack : String(err),
@@ -148,7 +155,7 @@ export class CandidateApplicationsService {
 
     return {
       message: 'Ứng tuyển thành công',
-      applicationId: saved.id,
+      applicationId: applicationId!,
       reapplied: false,
     };
   }
@@ -216,23 +223,32 @@ export class CandidateApplicationsService {
       throw new BadRequestException('Đơn ứng tuyển đã được rút trước đó');
     }
 
-    if (application.status === (ApplicationStatus.OFFER as string)) {
+    const nonWithdrawableStatuses = [
+      ApplicationStatus.OFFER as string,
+      ApplicationStatus.HIRED as string,
+    ];
+    if (nonWithdrawableStatuses.includes(application.status)) {
       throw new BadRequestException(
-        'Không thể rút đơn khi đã nhận đề nghị việc làm. Vui lòng liên hệ nhà tuyển dụng.',
+        'Không thể rút đơn khi đã nhận đề nghị việc làm hoặc đã được tuyển dụng. Vui lòng liên hệ nhà tuyển dụng.',
       );
     }
 
     const oldStatus = application.status;
     application.status = ApplicationStatus.WITHDRAWN;
-    await this.applicationRepo.save(application);
 
-    await this.logHistory(
-      applicationId,
-      oldStatus,
-      ApplicationStatus.WITHDRAWN,
-      'Ứng viên tự rút đơn',
-      userId,
-    );
+    await this.dataSource.transaction(async (manager) => {
+      await manager.save(JobApplicationEntity, application);
+      await manager.save(
+        ApplicationStatusHistoryEntity,
+        manager.create(ApplicationStatusHistoryEntity, {
+          applicationId: application.id,
+          oldStatus,
+          newStatus: ApplicationStatus.WITHDRAWN,
+          reason: 'Ứng viên tự rút đơn',
+          changedById: userId,
+        }),
+      );
+    });
 
     return { message: 'Đã rút đơn ứng tuyển thành công' };
   }
@@ -247,31 +263,12 @@ export class CandidateApplicationsService {
     return candidate;
   }
 
-  private async logHistory(
-    applicationId: number,
-    oldStatus: string | null,
-    newStatus: string,
-    reason: string | null,
-    changedById: number | null,
-  ) {
-    await this.historyRepo.save(
-      this.historyRepo.create({
-        applicationId,
-        oldStatus,
-        newStatus,
-        reason,
-        changedById,
-      }),
-    );
-  }
-
   private async calculateAiMatchScore(applicationId: number) {
     if (!this.genAI) {
       this.logger.warn('AI API key not configured. Skipping match score.');
       return;
     }
 
-    // Lấy thông tin ứng tuyển
     const application = await this.applicationRepo.findOne({
       where: { id: applicationId },
       relations: [
@@ -290,7 +287,6 @@ export class CandidateApplicationsService {
 
     if (!application) return;
 
-    // Chuẩn bị Dữ liệu Job dùng chung
     const jobData = {
       title: application.job.title,
       requirements: application.job.requirements,
@@ -302,15 +298,12 @@ export class CandidateApplicationsService {
 
     const promises: Promise<void>[] = [];
 
-    // 1. Luồng chạy AI Profile trong DB
     promises.push(this.calculateProfileScore(application, jobData));
 
-    // 2. Luồng chạy AI Quét File CV (nếu có CV URL)
     if (application.cvUrlSnapshot) {
       promises.push(this.calculateCvScore(application, jobData));
     }
 
-    // Chạy song song không chặn nhau (allSettled để một lỗi ko chết cái kia)
     await Promise.allSettled(promises);
   }
 
@@ -345,7 +338,7 @@ export class CandidateApplicationsService {
 
     try {
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: this.aiModel,
       });
       const result = await model.generateContent(prompt);
       const text = result.response.text().trim();
@@ -361,9 +354,12 @@ export class CandidateApplicationsService {
       };
 
       if (typeof parsed.matchScore === 'number') {
-        application.matchScore = parsed.matchScore;
-        application.matchReasoning = parsed.reasoning || text;
-        await this.applicationRepo.save(application);
+        // Fix Race Condition by updating only specific columns
+        await this.applicationRepo.update(application.id, {
+          matchScore: parsed.matchScore,
+          matchReasoning: parsed.reasoning || text,
+        });
+
         this.logger.log(
           'AI Profile Score calculated for App #' +
             application.id +
@@ -385,7 +381,6 @@ export class CandidateApplicationsService {
     jobData: Record<string, any>,
   ) {
     try {
-      // 1. Tải file từ Cloud về RAM
       const fileData = await this.fetchBase64Cv(application.cvUrlSnapshot);
       if (!fileData) {
         this.logger.warn(
@@ -396,10 +391,9 @@ export class CandidateApplicationsService {
 
       const prompt = CV_MATCH_SCORE_PROMPT(jobData);
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: this.aiModel,
       });
 
-      // Gửi Cả File Nhị Phân và Prompt Lên Gemini
       const result = await model.generateContent([
         {
           inlineData: {
@@ -423,9 +417,12 @@ export class CandidateApplicationsService {
       };
 
       if (typeof parsed.cvMatchScore === 'number') {
-        application.cvMatchScore = parsed.cvMatchScore;
-        application.cvMatchReasoning = parsed.reasoning || text;
-        await this.applicationRepo.save(application);
+        // Fix Race Condition by updating only specific columns
+        await this.applicationRepo.update(application.id, {
+          cvMatchScore: parsed.cvMatchScore,
+          cvMatchReasoning: parsed.reasoning || text,
+        });
+
         this.logger.log(
           'AI CV Score calculated for App #' +
             application.id +
@@ -446,11 +443,20 @@ export class CandidateApplicationsService {
   ): Promise<{ base64: string; mimeType: string } | null> {
     if (!url || !url.startsWith('http')) return null;
     try {
+      // Dùng method fetch standard
       const res = await fetch(url);
       if (!res.ok) return null;
 
+      // Check Content-Length to prevent memory leak
+      const contentLength = res.headers.get('content-length');
+      if (contentLength && parseInt(contentLength, 10) > 10 * 1024 * 1024) {
+        this.logger.warn(
+          `CV file is too large (${contentLength} bytes), skipping AI CV scan to prevent memory issues: ${url}`,
+        );
+        return null; // Ignore files > 10MB
+      }
+
       const mimeType = res.headers.get('content-type') || 'application/pdf';
-      // Gemini Flash hỗ trợ cực tốt PDF và Image, nếu là docx sẽ return null bỏ qua
       if (!mimeType.includes('pdf') && !mimeType.includes('image')) {
         return null;
       }

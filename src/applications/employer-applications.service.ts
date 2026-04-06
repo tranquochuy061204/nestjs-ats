@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   JobApplicationEntity,
   ApplicationStatus,
@@ -30,6 +30,7 @@ export class EmployerApplicationsService {
     private readonly jobRepo: Repository<JobEntity>,
     @InjectRepository(EmployerEntity)
     private readonly employerRepo: Repository<EmployerEntity>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async getJobApplications(
@@ -53,6 +54,8 @@ export class EmployerApplicationsService {
     const qb = this.applicationRepo
       .createQueryBuilder('app')
       .leftJoinAndSelect('app.candidate', 'candidate')
+      .leftJoinAndSelect('candidate.skills', 'skills')
+      .leftJoinAndSelect('skills.skillMetadata', 'skillMetadata')
       .where('app.jobId = :jobId', { jobId });
 
     if (status) {
@@ -90,7 +93,7 @@ export class EmployerApplicationsService {
       { id: ApplicationStatus.WITHDRAWN, title: 'Đã rút đơn' },
     ];
 
-    // Query 1: Đếm tổng từng status bằng 1 câu SQL duy nhất thay vì 8 câu
+    // 1. Tính tổng số lượng ở mỗi cột
     const counts = await this.applicationRepo
       .createQueryBuilder('app')
       .select('app.status', 'status')
@@ -104,40 +107,38 @@ export class EmployerApplicationsService {
       countMap.set(row.status, row.count);
     }
 
-    // Query 2: Lấy top 10 items mỗi cột bằng 1 câu SQL + window function
-    const allItems = await this.applicationRepo
-      .createQueryBuilder('app')
-      .leftJoinAndSelect('app.candidate', 'candidate')
-      .leftJoinAndSelect('candidate.skills', 'skills')
-      .leftJoinAndSelect('skills.skillMetadata', 'skillMetadata')
-      .where('app.jobId = :jobId', { jobId })
-      .orderBy('app.status', 'ASC')
-      .addOrderBy('app.appliedAt', 'DESC')
-      .getMany();
+    // 2. Chạy 8 query song song để lấy 10 item mới nhất cho mỗi cột (tránh N+1 và load vào RAM)
+    const columnPromises = columns.map(async (col) => {
+      const items = await this.applicationRepo.find({
+        where: { jobId, status: col.id },
+        relations: [
+          'candidate',
+          'candidate.skills',
+          'candidate.skills.skillMetadata',
+        ],
+        order: { appliedAt: 'DESC' },
+        take: 10,
+      });
 
-    // Nhóm items theo status, giới hạn 10 mỗi cột
-    const itemMap = new Map<string, JobApplicationEntity[]>();
-    for (const item of allItems) {
-      const list = itemMap.get(item.status) || [];
-      if (list.length < 10) {
-        list.push(item);
-      }
-      itemMap.set(item.status, list);
-    }
+      return {
+        id: col.id,
+        title: col.title,
+        count: countMap.get(col.id) || 0,
+        items,
+      };
+    });
 
-    return columns.map((col) => ({
-      id: col.id,
-      title: col.title,
-      count: countMap.get(col.id) || 0,
-      items: itemMap.get(col.id) || [],
-    }));
+    return Promise.all(columnPromises);
   }
 
   async getApplicationDetail(employerUserId: number, applicationId: number) {
     const employer = await this.findEmployerByUserId(employerUserId);
 
     const application = await this.applicationRepo.findOne({
-      where: { id: applicationId },
+      where: {
+        id: applicationId,
+        job: { companyId: employer.companyId }, // Early Check Authorization
+      },
       relations: [
         'job',
         'candidate',
@@ -151,11 +152,9 @@ export class EmployerApplicationsService {
     });
 
     if (!application) {
-      throw new NotFoundException('Đơn ứng tuyển không tồn tại');
-    }
-
-    if (application.job.companyId !== employer.companyId) {
-      throw new ForbiddenException('Bạn không có quyền xem đơn ứng tuyển này');
+      throw new NotFoundException(
+        'Đơn ứng tuyển không tồn tại hoặc bạn không có quyền truy cập',
+      );
     }
 
     return application;
@@ -169,21 +168,19 @@ export class EmployerApplicationsService {
     const employer = await this.findEmployerByUserId(employerUserId);
 
     const application = await this.applicationRepo.findOne({
-      where: { id: applicationId },
+      where: {
+        id: applicationId,
+        job: { companyId: employer.companyId },
+      },
       relations: ['job'],
     });
 
     if (!application) {
-      throw new NotFoundException('Đơn ứng tuyển không tồn tại');
-    }
-
-    if (application.job.companyId !== employer.companyId) {
-      throw new ForbiddenException(
-        'Bạn không có quyền thay đổi đơn ứng tuyển này',
+      throw new NotFoundException(
+        'Đơn ứng tuyển không tồn tại hoặc bạn không có quyền truy cập',
       );
     }
 
-    // Chặn thay đổi status cho đơn đã bị rút hoặc đã từ chối
     if (application.status === (ApplicationStatus.WITHDRAWN as string)) {
       throw new BadRequestException(
         'Không thể thay đổi trạng thái đơn đã được ứng viên rút',
@@ -196,7 +193,6 @@ export class EmployerApplicationsService {
       );
     }
 
-    // Employer không được gán status thuộc quyền hệ thống/ứng viên
     const employerForbiddenStatuses: string[] = [
       ApplicationStatus.APPLIED,
       ApplicationStatus.WITHDRAWN,
@@ -224,15 +220,19 @@ export class EmployerApplicationsService {
       application.employerNote = dto.note ?? null;
     }
 
-    await this.applicationRepo.save(application);
-
-    await this.logHistory(
-      applicationId,
-      oldStatus,
-      dto.status,
-      dto.reason ?? null,
-      employerUserId,
-    );
+    await this.dataSource.transaction(async (manager) => {
+      await manager.save(JobApplicationEntity, application);
+      await manager.save(
+        ApplicationStatusHistoryEntity,
+        manager.create(ApplicationStatusHistoryEntity, {
+          applicationId,
+          oldStatus,
+          newStatus: dto.status,
+          reason: dto.reason ?? null,
+          changedById: employerUserId,
+        }),
+      );
+    });
 
     return {
       message: `Đã cập nhật trạng thái thành "${dto.status}"`,
@@ -243,17 +243,16 @@ export class EmployerApplicationsService {
     const employer = await this.findEmployerByUserId(employerUserId);
 
     const application = await this.applicationRepo.findOne({
-      where: { id: applicationId },
+      where: {
+        id: applicationId,
+        job: { companyId: employer.companyId },
+      },
       relations: ['job'],
     });
 
     if (!application) {
-      throw new NotFoundException('Đơn ứng tuyển không tồn tại');
-    }
-
-    if (application.job.companyId !== employer.companyId) {
-      throw new ForbiddenException(
-        'Bạn không có quyền xem lịch sử đơn ứng tuyển này',
+      throw new NotFoundException(
+        'Đơn ứng tuyển không tồn tại hoặc bạn không có quyền truy cập',
       );
     }
 
@@ -276,23 +275,5 @@ export class EmployerApplicationsService {
       );
     }
     return employer;
-  }
-
-  private async logHistory(
-    applicationId: number,
-    oldStatus: string | null,
-    newStatus: string,
-    reason: string | null,
-    changedById: number | null,
-  ) {
-    await this.historyRepo.save(
-      this.historyRepo.create({
-        applicationId,
-        oldStatus,
-        newStatus,
-        reason,
-        changedById,
-      }),
-    );
   }
 }

@@ -11,7 +11,7 @@ const ApplicationFilterSchema = z.object({
   limit: z
     .string()
     .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 10)),
+    .transform((val) => Math.min(val ? parseInt(val, 10) : 10, 100)),
   status: z.nativeEnum(ApplicationStatus).optional(),
 });
 
