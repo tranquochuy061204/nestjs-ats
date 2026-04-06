@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { JobEntity, JobStatus } from './entities/job.entity';
 import { JobStatusHistoryEntity } from './entities/job-status-history.entity';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -33,25 +33,41 @@ export class JobsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  /**
-   * Cron job runs every hour to close overdue jobs
-   */
   @Cron(CronExpression.EVERY_HOUR)
   async handleJobDeadlines() {
     this.logger.log('Checking for overdue jobs...');
-    const now = new Date();
+    try {
+      const now = new Date();
+      const overdueJobs = await this.jobRepository
+        .createQueryBuilder('job')
+        .select(['job.id', 'job.status'])
+        .where('job.status = :status', { status: JobStatus.PUBLISHED })
+        .andWhere('job.deadline IS NOT NULL')
+        .andWhere('job.deadline < :now', { now })
+        .getMany();
 
-    const result = await this.jobRepository
-      .createQueryBuilder()
-      .update(JobEntity)
-      .set({ status: JobStatus.CLOSED })
-      .where('status = :status', { status: JobStatus.PUBLISHED })
-      .andWhere('deadline IS NOT NULL')
-      .andWhere('deadline < :now', { now })
-      .execute();
+      if (overdueJobs.length === 0) return;
 
-    if (result && result.affected && result.affected > 0) {
-      this.logger.log(`Closed ${result.affected} overdue jobs.`);
+      await this.dataSource.transaction(async (manager) => {
+        const jobIds = overdueJobs.map((j) => j.id);
+        
+        await manager.update(JobEntity, { id: In(jobIds) }, { status: JobStatus.CLOSED });
+        
+        const histories = overdueJobs.map((j) => 
+          manager.create(JobStatusHistoryEntity, {
+            jobId: j.id,
+            oldStatus: j.status,
+            newStatus: JobStatus.CLOSED,
+            reason: 'Tự động đóng do quá hạn nộp hồ sơ',
+          })
+        );
+        
+        await manager.insert(JobStatusHistoryEntity, histories);
+      });
+
+      this.logger.log(`Closed ${overdueJobs.length} overdue jobs.`);
+    } catch (error) {
+      this.logger.error('Failed to handle overdue jobs', error instanceof Error ? error.stack : String(error));
     }
   }
 
@@ -63,46 +79,31 @@ export class JobsService {
         'Bạn phải tham gia vào một công ty trước khi đăng tin tuyển dụng',
       );
     }
-
     if (!employer.isAdminCompany) {
       throw new ForbiddenException(
         'Bạn không có quyền đăng tin (Yêu cầu tài khoản HR Admin)',
       );
     }
 
-    // Execute within a transaction (Best Practice: db-use-transactions)
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      const { skills, ...jobData } = createJobDto;
+      return await this.dataSource.transaction(async (manager) => {
+        const { skills, ...jobData } = createJobDto;
 
-      // 1. Create Job record
-      const newJob = queryRunner.manager.create(JobEntity, {
-        ...jobData,
-        employerId: employer.id,
-        companyId: employer.companyId,
-        status: JobStatus.DRAFT, // Default always draft until published
+        const newJob = manager.create(JobEntity, {
+          ...jobData,
+          employerId: employer.id,
+          companyId: employer.companyId,
+          status: JobStatus.DRAFT,
+        });
+        const savedJob = await manager.save(newJob);
+
+        await this.jobSkillsService.syncJobSkills(manager, savedJob.id, skills);
+
+        return { id: savedJob.id, message: 'Đã tạo bản nháp tin tuyển dụng' };
       });
-      const savedJob = await queryRunner.manager.save(newJob);
-
-      // 2. Sync Skills using dedicated service (includes AI normalization)
-      await this.jobSkillsService.syncJobSkills(
-        queryRunner,
-        savedJob.id,
-        skills,
-      );
-
-      await queryRunner.commitTransaction();
-      return { id: savedJob.id, message: 'Đã tạo bản nháp tin tuyển dụng' };
-    } catch {
-      await queryRunner.rollbackTransaction();
-      throw new BadRequestException(
-        'Không thể tạo tin tuyển dụng. Vui lòng kiểm tra lại thông tin.',
-      );
-    } finally {
-      await queryRunner.release();
+    } catch (e) {
+      this.logger.error(e);
+      throw new BadRequestException('Không thể tạo tin tuyển dụng. Vui lòng kiểm tra lại thông tin.');
     }
   }
 
@@ -113,8 +114,15 @@ export class JobsService {
   ) {
     const employer = await this.getCurrentEmployer(employerUserId);
 
+    if (!employer.isAdminCompany) {
+      throw new ForbiddenException(
+        'Bạn không có quyền chỉnh sửa tin (Yêu cầu tài khoản HR Admin)',
+      );
+    }
+
     const job = await this.jobRepository.findOne({
       where: { id: jobId, companyId: employer.companyId },
+      relations: ['company'],
     });
 
     if (!job) {
@@ -123,62 +131,67 @@ export class JobsService {
       );
     }
 
-    if (!employer.isAdminCompany) {
-      throw new ForbiddenException(
-        'Bạn không có quyền chỉnh sửa tin (Yêu cầu tài khoản HR Admin)',
+    const { status, ...otherJobData } = updateJobDto;
+
+    // VALIDATE ALLOWED STATUS
+    const employerAllowedStatuses = [
+      JobStatus.DRAFT,
+      JobStatus.PUBLISHED,
+      JobStatus.CLOSED,
+      JobStatus.PENDING,
+    ];
+
+    if (status && !employerAllowedStatuses.includes(status)) {
+      throw new BadRequestException(
+        `Nhà tuyển dụng không thể cập nhật tin sang trạng thái "${status}"`,
       );
     }
 
-    // Check if the company is verified for auto-approval
-    const company = await this.jobRepository
-      .createQueryBuilder('job')
-      .leftJoinAndSelect('job.company', 'company')
-      .where('job.id = :jobId', { jobId })
-      .getOne()
-      .then((j) => j?.company);
+    const isCompanyVerified = job.company?.status === CompanyStatus.APPROVED;
+    let finalStatus = status ?? job.status;
 
-    const isCompanyVerified =
-      company?.status === CompanyStatus.APPROVED || false;
-
-    const { status, ...jobData } = updateJobDto;
-
-    // BUSINESS LOGIC: Employers cannot set status to PUBLISHED directly UNLESS company is verified
-    let finalStatus = status;
     if (status === JobStatus.PUBLISHED && !isCompanyVerified) {
       finalStatus = JobStatus.PENDING;
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      const { skills, ...otherJobData } = jobData;
+      await this.dataSource.transaction(async (manager) => {
+        const { skills, ...jobDataUpdates } = updateJobDto;
+        delete jobDataUpdates.status; // handled above
 
-      // 1. Update Job info
-      await queryRunner.manager.update(
-        JobEntity,
-        { id: jobId },
-        { ...otherJobData, status: finalStatus },
-      );
+        await manager.update(
+          JobEntity,
+          { id: jobId },
+          { ...otherJobData, status: finalStatus },
+        );
 
-      // 2. Overwrite skills using service if provided
-      if (skills) {
-        await this.jobSkillsService.syncJobSkills(queryRunner, jobId, skills);
-      }
+        if (finalStatus !== job.status) {
+          await manager.save(
+            JobStatusHistoryEntity,
+            manager.create(JobStatusHistoryEntity, {
+              jobId,
+              oldStatus: job.status,
+              newStatus: finalStatus,
+              reason: 'Nhà tuyển dụng thay đổi',
+              changedById: employerUserId,
+            }),
+          );
+        }
 
-      await queryRunner.commitTransaction();
+        if (skills) {
+          await this.jobSkillsService.syncJobSkills(manager, jobId, skills);
+        }
+      });
+
       return {
         message:
           finalStatus === JobStatus.PENDING
             ? 'Tin đã được gửi duyệt. Vui lòng chờ Admin xác nhận.'
             : 'Cập nhật tin tuyển dụng thành công',
       };
-    } catch {
-      await queryRunner.rollbackTransaction();
+    } catch (e) {
+      this.logger.error(e);
       throw new BadRequestException('Lỗi cập nhật. Vui lòng thử lại.');
-    } finally {
-      await queryRunner.release();
     }
   }
 
@@ -190,20 +203,27 @@ export class JobsService {
     const job = await this.jobRepository.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
-    const oldStatus = job.status;
-    await this.jobRepository.update(jobId, {
-      status: JobStatus.PUBLISHED,
-      rejectionReason: null, // Clear reason if previously rejected
-    });
+    if (job.status === JobStatus.PUBLISHED) {
+      throw new BadRequestException('Tin đã được duyệt trước đó');
+    }
 
-    // Log history
-    await this.historyRepo.save(
-      this.historyRepo.create({
-        jobId,
-        oldStatus,
-        newStatus: JobStatus.PUBLISHED,
-      }),
-    );
+    const oldStatus = job.status;
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(JobEntity, jobId, {
+        status: JobStatus.PUBLISHED,
+        rejectionReason: null,
+      });
+
+      await manager.save(
+        JobStatusHistoryEntity,
+        manager.create(JobStatusHistoryEntity, {
+          jobId,
+          oldStatus,
+          newStatus: JobStatus.PUBLISHED,
+        }),
+      );
+    });
 
     return { message: 'Đã duyệt tin tuyển dụng' };
   }
@@ -212,26 +232,49 @@ export class JobsService {
     const job = await this.jobRepository.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
-    const oldStatus = job.status;
-    await this.jobRepository.update(jobId, {
-      status: JobStatus.REJECTED,
-      rejectionReason: reason,
-    });
+    if (job.status === JobStatus.REJECTED) {
+      throw new BadRequestException('Tin đã bị từ chối trước đó');
+    }
 
-    // Log history
-    await this.historyRepo.save(
-      this.historyRepo.create({
-        jobId,
-        oldStatus,
-        newStatus: JobStatus.REJECTED,
-        reason,
-      }),
-    );
+    const oldStatus = job.status;
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(JobEntity, jobId, {
+        status: JobStatus.REJECTED,
+        rejectionReason: reason,
+      });
+
+      await manager.save(
+        JobStatusHistoryEntity,
+        manager.create(JobStatusHistoryEntity, {
+          jobId,
+          oldStatus,
+          newStatus: JobStatus.REJECTED,
+          reason,
+        }),
+      );
+    });
 
     return { message: 'Đã từ chối tin tuyển dụng' };
   }
 
-  async getJobHistory(jobId: number) {
+  async getAdminJobHistory(jobId: number) {
+    return this.historyRepo.find({
+      where: { jobId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async getEmployerJobHistory(employerUserId: number, jobId: number) {
+    const employer = await this.getCurrentEmployer(employerUserId);
+    const job = await this.jobRepository.findOne({
+      where: { id: jobId, companyId: employer.companyId },
+    });
+    
+    if (!job) {
+      throw new NotFoundException('Tin tuyển dụng không tồn tại hoặc bạn không có quyền');
+    }
+
     return this.historyRepo.find({
       where: { jobId },
       order: { createdAt: 'DESC' },
@@ -247,6 +290,7 @@ export class JobsService {
       .leftJoinAndSelect('job.category', 'category');
 
     if (keyword) {
+      // Temporary fallback. Proper fix requires pg_trgm index
       qb.andWhere('job.title ILIKE :keyword', { keyword: `%${keyword}%` });
     }
 

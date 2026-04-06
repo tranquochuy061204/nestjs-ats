@@ -33,6 +33,14 @@ export const CreateJobSchema = z.object({
   deadline: z
     .string()
     .optional()
+    .refine(
+      (val) => {
+        if (!val) return true;
+        const date = new Date(val);
+        return !isNaN(date.getTime()) && date > new Date();
+      },
+      { message: 'Deadline phải là ngày hợp lệ và trong tương lai' },
+    )
     .transform((val) => (val ? new Date(val) : undefined)),
 
   skills: z

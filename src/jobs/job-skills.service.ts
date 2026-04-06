@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryRunner } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { JobSkillTagEntity } from './entities/job-skill-tag.entity';
 import { SkillsMetadataService } from '../metadata/skills/skills-metadata.service';
 
@@ -18,12 +18,12 @@ export class JobSkillsService {
    * Sync skills for a job — Includes AI normalization for raw text tags
    */
   async syncJobSkills(
-    queryRunner: QueryRunner,
+    manager: EntityManager,
     jobId: number,
     skills: { skillId?: number; tagText?: string }[],
   ) {
-    // 1. Remove old skills first (Simplest way for update)
-    await queryRunner.manager.delete(JobSkillTagEntity, { jobId });
+    // 1. Remove old skills first
+    await manager.delete(JobSkillTagEntity, { jobId });
 
     if (!skills || skills.length === 0) return;
 
@@ -39,21 +39,33 @@ export class JobSkillsService {
       }
     }
 
-    // 3. Process raw strings (AI Normalization)
+    // 3. Process raw strings (AI Normalization) - Fixed N+1 issues
     if (rawStrings.length > 0) {
-      for (const raw of rawStrings) {
-        // Fuzzy search first to avoid AI call if possible
-        const found = await this.skillsMetadataService.findByFuzzy(raw);
+      // 3.1 Fetch fuzzy search concurrently
+      const fuzzyResults = await Promise.all(
+        rawStrings.map((raw) => this.skillsMetadataService.findByFuzzy(raw)),
+      );
+
+      const unmatchedRawStrings: string[] = [];
+      for (let i = 0; i < rawStrings.length; i++) {
+        const found = fuzzyResults[i];
         if (found) {
           skillRecords.push({ jobId, skillId: found.id });
           await this.skillsMetadataService.incrementUseCount(found.id);
         } else {
-          // Use AI to format and then upsert
-          const formatted = await this.skillsMetadataService.formatWithAI([
-            raw,
-          ]);
-          if (formatted && formatted.length > 0) {
-            const { name, type } = formatted[0];
+          unmatchedRawStrings.push(rawStrings[i]);
+        }
+      }
+
+      // 3.2 AI calls are bundled entirely
+      if (unmatchedRawStrings.length > 0) {
+        const formatted = await this.skillsMetadataService.formatWithAI(
+          unmatchedRawStrings,
+        );
+        if (formatted && formatted.length > 0) {
+          for (let i = 0; i < formatted.length; i++) {
+            const { name, type } = formatted[i];
+            const raw = unmatchedRawStrings[i] || name;
             const skill = await this.skillsMetadataService.upsertSkill(
               name,
               type,
@@ -68,7 +80,7 @@ export class JobSkillsService {
     // 4. Batch insert all resolved skills
     if (skillRecords.length > 0) {
       const uniqueRecords = this.deduplicateSkills(skillRecords);
-      await queryRunner.manager.insert(JobSkillTagEntity, uniqueRecords);
+      await manager.insert(JobSkillTagEntity, uniqueRecords);
     }
   }
 

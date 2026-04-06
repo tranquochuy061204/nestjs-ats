@@ -10,8 +10,8 @@ const JobFilterSchema = z.object({
   limit: z
     .string()
     .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 10)),
-  keyword: z.string().optional(),
+    .transform((val) => Math.min(val ? parseInt(val, 10) : 10, 100)),
+  keyword: z.string().max(100).optional(),
   provinceId: z
     .string()
     .optional()
