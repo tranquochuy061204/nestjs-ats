@@ -59,9 +59,8 @@ export class JobSkillsService {
 
       // 3.2 AI calls are bundled entirely
       if (unmatchedRawStrings.length > 0) {
-        const formatted = await this.skillsMetadataService.formatWithAI(
-          unmatchedRawStrings,
-        );
+        const formatted =
+          await this.skillsMetadataService.formatWithAI(unmatchedRawStrings);
         if (formatted && formatted.length > 0) {
           for (let i = 0; i < formatted.length; i++) {
             const { name, type } = formatted[i];

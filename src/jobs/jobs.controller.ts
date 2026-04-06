@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Put, Patch, Body, Param, Query, ParseIntPipe, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  Req,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JobsService } from './jobs.service';
@@ -19,7 +30,9 @@ export class JobsController {
 
   @ApiTags('Jobs - Public')
   @Get('public')
-  @ApiOperation({ summary: 'Lấy danh sách các công việc đang mở (Cho ứng viên tìm kiếm)' })
+  @ApiOperation({
+    summary: 'Lấy danh sách các công việc đang mở (Cho ứng viên tìm kiếm)',
+  })
   @ApiResponse({ status: 200, description: 'Danh sách công việc' })
   getPublicJobs(@Query() filterDto: JobFilterDto) {
     return this.jobsService.getPublicJobs(filterDto);
@@ -98,8 +111,13 @@ export class JobsController {
   @ApiTags('Jobs - Quản lý Nhàn Tuyển Dụng')
   @Get(':id/history')
   @ApiAuth(UserRole.EMPLOYER)
-  @ApiOperation({ summary: 'Xem lịch sử thay đổi trạng thái của tin (Nhà tuyển dụng)' })
-  getEmployerJobHistory(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+  @ApiOperation({
+    summary: 'Xem lịch sử thay đổi trạng thái của tin (Nhà tuyển dụng)',
+  })
+  getEmployerJobHistory(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     const user = req.user as { id: number };
     return this.jobsService.getEmployerJobHistory(user.id, id);
   }

@@ -50,24 +50,31 @@ export class JobsService {
 
       await this.dataSource.transaction(async (manager) => {
         const jobIds = overdueJobs.map((j) => j.id);
-        
-        await manager.update(JobEntity, { id: In(jobIds) }, { status: JobStatus.CLOSED });
-        
-        const histories = overdueJobs.map((j) => 
+
+        await manager.update(
+          JobEntity,
+          { id: In(jobIds) },
+          { status: JobStatus.CLOSED },
+        );
+
+        const histories = overdueJobs.map((j) =>
           manager.create(JobStatusHistoryEntity, {
             jobId: j.id,
             oldStatus: j.status,
             newStatus: JobStatus.CLOSED,
             reason: 'Tự động đóng do quá hạn nộp hồ sơ',
-          })
+          }),
         );
-        
+
         await manager.insert(JobStatusHistoryEntity, histories);
       });
 
       this.logger.log(`Closed ${overdueJobs.length} overdue jobs.`);
     } catch (error) {
-      this.logger.error('Failed to handle overdue jobs', error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        'Failed to handle overdue jobs',
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 
@@ -103,7 +110,9 @@ export class JobsService {
       });
     } catch (e) {
       this.logger.error(e);
-      throw new BadRequestException('Không thể tạo tin tuyển dụng. Vui lòng kiểm tra lại thông tin.');
+      throw new BadRequestException(
+        'Không thể tạo tin tuyển dụng. Vui lòng kiểm tra lại thông tin.',
+      );
     }
   }
 
@@ -185,7 +194,7 @@ export class JobsService {
 
       return {
         message:
-          finalStatus === JobStatus.PENDING
+          finalStatus === (JobStatus.PENDING as string)
             ? 'Tin đã được gửi duyệt. Vui lòng chờ Admin xác nhận.'
             : 'Cập nhật tin tuyển dụng thành công',
       };
@@ -203,7 +212,7 @@ export class JobsService {
     const job = await this.jobRepository.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
-    if (job.status === JobStatus.PUBLISHED) {
+    if (job.status === (JobStatus.PUBLISHED as string)) {
       throw new BadRequestException('Tin đã được duyệt trước đó');
     }
 
@@ -232,7 +241,7 @@ export class JobsService {
     const job = await this.jobRepository.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
-    if (job.status === JobStatus.REJECTED) {
+    if (job.status === (JobStatus.REJECTED as string)) {
       throw new BadRequestException('Tin đã bị từ chối trước đó');
     }
 
@@ -270,9 +279,11 @@ export class JobsService {
     const job = await this.jobRepository.findOne({
       where: { id: jobId, companyId: employer.companyId },
     });
-    
+
     if (!job) {
-      throw new NotFoundException('Tin tuyển dụng không tồn tại hoặc bạn không có quyền');
+      throw new NotFoundException(
+        'Tin tuyển dụng không tồn tại hoặc bạn không có quyền',
+      );
     }
 
     return this.historyRepo.find({
