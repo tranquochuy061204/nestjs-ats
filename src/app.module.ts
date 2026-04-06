@@ -11,6 +11,7 @@ import { StorageModule } from './storage/storage.module';
 import { EmployersModule } from './employers/employers.module';
 import { CompaniesModule } from './companies/companies.module';
 import { JobsModule } from './jobs/jobs.module';
+import { ApplicationsModule } from './applications/applications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import config from '../typeorm.config';
 
@@ -27,6 +28,7 @@ import config from '../typeorm.config';
     EmployersModule,
     CompaniesModule,
     JobsModule,
+    ApplicationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

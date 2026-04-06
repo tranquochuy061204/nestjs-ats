@@ -11,6 +11,7 @@ import { CompanyImageEntity } from './entities/company-image.entity';
 import { CompanyStatusHistoryEntity } from './entities/company-status-history.entity';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { SupabaseService } from '../storage/supabase.service';
+import { sanitizeFilename } from '../common/utils/string.util';
 
 @Injectable()
 export class CompaniesService {
@@ -55,64 +56,48 @@ export class CompaniesService {
     if (!file) throw new BadRequestException('Vui lòng chọn file logo');
     const company = await this.getCompanyByUser(userId);
 
-    const originalName = file.originalname.replace(/\s+/g, '_');
+    const originalName = sanitizeFilename(file.originalname);
     const filePath = `companies/logos/${company.id}-${Date.now()}-${originalName}`;
-    const logoUrl = await this.supabaseService.uploadFile(file, filePath);
+    const oldFilePath = company.logoUrl
+      ? `companies/logos/${company.logoUrl.split('/').pop()}`
+      : undefined;
 
-    try {
-      const oldLogoUrl = company.logoUrl;
-      company.logoUrl = logoUrl;
-      await this.companyRepo.save(company);
+    const { result } = await this.supabaseService.atomicUploadAndUpdate(
+      file,
+      filePath,
+      async (url) => {
+        company.logoUrl = url;
+        await this.companyRepo.save(company);
+        return { message: 'Upload logo thành công', logoUrl: url };
+      },
+      oldFilePath,
+    );
 
-      // Orphan Fix: delete old logo after successful save
-      if (oldLogoUrl) {
-        const fileName = oldLogoUrl.split('/').pop();
-        await this.supabaseService
-          .deleteFile(`companies/logos/${fileName}`)
-          .catch((e: Error) =>
-            this.logger.error(`Error deleting old logo: ${e.message}`),
-          );
-      }
-
-      return { message: 'Upload logo thành công', logoUrl };
-    } catch (dbError) {
-      // Orphan Fix: DB failed → delete newly uploaded file
-      this.logger.error(`Failed to save company, deleting orphaned logo...`);
-      await this.supabaseService.deleteFile(filePath).catch(() => null);
-      throw dbError;
-    }
+    return result;
   }
 
   async uploadBanner(userId: number, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Vui lòng chọn file banner');
     const company = await this.getCompanyByUser(userId);
 
-    const originalName = file.originalname.replace(/\s+/g, '_');
+    const originalName = sanitizeFilename(file.originalname);
     const filePath = `companies/banners/${company.id}-${Date.now()}-${originalName}`;
-    const bannerUrl = await this.supabaseService.uploadFile(file, filePath);
+    const oldFilePath = company.bannerUrl
+      ? `companies/banners/${company.bannerUrl.split('/').pop()}`
+      : undefined;
 
-    try {
-      const oldBannerUrl = company.bannerUrl;
-      company.bannerUrl = bannerUrl;
-      await this.companyRepo.save(company);
+    const { result } = await this.supabaseService.atomicUploadAndUpdate(
+      file,
+      filePath,
+      async (url) => {
+        company.bannerUrl = url;
+        await this.companyRepo.save(company);
+        return { message: 'Upload banner thành công', bannerUrl: url };
+      },
+      oldFilePath,
+    );
 
-      // Orphan Fix: delete old banner after successful save
-      if (oldBannerUrl) {
-        const fileName = oldBannerUrl.split('/').pop();
-        await this.supabaseService
-          .deleteFile(`companies/banners/${fileName}`)
-          .catch((e: Error) =>
-            this.logger.error(`Error deleting old banner: ${e.message}`),
-          );
-      }
-
-      return { message: 'Upload banner thành công', bannerUrl };
-    } catch (dbError) {
-      // Orphan Fix: DB failed → delete newly uploaded file
-      this.logger.error(`Failed to save company, deleting orphaned banner...`);
-      await this.supabaseService.deleteFile(filePath).catch(() => null);
-      throw dbError;
-    }
+    return result;
   }
 
   async uploadCompanyImages(userId: number, files: Express.Multer.File[]) {
@@ -126,7 +111,7 @@ export class CompaniesService {
     const uploadedPaths: string[] = [];
 
     for (const file of files) {
-      const originalName = file.originalname.replace(/\s+/g, '_');
+      const originalName = sanitizeFilename(file.originalname);
       const filePath = `companies/images/${company.id}-${Date.now()}-${originalName}`;
       const imageUrl = await this.supabaseService.uploadFile(file, filePath);
       uploadedPaths.push(filePath);
@@ -185,39 +170,29 @@ export class CompaniesService {
     }
     const company = await this.getCompanyByUser(userId);
 
-    const originalName = file.originalname.replace(/\s+/g, '_');
+    const originalName = sanitizeFilename(file.originalname);
     const filePath = `companies/licenses/${company.id}-${Date.now()}-${originalName}`;
-    const licenseUrl = await this.supabaseService.uploadFile(file, filePath);
+    const oldFilePath = company.businessLicenseUrl
+      ? `companies/licenses/${company.businessLicenseUrl.split('/').pop()}`
+      : undefined;
 
-    try {
-      const oldLicenseUrl = company.businessLicenseUrl;
-      company.businessLicenseUrl = licenseUrl;
-      company.status = CompanyStatus.PENDING;
-      await this.companyRepo.save(company);
+    const { result } = await this.supabaseService.atomicUploadAndUpdate(
+      file,
+      filePath,
+      async (url) => {
+        company.businessLicenseUrl = url;
+        company.status = CompanyStatus.PENDING;
+        await this.companyRepo.save(company);
+        return {
+          message:
+            'Tải lên giấy phép kinh doanh thành công. Vui lòng chờ Admin duyệt.',
+          licenseUrl: url,
+        };
+      },
+      oldFilePath,
+    );
 
-      // Orphan Fix: delete old license after successful save
-      if (oldLicenseUrl) {
-        const fileName = oldLicenseUrl.split('/').pop();
-        await this.supabaseService
-          .deleteFile(`companies/licenses/${fileName}`)
-          .catch((e: Error) =>
-            this.logger.error(`Error deleting old license: ${e.message}`),
-          );
-      }
-
-      return {
-        message:
-          'Tải lên giấy phép kinh doanh thành công. Vui lòng chờ Admin duyệt.',
-        licenseUrl,
-      };
-    } catch (dbError) {
-      // Orphan Fix: DB failed → delete newly uploaded file
-      this.logger.error(
-        'Failed to save license record, deleting orphaned file...',
-      );
-      await this.supabaseService.deleteFile(filePath).catch(() => null);
-      throw dbError;
-    }
+    return result;
   }
 
   async getPendingVerifications(page = 1, limit = 10) {

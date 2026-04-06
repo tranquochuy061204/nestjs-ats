@@ -15,6 +15,7 @@ import { WorkExperienceEntity } from './work-experience.entity';
 import { EducationEntity } from './education.entity';
 import { ProjectEntity } from './project.entity';
 import { CandidateSkillTagEntity } from './candidate-skill-tag.entity';
+import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
 
 @Entity('candidate')
 export class CandidateEntity {
@@ -97,4 +98,7 @@ export class CandidateEntity {
 
   @OneToMany(() => CandidateSkillTagEntity, (skill) => skill.candidate)
   skills: CandidateSkillTagEntity[];
+
+  @OneToMany(() => JobApplicationEntity, (app) => app.candidate)
+  applications: JobApplicationEntity[];
 }

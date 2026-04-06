@@ -4,6 +4,8 @@ import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SkillMetadataEntity, SkillType } from './skill-metadata.entity';
+import { SKILL_STANDARDIZER_PROMPT } from './skills-metadata.constants';
+import { toSlug } from '../../common/utils/string.util';
 
 @Injectable()
 export class SkillsMetadataService {
@@ -56,7 +58,7 @@ export class SkillsMetadataService {
    * Tìm trong canonical_name + aliases.
    */
   async findByFuzzy(rawName: string) {
-    const slug = this.toSlug(rawName);
+    const slug = toSlug(rawName);
 
     // Exact slug match trước
     const exact = await this.findBySlug(slug);
@@ -90,20 +92,7 @@ export class SkillsMetadataService {
         model: 'gemini-2.5-flash',
       });
 
-      const prompt = `You are a skill name standardizer for an ATS (Applicant Tracking System).
-Your task is to correct typos, normalize casing, and standardize the given raw skill names into their official, widely-accepted canonical forms.
-
-Rules:
-1. STRICTLY fix typographical errors (e.g., "javaspit" -> "JavaScript", "typescrist" -> "TypeScript", "nodejs" -> "Node.js", "comunication" -> "Communication").
-2. Use the exact official capitalization (e.g., "JavaScript", "Node.js", "Python", "React", "Vue.js", "C++").
-3. Classify each skill strictly as "hard" (technical skills) or "soft" (interpersonal skills).
-4. You must output exactly the same number of skills as the input.
-
-Input array of raw skills:
-${JSON.stringify(rawSkills)}
-
-Return ONLY a valid JSON array, no markdown blocks (\`\`\`json) and no explanation. Example:
-[{"name": "JavaScript", "type": "hard"}]`;
+      const prompt = SKILL_STANDARDIZER_PROMPT(rawSkills);
 
       const result = await model.generateContent(prompt);
       const text = result.response.text().trim();
@@ -138,7 +127,7 @@ Return ONLY a valid JSON array, no markdown blocks (\`\`\`json) and no explanati
     type: SkillType,
     alias?: string,
   ): Promise<SkillMetadataEntity> {
-    const slug = this.toSlug(name);
+    const slug = toSlug(name);
     this.logger.log(
       `Upserting skill: ${name} (slug: ${slug}, alias: ${alias})`,
     );
@@ -207,16 +196,5 @@ Return ONLY a valid JSON array, no markdown blocks (\`\`\`json) and no explanati
       'useCount',
       1,
     );
-  }
-
-  /**
-   * Convert tên thành slug: lowercase, trim, replace spaces.
-   */
-  private toSlug(name: string): string {
-    return name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9\s\-.#+]/g, '')
-      .replace(/\s+/g, '-');
   }
 }

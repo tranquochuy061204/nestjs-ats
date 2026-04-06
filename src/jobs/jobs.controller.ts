@@ -85,7 +85,9 @@ export class JobsController {
   @ApiTags('Jobs - Quản lý Nhàn Tuyển Dụng')
   @Get(':id/history')
   @ApiAuth(UserRole.EMPLOYER)
-  @ApiOperation({ summary: 'Xem lịch sử thay đổi trạng thái của tin (Nhà tuyển dụng)' })
+  @ApiOperation({
+    summary: 'Xem lịch sử thay đổi trạng thái của tin (Nhà tuyển dụng)',
+  })
   getEmployerJobHistory(@Param('id', ParseIntPipe) id: number) {
     // Note: In a real app, you'd verify the employer owns this job here.
     return this.jobsService.getJobHistory(id);

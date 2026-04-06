@@ -14,6 +14,7 @@ import { ProvinceMetadataEntity } from '../../metadata/provinces/province.entity
 import { JobCategoryMetadataEntity } from '../../metadata/job-categories/job-category.entity';
 import { JobTypeMetadataEntity } from '../../metadata/job-types/job-type.entity';
 import { JobSkillTagEntity } from './job-skill-tag.entity';
+import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
 
 export enum JobStatus {
   DRAFT = 'draft',
@@ -111,4 +112,7 @@ export class JobEntity {
     cascade: ['insert', 'update', 'remove'],
   })
   skills: JobSkillTagEntity[];
+
+  @OneToMany(() => JobApplicationEntity, (app) => app.job)
+  applications: JobApplicationEntity[];
 }

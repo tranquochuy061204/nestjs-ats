@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { JobEntity } from './job.entity';
 import { SkillMetadataEntity } from '../../metadata/skills/skill-metadata.entity';
 
@@ -21,7 +27,10 @@ export class JobSkillTagEntity {
   @JoinColumn({ name: 'job_id' })
   job: JobEntity;
 
-  @ManyToOne(() => SkillMetadataEntity, { onDelete: 'SET NULL', nullable: true })
+  @ManyToOne(() => SkillMetadataEntity, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
   @JoinColumn({ name: 'skill_id' })
   skillMetadata: SkillMetadataEntity;
 }

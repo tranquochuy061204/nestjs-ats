@@ -101,35 +101,22 @@ export class CandidateProfileService {
 
     const uniqueId = Date.now();
     const filePath = `candidates/${userId}/cv_${uniqueId}.pdf`;
-    const publicUrl = await this.supabaseService.uploadFile(file, filePath);
+    const oldFilePath = candidate.cvUrl
+      ? `candidates/${userId}/${candidate.cvUrl.split('/').pop()}`
+      : undefined;
 
-    try {
-      const oldCvUrl = candidate.cvUrl;
-      candidate.cvUrl = publicUrl;
-      await this.candidateRepository.save(candidate);
+    const { result } = await this.supabaseService.atomicUploadAndUpdate(
+      file,
+      filePath,
+      async (publicUrl) => {
+        candidate.cvUrl = publicUrl;
+        await this.candidateRepository.save(candidate);
+        return { cvUrl: publicUrl };
+      },
+      oldFilePath,
+    );
 
-      // Orphan Fix: If save succeeds, try to delete the old CV
-      if (oldCvUrl) {
-        try {
-          const urlParts = oldCvUrl.split('/');
-          const fileName = urlParts[urlParts.length - 1];
-          await this.supabaseService.deleteFile(
-            `candidates/${userId}/${fileName}`,
-          );
-        } catch (error) {
-          this.logger.error(
-            `Error deleting old CV: ${(error as Error).message}`,
-            (error as Error).stack,
-          );
-        }
-      }
-      return { cvUrl: publicUrl };
-    } catch (dbError) {
-      // Orphan Fix: If save fails, delete the newly uploaded file to prevent orphan data
-      this.logger.error(`Failed to save candidate, deleting orphaned CV...`);
-      await this.supabaseService.deleteFile(filePath).catch(() => null);
-      throw dbError;
-    }
+    return result;
   }
 
   async uploadAvatar(userId: number, file: Express.Multer.File) {
@@ -137,38 +124,22 @@ export class CandidateProfileService {
 
     const ext = file.originalname.split('.').pop() ?? 'jpg';
     const filePath = `candidates/${userId}/avatar_${Date.now()}.${ext}`;
-    const publicUrl = await this.supabaseService.uploadFile(file, filePath);
+    const oldFilePath = candidate.avatarUrl
+      ? `candidates/${userId}/${candidate.avatarUrl.split('/').pop()}`
+      : undefined;
 
-    try {
-      const oldAvatarUrl = candidate.avatarUrl;
-      candidate.avatarUrl = publicUrl;
-      await this.candidateRepository.save(candidate);
+    const { result } = await this.supabaseService.atomicUploadAndUpdate(
+      file,
+      filePath,
+      async (publicUrl) => {
+        candidate.avatarUrl = publicUrl;
+        await this.candidateRepository.save(candidate);
+        return { avatarUrl: publicUrl };
+      },
+      oldFilePath,
+    );
 
-      // Orphan Fix: If save succeeds, try to delete the old avatar
-      if (oldAvatarUrl) {
-        try {
-          const urlParts = oldAvatarUrl.split('/');
-          const fileName = urlParts[urlParts.length - 1];
-          await this.supabaseService.deleteFile(
-            `candidates/${userId}/${fileName}`,
-          );
-        } catch (error) {
-          this.logger.error(
-            `Error deleting old avatar: ${(error as Error).message}`,
-            (error as Error).stack,
-          );
-        }
-      }
-
-      return { avatarUrl: publicUrl };
-    } catch (dbError) {
-      // Orphan Fix: If save fails, delete the newly uploaded file
-      this.logger.error(
-        `Failed to save candidate, deleting orphaned avatar...`,
-      );
-      await this.supabaseService.deleteFile(filePath).catch(() => null);
-      throw dbError;
-    }
+    return result;
   }
 
   private async findCandidateByUserId(userId: number) {

@@ -10,6 +10,8 @@ import * as bcrypt from 'bcrypt';
 
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
 
+export const BCRYPT_SALT_ROUNDS = 10;
+
 export enum UserRole {
   ADMIN = 'admin',
   EMPLOYER = 'employer',
@@ -46,6 +48,6 @@ export class UserEntity {
 
   @BeforeInsert()
   async hashPassword() {
-    this.password = await bcrypt.hash(this.password, 10);
+    this.password = await bcrypt.hash(this.password, BCRYPT_SALT_ROUNDS);
   }
 }

@@ -53,4 +53,3 @@ export class AdminCompaniesController {
     return this.companiesService.getCompanyHistory(id);
   }
 }
-

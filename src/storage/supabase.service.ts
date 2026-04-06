@@ -93,4 +93,42 @@ export class SupabaseService {
       // but let's log it.
     }
   }
+
+  /**
+   * Helper to perform an atomic file upload and database update.
+   * If the database update fails, the newly uploaded file is deleted.
+   * If it succeeds, the old file (if provided) is deleted.
+   * @param file The file to upload
+   * @param uploadPath The path to upload to
+   * @param updateDbCallback Callback function to perform the database update
+   * @param oldFilePath Optional old file path to delete after successful update
+   */
+  async atomicUploadAndUpdate<T>(
+    file: UploadFile,
+    uploadPath: string,
+    updateDbCallback: (publicUrl: string) => Promise<T>,
+    oldFilePath?: string,
+  ): Promise<{ result: T; publicUrl: string }> {
+    const publicUrl = await this.uploadFile(file, uploadPath);
+
+    try {
+      const result = await updateDbCallback(publicUrl);
+
+      // Orphan Fix: delete old file after successful save
+      if (oldFilePath) {
+        await this.deleteFile(oldFilePath).catch((e: Error) =>
+          this.logger.error(`Error deleting old file: ${e.message}`),
+        );
+      }
+
+      return { result, publicUrl };
+    } catch (dbError) {
+      // Orphan Fix: DB failed → delete newly uploaded file
+      this.logger.error(
+        `Database update failed, deleting orphaned file: ${uploadPath}`,
+      );
+      await this.deleteFile(uploadPath).catch(() => null);
+      throw dbError;
+    }
+  }
 }
