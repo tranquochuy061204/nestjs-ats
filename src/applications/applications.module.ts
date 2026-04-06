@@ -5,7 +5,8 @@ import { ApplicationStatusHistoryEntity } from './entities/application-status-hi
 import { CandidateEntity } from '../candidates/entities/candidate.entity';
 import { JobEntity } from '../jobs/entities/job.entity';
 import { EmployerEntity } from '../employers/entities/employer.entity';
-import { ApplicationsService } from './applications.service';
+import { CandidateApplicationsService } from './candidate-applications.service';
+import { EmployerApplicationsService } from './employer-applications.service';
 import { CandidateApplicationsController } from './candidate-applications.controller';
 import { EmployerApplicationsController } from './employer-applications.controller';
 
@@ -23,6 +24,6 @@ import { EmployerApplicationsController } from './employer-applications.controll
     CandidateApplicationsController,
     EmployerApplicationsController,
   ],
-  providers: [ApplicationsService],
+  providers: [CandidateApplicationsService, EmployerApplicationsService],
 })
 export class ApplicationsModule {}

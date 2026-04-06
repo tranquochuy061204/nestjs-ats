@@ -17,7 +17,7 @@ export class UpdateApplicationStatusDto extends createZodDto(
   @ApiProperty({
     description: 'Trạng thái mới',
     enum: ApplicationStatus,
-    example: ApplicationStatus.SCREENING,
+    example: ApplicationStatus.SHORTLISTED,
   })
   status: ApplicationStatus;
 

@@ -25,7 +25,7 @@ export class ApplicationStatusHistoryEntity {
   @Column({ type: 'text', nullable: true })
   reason: string | null;
 
-  @Column({ name: 'changed_by_id', nullable: true })
+  @Column({ name: 'changed_by_id', type: 'int', nullable: true })
   changedById: number | null;
 
   @CreateDateColumn({ name: 'created_at' })

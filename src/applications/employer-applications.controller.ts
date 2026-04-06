@@ -11,7 +11,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { UserRole } from '../users/entities/user.entity';
-import { ApplicationsService } from './applications.service';
+import { EmployerApplicationsService } from './employer-applications.service';
 import { ApplicationFilterDto } from './dto/application-filter.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
 import type { Request } from 'express';
@@ -19,7 +19,9 @@ import type { Request } from 'express';
 @ApiTags('Applications - Employer')
 @Controller('employer/applications')
 export class EmployerApplicationsController {
-  constructor(private readonly applicationsService: ApplicationsService) {}
+  constructor(
+    private readonly applicationsService: EmployerApplicationsService,
+  ) {}
 
   @Get('job/:jobId')
   @ApiAuth(UserRole.EMPLOYER)
@@ -43,6 +45,25 @@ export class EmployerApplicationsController {
       jobId,
       filterDto,
     );
+  }
+
+  @Get('job/:jobId/kanban')
+  @ApiAuth(UserRole.EMPLOYER)
+  @ApiOperation({
+    summary: 'Xem Kanban Board danh sách ứng viên của 1 tin tuyển dụng',
+  })
+  @ApiParam({ name: 'jobId', description: 'ID tin tuyển dụng' })
+  @ApiResponse({ status: 200, description: 'Cấu trúc Kanban board' })
+  @ApiResponse({
+    status: 404,
+    description: 'Tin tuyển dụng không tồn tại hoặc không thuộc công ty',
+  })
+  getKanbanBoard(
+    @Req() req: Request,
+    @Param('jobId', ParseIntPipe) jobId: number,
+  ) {
+    const user = req.user as { id: number };
+    return this.applicationsService.getKanbanBoard(user.id, jobId);
   }
 
   @Get(':id')

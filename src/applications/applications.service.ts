@@ -82,7 +82,7 @@ export class ApplicationsService {
     if (existing) {
       if (existing.status === (ApplicationStatus.WITHDRAWN as string)) {
         // Cho phép nộp lại — cập nhật đơn cũ
-        existing.status = ApplicationStatus.RECEIVED;
+        existing.status = ApplicationStatus.APPLIED;
         existing.cvUrlSnapshot = candidate.cvUrl;
         existing.coverLetter = dto.coverLetter ?? null;
         existing.rejectionReason = null;
@@ -93,7 +93,7 @@ export class ApplicationsService {
         await this.logHistory(
           existing.id,
           ApplicationStatus.WITHDRAWN,
-          ApplicationStatus.RECEIVED,
+          ApplicationStatus.APPLIED,
           null,
           userId,
         );
@@ -118,7 +118,7 @@ export class ApplicationsService {
       candidateId: candidate.id,
       cvUrlSnapshot: candidate.cvUrl,
       coverLetter: dto.coverLetter,
-      status: ApplicationStatus.RECEIVED,
+      status: ApplicationStatus.APPLIED,
     });
     const saved = await this.applicationRepo.save(application);
 
@@ -126,7 +126,7 @@ export class ApplicationsService {
     await this.logHistory(
       saved.id,
       null,
-      ApplicationStatus.RECEIVED,
+      ApplicationStatus.APPLIED,
       null,
       userId,
     );

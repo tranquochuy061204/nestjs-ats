@@ -12,7 +12,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { UserRole } from '../users/entities/user.entity';
-import { ApplicationsService } from './applications.service';
+import { CandidateApplicationsService } from './candidate-applications.service';
 import { ApplyJobDto } from './dto/apply-job.dto';
 import { ApplicationFilterDto } from './dto/application-filter.dto';
 import type { Request } from 'express';
@@ -20,7 +20,9 @@ import type { Request } from 'express';
 @ApiTags('Applications - Candidate')
 @Controller('applications')
 export class CandidateApplicationsController {
-  constructor(private readonly applicationsService: ApplicationsService) {}
+  constructor(
+    private readonly applicationsService: CandidateApplicationsService,
+  ) {}
 
   @Post(':jobId')
   @ApiAuth(UserRole.CANDIDATE)

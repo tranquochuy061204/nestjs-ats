@@ -25,7 +25,7 @@ export class ApplicationFilterDto extends createZodDto(
 
   @ApiPropertyOptional({
     description:
-      'Lọc theo trạng thái (received, screening, interview, offer, rejected, withdrawn)',
+      'Lọc theo trạng thái (applied, shortlisted, skill_test, interview, offer, hired, rejected, withdrawn)',
   })
   status?: string;
 }

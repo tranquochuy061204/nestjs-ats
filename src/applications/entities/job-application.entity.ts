@@ -14,10 +14,12 @@ import { CandidateEntity } from '../../candidates/entities/candidate.entity';
 import { ApplicationStatusHistoryEntity } from './application-status-history.entity';
 
 export enum ApplicationStatus {
-  RECEIVED = 'received',
-  SCREENING = 'screening',
+  APPLIED = 'applied',
+  SHORTLISTED = 'shortlisted',
+  SKILL_TEST = 'skill_test',
   INTERVIEW = 'interview',
   OFFER = 'offer',
+  HIRED = 'hired',
   REJECTED = 'rejected',
   WITHDRAWN = 'withdrawn',
 }
@@ -47,8 +49,7 @@ export class JobApplicationEntity {
 
   @Column({
     type: 'varchar',
-    length: 20,
-    default: ApplicationStatus.RECEIVED,
+    default: ApplicationStatus.APPLIED,
   })
   status: string;
 
