@@ -90,28 +90,47 @@ export class EmployerApplicationsService {
       { id: ApplicationStatus.WITHDRAWN, title: 'Đã rút đơn' },
     ];
 
-    const result = [];
+    // Query 1: Đếm tổng từng status bằng 1 câu SQL duy nhất thay vì 8 câu
+    const counts = await this.applicationRepo
+      .createQueryBuilder('app')
+      .select('app.status', 'status')
+      .addSelect('COUNT(*)::int', 'count')
+      .where('app.jobId = :jobId', { jobId })
+      .groupBy('app.status')
+      .getRawMany<{ status: string; count: number }>();
 
-    for (const column of columns) {
-      const qb = this.applicationRepo
-        .createQueryBuilder('app')
-        .leftJoinAndSelect('app.candidate', 'candidate')
-        .where('app.jobId = :jobId', { jobId })
-        .andWhere('app.status = :status', { status: column.id })
-        .orderBy('app.appliedAt', 'DESC');
-
-      const count = await qb.getCount();
-      const items = await qb.take(10).getMany();
-
-      result.push({
-        id: column.id,
-        title: column.title,
-        count,
-        items,
-      });
+    const countMap = new Map<string, number>();
+    for (const row of counts) {
+      countMap.set(row.status, row.count);
     }
 
-    return result;
+    // Query 2: Lấy top 10 items mỗi cột bằng 1 câu SQL + window function
+    const allItems = await this.applicationRepo
+      .createQueryBuilder('app')
+      .leftJoinAndSelect('app.candidate', 'candidate')
+      .leftJoinAndSelect('candidate.skills', 'skills')
+      .leftJoinAndSelect('skills.skillMetadata', 'skillMetadata')
+      .where('app.jobId = :jobId', { jobId })
+      .orderBy('app.status', 'ASC')
+      .addOrderBy('app.appliedAt', 'DESC')
+      .getMany();
+
+    // Nhóm items theo status, giới hạn 10 mỗi cột
+    const itemMap = new Map<string, JobApplicationEntity[]>();
+    for (const item of allItems) {
+      const list = itemMap.get(item.status) || [];
+      if (list.length < 10) {
+        list.push(item);
+      }
+      itemMap.set(item.status, list);
+    }
+
+    return columns.map((col) => ({
+      id: col.id,
+      title: col.title,
+      count: countMap.get(col.id) || 0,
+      items: itemMap.get(col.id) || [],
+    }));
   }
 
   async getApplicationDetail(employerUserId: number, applicationId: number) {
@@ -164,9 +183,27 @@ export class EmployerApplicationsService {
       );
     }
 
+    // Chặn thay đổi status cho đơn đã bị rút hoặc đã từ chối
     if (application.status === (ApplicationStatus.WITHDRAWN as string)) {
       throw new BadRequestException(
         'Không thể thay đổi trạng thái đơn đã được ứng viên rút',
+      );
+    }
+
+    if (application.status === (ApplicationStatus.REJECTED as string)) {
+      throw new BadRequestException(
+        'Không thể thay đổi trạng thái đơn đã bị từ chối. Hãy tạo đơn mới nếu cần.',
+      );
+    }
+
+    // Employer không được gán status thuộc quyền hệ thống/ứng viên
+    const employerForbiddenStatuses: string[] = [
+      ApplicationStatus.APPLIED,
+      ApplicationStatus.WITHDRAWN,
+    ];
+    if (employerForbiddenStatuses.includes(dto.status)) {
+      throw new BadRequestException(
+        `Nhà tuyển dụng không được phép chuyển sang trạng thái "${dto.status}"`,
       );
     }
 

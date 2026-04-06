@@ -16,6 +16,12 @@ import { CandidateEntity } from '../candidates/entities/candidate.entity';
 import { JobEntity, JobStatus } from '../jobs/entities/job.entity';
 import { ApplyJobDto } from './dto/apply-job.dto';
 import { ApplicationFilterDto } from './dto/application-filter.dto';
+import { ConfigService } from '@nestjs/config';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
+  CANDIDATE_MATCH_SCORE_PROMPT,
+  CV_MATCH_SCORE_PROMPT,
+} from './applications.constants';
 
 @Injectable()
 export class CandidateApplicationsService {
@@ -30,7 +36,15 @@ export class CandidateApplicationsService {
     private readonly candidateRepo: Repository<CandidateEntity>,
     @InjectRepository(JobEntity)
     private readonly jobRepo: Repository<JobEntity>,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    if (apiKey) {
+      this.genAI = new GoogleGenerativeAI(apiKey);
+    }
+  }
+
+  private genAI: GoogleGenerativeAI;
 
   async apply(userId: number, jobId: number, dto: ApplyJobDto) {
     const candidate = await this.findCandidateByUserId(userId);
@@ -70,6 +84,10 @@ export class CandidateApplicationsService {
         existing.coverLetter = dto.coverLetter ?? null;
         existing.rejectionReason = null;
         existing.employerNote = null;
+        existing.matchScore = null;
+        existing.matchReasoning = null;
+        existing.cvMatchScore = null;
+        existing.cvMatchReasoning = null;
         await this.applicationRepo.save(existing);
 
         await this.logHistory(
@@ -79,6 +97,14 @@ export class CandidateApplicationsService {
           null,
           userId,
         );
+
+        // Kích hoạt tính điểm AI dưới nền (fire-and-forget)
+        this.calculateAiMatchScore(existing.id).catch((err: unknown) => {
+          this.logger.error(
+            'Error calculating AI match score for re-apply',
+            err instanceof Error ? err.stack : String(err),
+          );
+        });
 
         return {
           message:
@@ -111,6 +137,14 @@ export class CandidateApplicationsService {
       null,
       userId,
     );
+
+    // Kích hoạt tính điểm AI dưới nền (fire-and-forget)
+    this.calculateAiMatchScore(saved.id).catch((err: unknown) => {
+      this.logger.error(
+        'Error calculating AI match score',
+        err instanceof Error ? err.stack : String(err),
+      );
+    });
 
     return {
       message: 'Ứng tuyển thành công',
@@ -229,5 +263,204 @@ export class CandidateApplicationsService {
         changedById,
       }),
     );
+  }
+
+  private async calculateAiMatchScore(applicationId: number) {
+    if (!this.genAI) {
+      this.logger.warn('AI API key not configured. Skipping match score.');
+      return;
+    }
+
+    // Lấy thông tin ứng tuyển
+    const application = await this.applicationRepo.findOne({
+      where: { id: applicationId },
+      relations: [
+        'job',
+        'job.skills',
+        'job.skills.skillMetadata',
+        'candidate',
+        'candidate.skills',
+        'candidate.skills.skillMetadata',
+        'candidate.educations',
+        'candidate.workExperiences',
+        'candidate.projects',
+        'candidate.certificates',
+      ],
+    });
+
+    if (!application) return;
+
+    // Chuẩn bị Dữ liệu Job dùng chung
+    const jobData = {
+      title: application.job.title,
+      requirements: application.job.requirements,
+      yearsOfExperience: application.job.yearsOfExperience,
+      skillTags:
+        application.job.skills?.map((s) => s.skillMetadata?.canonicalName) ||
+        [],
+    };
+
+    const promises: Promise<void>[] = [];
+
+    // 1. Luồng chạy AI Profile trong DB
+    promises.push(this.calculateProfileScore(application, jobData));
+
+    // 2. Luồng chạy AI Quét File CV (nếu có CV URL)
+    if (application.cvUrlSnapshot) {
+      promises.push(this.calculateCvScore(application, jobData));
+    }
+
+    // Chạy song song không chặn nhau (allSettled để một lỗi ko chết cái kia)
+    await Promise.allSettled(promises);
+  }
+
+  private async calculateProfileScore(
+    application: JobApplicationEntity,
+    jobData: Record<string, any>,
+  ) {
+    const candidateData = {
+      yearsOfExperience: application.candidate.yearWorkingExperience,
+      skills:
+        application.candidate.skills?.map(
+          (s) => s.skillMetadata?.canonicalName,
+        ) || [],
+      workExperiences:
+        application.candidate.workExperiences?.map((we) => ({
+          position: we.position,
+          company: we.companyName,
+          description: we.description,
+        })) || [],
+      projects:
+        application.candidate.projects?.map((p) => ({
+          name: p.name,
+          description: p.description,
+        })) || [],
+      certificates:
+        application.candidate.certificates?.map((c) => ({
+          name: c.name,
+        })) || [],
+    };
+
+    const prompt = CANDIDATE_MATCH_SCORE_PROMPT(jobData, candidateData);
+
+    try {
+      const model = this.genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+      });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text().trim();
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON object found in AI response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        matchScore: number;
+        reasoning: string;
+      };
+
+      if (typeof parsed.matchScore === 'number') {
+        application.matchScore = parsed.matchScore;
+        application.matchReasoning = parsed.reasoning || text;
+        await this.applicationRepo.save(application);
+        this.logger.log(
+          'AI Profile Score calculated for App #' +
+            application.id +
+            ': ' +
+            parsed.matchScore,
+        );
+      }
+    } catch (error: unknown) {
+      this.logger.error(
+        'Failed to calculate AI Profile Score for application ' +
+          application.id,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  private async calculateCvScore(
+    application: JobApplicationEntity,
+    jobData: Record<string, any>,
+  ) {
+    try {
+      // 1. Tải file từ Cloud về RAM
+      const fileData = await this.fetchBase64Cv(application.cvUrlSnapshot);
+      if (!fileData) {
+        this.logger.warn(
+          'Không thể đọc file CV định dạng này cho App #' + application.id,
+        );
+        return;
+      }
+
+      const prompt = CV_MATCH_SCORE_PROMPT(jobData);
+      const model = this.genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+      });
+
+      // Gửi Cả File Nhị Phân và Prompt Lên Gemini
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            data: fileData.base64,
+            mimeType: fileData.mimeType,
+          },
+        },
+        prompt,
+      ]);
+
+      const text = result.response.text().trim();
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON object found in AI CV response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        cvMatchScore: number;
+        reasoning: string;
+      };
+
+      if (typeof parsed.cvMatchScore === 'number') {
+        application.cvMatchScore = parsed.cvMatchScore;
+        application.cvMatchReasoning = parsed.reasoning || text;
+        await this.applicationRepo.save(application);
+        this.logger.log(
+          'AI CV Score calculated for App #' +
+            application.id +
+            ': ' +
+            parsed.cvMatchScore,
+        );
+      }
+    } catch (error: unknown) {
+      this.logger.error(
+        'Failed to calculate AI CV Score for application ' + application.id,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  private async fetchBase64Cv(
+    url: string | null,
+  ): Promise<{ base64: string; mimeType: string } | null> {
+    if (!url || !url.startsWith('http')) return null;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+
+      const mimeType = res.headers.get('content-type') || 'application/pdf';
+      // Gemini Flash hỗ trợ cực tốt PDF và Image, nếu là docx sẽ return null bỏ qua
+      if (!mimeType.includes('pdf') && !mimeType.includes('image')) {
+        return null;
+      }
+
+      const arrayBuffer = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      return { base64: buffer.toString('base64'), mimeType };
+    } catch (e) {
+      this.logger.error('Fetch CV Error: ' + url, e);
+      return null;
+    }
   }
 }

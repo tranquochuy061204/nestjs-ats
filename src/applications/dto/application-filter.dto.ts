@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApplicationStatus } from '../entities/job-application.entity';
 
 const ApplicationFilterSchema = z.object({
   page: z
@@ -11,7 +12,7 @@ const ApplicationFilterSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? parseInt(val, 10) : 10)),
-  status: z.string().optional(),
+  status: z.nativeEnum(ApplicationStatus).optional(),
 });
 
 export class ApplicationFilterDto extends createZodDto(
@@ -26,6 +27,7 @@ export class ApplicationFilterDto extends createZodDto(
   @ApiPropertyOptional({
     description:
       'Lọc theo trạng thái (applied, shortlisted, skill_test, interview, offer, hired, rejected, withdrawn)',
+    enum: ApplicationStatus,
   })
-  status?: string;
+  status?: ApplicationStatus;
 }

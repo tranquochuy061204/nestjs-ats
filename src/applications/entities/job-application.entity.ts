@@ -59,6 +59,18 @@ export class JobApplicationEntity {
   @Column({ name: 'employer_note', type: 'text', nullable: true })
   employerNote: string | null;
 
+  @Column({ name: 'match_score', type: 'int', nullable: true })
+  matchScore: number | null;
+
+  @Column({ name: 'match_reasoning', type: 'text', nullable: true })
+  matchReasoning: string | null;
+
+  @Column({ name: 'cv_match_score', type: 'int', nullable: true })
+  cvMatchScore: number | null;
+
+  @Column({ name: 'cv_match_reasoning', type: 'text', nullable: true })
+  cvMatchReasoning: string | null;
+
   @CreateDateColumn({ name: 'applied_at' })
   appliedAt: Date;
 
