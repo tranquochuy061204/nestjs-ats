@@ -8,6 +8,9 @@ import { CandidateEntity } from '../candidates/entities/candidate.entity';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { RefreshTokenEntity } from './entities/refresh-token.entity';
+import { Response } from 'express';
 
 @Injectable()
 export class AuthService {
@@ -16,7 +19,10 @@ export class AuthService {
     private readonly userRepository: Repository<UserEntity>,
     @InjectRepository(CandidateEntity)
     private readonly candidateRepository: Repository<CandidateEntity>,
+    @InjectRepository(RefreshTokenEntity)
+    private readonly refreshTokenRepository: Repository<RefreshTokenEntity>,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -103,15 +109,124 @@ export class AuthService {
     }
     return user;
   }
-  login(user: UserEntity) {
-    const token = this.jwtService.sign({
+
+  async generateTokenPair(user: UserEntity) {
+    const payload = {
       id: user.id,
       email: user.email,
       role: user.role,
       ...(user.candidate ? { candidateId: user.candidate.id } : {}),
-    });
+    };
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(payload, {
+        secret: this.configService.get<string>('JWT_SECRET'),
+        expiresIn: this.configService.get<string>('JWT_EXPIRES_TIME') as any,
+      }),
+      this.jwtService.signAsync(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.get<string>(
+          'JWT_REFRESH_EXPIRES_TIME',
+        ) as any,
+      }),
+    ]);
+
     return {
-      access_token: token,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
+  }
+
+  async storeRefreshToken(
+    userId: number,
+    token: string,
+    userAgent?: string,
+    ipAddress?: string,
+  ) {
+    const hashedToken = await bcrypt.hash(token, 10);
+    const expiresAt = new Date();
+    // Giả sử refresh token hết hạn sau 7 ngày (đồng bộ với JWT config)
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const refreshToken = this.refreshTokenRepository.create({
+      userId,
+      token: hashedToken,
+      expiresAt,
+      userAgent,
+      ipAddress,
+    });
+
+    await this.refreshTokenRepository.save(refreshToken);
+  }
+
+  async refreshTokens(userId: number, rawRefreshToken: string, userAgent?: string, ipAddress?: string) {
+    const user = await this.userRepository.findOne({ 
+      where: { id: userId },
+      relations: ['candidate']
+    });
+    if (!user) throw new ConflictException('User not found');
+
+    // Tìm xem token này có trong DB không
+    const savedTokens = await this.refreshTokenRepository.find({
+      where: { userId, isRevoked: false },
+    });
+
+    // So khớp token đã hash
+    let matchedTokenRecord = null;
+    for (const record of savedTokens) {
+      const isMatch = await bcrypt.compare(rawRefreshToken, record.token);
+      if (isMatch) {
+        matchedTokenRecord = record;
+        break;
+      }
+    }
+
+    if (!matchedTokenRecord) {
+      throw new ConflictException('Invalid Refresh Token');
+    }
+
+    // Xoay vòng (Rotation): Xóa bản ghi cũ
+    await this.refreshTokenRepository.remove(matchedTokenRecord);
+
+    // Tạo cặp mới
+    const tokens = await this.generateTokenPair(user);
+    await this.storeRefreshToken(user.id, tokens.refresh_token, userAgent, ipAddress);
+
+    return tokens;
+  }
+
+  async logout(userId: number, rawRefreshToken: string) {
+    const savedTokens = await this.refreshTokenRepository.find({
+      where: { userId, isRevoked: false },
+    });
+
+    for (const record of savedTokens) {
+      const isMatch = await bcrypt.compare(rawRefreshToken, record.token);
+      if (isMatch) {
+        await this.refreshTokenRepository.remove(record);
+        break;
+      }
+    }
+  }
+
+  setRefreshTokenCookie(res: Response, token: string) {
+    res.cookie('refresh_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
+    });
+  }
+
+  clearRefreshTokenCookie(res: Response) {
+    res.clearCookie('refresh_token');
+  }
+
+  async login(user: UserEntity) {
+    const tokens = await this.generateTokenPair(user);
+    return {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
       user: {
         id: user.id,
         email: user.email,

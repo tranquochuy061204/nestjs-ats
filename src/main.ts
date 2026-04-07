@@ -1,3 +1,4 @@
+import cookieParser from 'cookie-parser';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -5,6 +6,15 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Cấu hình CORS để cho phép Cookies
+  app.enableCors({
+    origin: true, // Trong thực tế nên để domain cụ thể
+    credentials: true,
+  });
+
+  // Sử dụng cookie-parser để đọc cookie từ request
+  app.use(cookieParser());
 
   // Global prefix cho tất cả các route
   app.setGlobalPrefix('api');
