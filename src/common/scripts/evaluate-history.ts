@@ -1,14 +1,6 @@
 import { DataSource } from 'typeorm';
-import { CompaniesService } from '../../companies/companies.service';
-import { JobsService } from '../../jobs/jobs.service';
-import { CompanyEntity } from '../../companies/entities/company.entity';
-import { CompanyImageEntity } from '../../companies/entities/company-image.entity';
 import { CompanyStatusHistoryEntity } from '../../companies/entities/company-status-history.entity';
-import { JobEntity } from '../../jobs/entities/job.entity';
 import { JobStatusHistoryEntity } from '../../jobs/entities/job-status-history.entity';
-import { EmployerEntity } from '../../users/../employers/entities/employer.entity'; // Path adjustments needed or use full path
-import { SupabaseService } from '../../storage/supabase.service';
-import { JobSkillsService } from '../../jobs/job-skills.service';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
