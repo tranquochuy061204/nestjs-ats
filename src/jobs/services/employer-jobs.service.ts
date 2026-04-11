@@ -124,7 +124,7 @@ export class EmployerJobsService {
         await manager.update(
           JobEntity,
           { id: jobId },
-          { ...otherJobData, status: finalStatus },
+          { ...jobDataUpdates, status: finalStatus },
         );
 
         if (finalStatus !== job.status) {
