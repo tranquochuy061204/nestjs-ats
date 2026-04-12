@@ -45,7 +45,10 @@ export class CandidateApplicationsService {
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
     }
-    this.aiModel = this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash');
+    this.aiModel = this.configService.get<string>(
+      'GEMINI_MODEL',
+      'gemini-2.5-flash',
+    );
   }
 
   async apply(userId: number, jobId: number, dto: ApplyJobDto) {

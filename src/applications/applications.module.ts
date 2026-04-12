@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobApplicationEntity } from './entities/job-application.entity';
 import { ApplicationStatusHistoryEntity } from './entities/application-status-history.entity';
+import { ApplicationNoteEntity } from './entities/application-note.entity';
 import { CandidateEntity } from '../candidates/entities/candidate.entity';
 import { JobEntity } from '../jobs/entities/job.entity';
 import { EmployerEntity } from '../employers/entities/employer.entity';
@@ -15,6 +16,7 @@ import { EmployerApplicationsController } from './employer-applications.controll
     TypeOrmModule.forFeature([
       JobApplicationEntity,
       ApplicationStatusHistoryEntity,
+      ApplicationNoteEntity,
       CandidateEntity,
       JobEntity,
       EmployerEntity,

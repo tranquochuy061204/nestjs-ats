@@ -14,11 +14,7 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      UserEntity,
-      CandidateEntity,
-      RefreshTokenEntity,
-    ]),
+    TypeOrmModule.forFeature([UserEntity, CandidateEntity, RefreshTokenEntity]),
     JwtModule.registerAsync({
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),

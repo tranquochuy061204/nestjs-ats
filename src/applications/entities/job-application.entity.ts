@@ -24,6 +24,8 @@ export enum ApplicationStatus {
   WITHDRAWN = 'withdrawn',
 }
 
+import { ApplicationNoteEntity } from './application-note.entity';
+
 @Entity('job_application')
 @Unique(['jobId', 'candidateId'])
 export class JobApplicationEntity {
@@ -56,6 +58,7 @@ export class JobApplicationEntity {
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })
   rejectionReason: string | null;
 
+  /** @deprecated Use notes instead */
   @Column({ name: 'employer_note', type: 'text', nullable: true })
   employerNote: string | null;
 
@@ -96,4 +99,7 @@ export class JobApplicationEntity {
     (history) => history.application,
   )
   statusHistory: ApplicationStatusHistoryEntity[];
+
+  @OneToMany(() => ApplicationNoteEntity, (note) => note.application)
+  notes: ApplicationNoteEntity[];
 }

@@ -159,10 +159,15 @@ export class AuthService {
     await this.refreshTokenRepository.save(refreshToken);
   }
 
-  async refreshTokens(userId: number, rawRefreshToken: string, userAgent?: string, ipAddress?: string) {
-    const user = await this.userRepository.findOne({ 
+  async refreshTokens(
+    userId: number,
+    rawRefreshToken: string,
+    userAgent?: string,
+    ipAddress?: string,
+  ) {
+    const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['candidate']
+      relations: ['candidate'],
     });
     if (!user) throw new ConflictException('User not found');
 
@@ -190,7 +195,12 @@ export class AuthService {
 
     // Tạo cặp mới
     const tokens = await this.generateTokenPair(user);
-    await this.storeRefreshToken(user.id, tokens.refresh_token, userAgent, ipAddress);
+    await this.storeRefreshToken(
+      user.id,
+      tokens.refresh_token,
+      userAgent,
+      ipAddress,
+    );
 
     return tokens;
   }

@@ -16,6 +16,9 @@ import { JobEntity } from '../jobs/entities/job.entity';
 import { EmployerEntity } from '../employers/entities/employer.entity';
 import { ApplicationFilterDto } from './dto/application-filter.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
+import { ApplicationNoteEntity } from './entities/application-note.entity';
+import { CreateApplicationNoteDto } from './dto/create-application-note.dto';
+import { UpdateApplicationNoteDto } from './dto/update-application-note.dto';
 
 @Injectable()
 export class EmployerApplicationsService {
@@ -30,6 +33,8 @@ export class EmployerApplicationsService {
     private readonly jobRepo: Repository<JobEntity>,
     @InjectRepository(EmployerEntity)
     private readonly employerRepo: Repository<EmployerEntity>,
+    @InjectRepository(ApplicationNoteEntity)
+    private readonly noteRepo: Repository<ApplicationNoteEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -145,10 +150,15 @@ export class EmployerApplicationsService {
         'candidate.skills',
         'candidate.skills.skillMetadata',
         'candidate.workExperiences',
-        'candidate.educations',
+        'candidate.projects',
         'candidate.certificates',
         'statusHistory',
+        'notes',
+        'notes.author',
       ],
+      order: {
+        notes: { createdAt: 'DESC' },
+      },
     });
 
     if (!application) {
@@ -216,8 +226,9 @@ export class EmployerApplicationsService {
       application.rejectionReason = dto.reason ?? null;
     }
 
-    if (dto.note !== undefined) {
-      application.employerNote = dto.note ?? null;
+    if (dto.note !== undefined && dto.note !== null && dto.note.trim() !== '') {
+      // Logic mới: Tự động tạo note record thay vì ghi đè record cũ
+      application.employerNote = `[Sytem] Trạng thái thay đổi sang ${dto.status}. Note cũ được lưu vào timeline.`;
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -232,6 +243,16 @@ export class EmployerApplicationsService {
           changedById: employerUserId,
         }),
       );
+      if (dto.note) {
+        await manager.save(
+          ApplicationNoteEntity,
+          manager.create(ApplicationNoteEntity, {
+            applicationId,
+            authorId: employer.id,
+            content: dto.note,
+          }),
+        );
+      }
     });
 
     return {
@@ -260,6 +281,67 @@ export class EmployerApplicationsService {
       where: { applicationId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async addNote(
+    employerUserId: number,
+    applicationId: number,
+    dto: CreateApplicationNoteDto,
+  ) {
+    const employer = await this.findEmployerByUserId(employerUserId);
+
+    const application = await this.applicationRepo.findOne({
+      where: {
+        id: applicationId,
+        job: { companyId: employer.companyId },
+      },
+      relations: ['job'],
+    });
+
+    if (!application) {
+      throw new NotFoundException(
+        'Đơn ứng tuyển không tồn tại hoặc bạn không có quyền truy cập',
+      );
+    }
+
+    const note = this.noteRepo.create({
+      applicationId,
+      authorId: employer.id,
+      content: dto.content,
+    });
+
+    return this.noteRepo.save(note);
+  }
+
+  async updateNote(
+    employerUserId: number,
+    noteId: number,
+    dto: UpdateApplicationNoteDto,
+  ) {
+    const employer = await this.findEmployerByUserId(employerUserId);
+
+    const note = await this.noteRepo.findOne({
+      where: { id: noteId },
+      relations: ['application', 'application.job'],
+    });
+
+    if (!note) {
+      throw new NotFoundException('Không tìm thấy ghi chú');
+    }
+
+    // Kiểm tra quyền: Chỉ người tạo và thuộc cùng công ty mới được sửa
+    if (note.authorId !== employer.id) {
+      throw new ForbiddenException(
+        'Bạn không có quyền sửa ghi chú của người khác',
+      );
+    }
+
+    if (note.application.job.companyId !== employer.companyId) {
+      throw new ForbiddenException('Ghi chú không thuộc công ty của bạn');
+    }
+
+    note.content = dto.content;
+    return this.noteRepo.save(note);
   }
 
   private async findEmployerByUserId(userId: number) {

@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
   Query,
   Req,
 } from '@nestjs/common';
@@ -14,6 +15,8 @@ import { UserRole } from '../users/entities/user.entity';
 import { EmployerApplicationsService } from './employer-applications.service';
 import { ApplicationFilterDto } from './dto/application-filter.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
+import { CreateApplicationNoteDto } from './dto/create-application-note.dto';
+import { UpdateApplicationNoteDto } from './dto/update-application-note.dto';
 import type { Request } from 'express';
 
 @ApiTags('Applications - Employer')
@@ -114,5 +117,36 @@ export class EmployerApplicationsController {
   ) {
     const user = req.user as { id: number };
     return this.applicationsService.getApplicationHistory(user.id, id);
+  }
+
+  @Post(':id/notes')
+  @ApiAuth(UserRole.EMPLOYER)
+  @ApiOperation({ summary: 'Thêm ghi chú/nhận xét cho đơn ứng tuyển' })
+  @ApiParam({ name: 'id', description: 'ID đơn ứng tuyển' })
+  @ApiResponse({ status: 201, description: 'Đã thêm ghi chú' })
+  @ApiResponse({ status: 404, description: 'Đơn ứng tuyển không tồn tại' })
+  addNote(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateApplicationNoteDto,
+  ) {
+    const user = req.user as { id: number };
+    return this.applicationsService.addNote(user.id, id, dto);
+  }
+
+  @Patch('notes/:noteId')
+  @ApiAuth(UserRole.EMPLOYER)
+  @ApiOperation({ summary: 'Cập nhật nội dung ghi chú (chỉ người tạo)' })
+  @ApiParam({ name: 'noteId', description: 'ID của ghi chú' })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền sửa' })
+  @ApiResponse({ status: 404, description: 'Ghi chú không tồn tại' })
+  updateNote(
+    @Req() req: Request,
+    @Param('noteId', ParseIntPipe) noteId: number,
+    @Body() dto: UpdateApplicationNoteDto,
+  ) {
+    const user = req.user as { id: number };
+    return this.applicationsService.updateNote(user.id, noteId, dto);
   }
 }
