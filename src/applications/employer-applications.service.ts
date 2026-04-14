@@ -155,6 +155,7 @@ export class EmployerApplicationsService {
         'statusHistory',
         'notes',
         'notes.author',
+        'notes.author.employer',
       ],
       order: {
         notes: { createdAt: 'DESC' },
@@ -248,7 +249,7 @@ export class EmployerApplicationsService {
           ApplicationNoteEntity,
           manager.create(ApplicationNoteEntity, {
             applicationId,
-            authorId: employer.id,
+            authorId: employerUserId,
             content: dto.note,
           }),
         );
@@ -306,7 +307,7 @@ export class EmployerApplicationsService {
 
     const note = this.noteRepo.create({
       applicationId,
-      authorId: employer.id,
+      authorId: employerUserId,
       content: dto.content,
     });
 
@@ -330,7 +331,7 @@ export class EmployerApplicationsService {
     }
 
     // Kiểm tra quyền: Chỉ người tạo và thuộc cùng công ty mới được sửa
-    if (note.authorId !== employer.id) {
+    if (note.authorId !== employerUserId) {
       throw new ForbiddenException(
         'Bạn không có quyền sửa ghi chú của người khác',
       );

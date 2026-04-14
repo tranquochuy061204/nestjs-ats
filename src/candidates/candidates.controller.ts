@@ -12,6 +12,7 @@ import {
   UploadedFile,
   ParseFilePipeBuilder,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -38,6 +39,7 @@ import { CreateCertificateDto } from './dto/create-certificate.dto';
 import { UpdateCertificateDto } from './dto/update-certificate.dto';
 import { AddSkillsDto } from './dto/add-skills.dto';
 import { UpdateJobCategoriesDto } from './dto/update-job-categories.dto';
+import { CandidateCvParserService } from './services/candidate-cv-parser.service';
 import type { Request } from 'express';
 
 @Controller('candidates')
@@ -47,6 +49,7 @@ export class CandidatesController {
     private readonly experienceService: CandidateExperienceService,
     private readonly skillsService: CandidateSkillsService,
     private readonly certificatesService: CandidateCertificatesService,
+    private readonly cvParserService: CandidateCvParserService,
   ) {}
 
   // ─── Profile ────────────────────────────────────────────────
@@ -101,9 +104,6 @@ export class CandidatesController {
     @Req() req: Request,
     @UploadedFile(
       new ParseFilePipeBuilder()
-        .addFileTypeValidator({
-          fileType: 'pdf',
-        })
         .addMaxSizeValidator({
           maxSize: 5 * 1024 * 1024, // 5MB limit
         })
@@ -113,8 +113,36 @@ export class CandidatesController {
     )
     file: Express.Multer.File,
   ) {
+    if (!file.mimetype.includes('pdf')) {
+      throw new BadRequestException('File không hợp lệ, chỉ hỗ trợ PDF');
+    }
     const user = req.user as { id: number };
     return this.profileService.uploadCv(user.id, file);
+  }
+
+  @ApiTags('Candidates - Profile')
+  @Post('cv/parse')
+  @ApiAuth()
+  @ApiOperation({
+    summary: '[AI] Parse CV → Tự động điền thông tin vào Profile',
+    description:
+      'Gọi Gemini AI đọc file CV đã upload và tự động điền: họ tên, SĐT, vị trí, bio, ' +
+      'kinh nghiệm làm việc, học vấn, dự án, chứng chỉ và kỹ năng. ' +
+      'Tính năng chỉ chạy khi người dùng chủ động bấm nút — KHÔNG tự động khi upload CV. ' +
+      'Dữ liệu mới được THÊM VÀO, không xóa dữ liệu đã có.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Phân tích và cập nhật thành công',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Chưa upload CV | File không đọc được | AI chưa cấu hình',
+  })
+  @ApiResponse({ status: 404, description: 'Hồ sơ ứng viên không tồn tại' })
+  parseCvToProfile(@Req() req: Request) {
+    const user = req.user as { id: number };
+    return this.cvParserService.parseAndApply(user.id);
   }
 
   @ApiTags('Candidates - Profile')

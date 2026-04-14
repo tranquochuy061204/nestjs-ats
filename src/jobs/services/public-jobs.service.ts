@@ -24,7 +24,16 @@ export class PublicJobsService {
 
     const qb = this.jobRepository
       .createQueryBuilder('job')
-      .leftJoinAndSelect('job.company', 'company')
+      .leftJoin('job.company', 'company')
+      .addSelect([
+        'company.id',
+        'company.name',
+        'company.logoUrl',
+        'company.bannerUrl',
+        'company.description',
+        'company.websiteUrl',
+        'company.slug',
+      ])
       .leftJoinAndSelect('job.province', 'province')
       .leftJoinAndSelect('job.category', 'category')
       .leftJoinAndSelect('job.jobType', 'jobType')
@@ -68,6 +77,47 @@ export class PublicJobsService {
       throw new NotFoundException('Tin tuyển dụng không tồn tại hoặc đã đóng');
     }
 
-    return job;
+    const { company, employer, ...jobData } = job;
+
+    // Lọc dữ liệu an toàn cho Company
+    const safeCompany = company
+      ? {
+          id: company.id,
+          name: company.name,
+          emailContact: company.emailContact,
+          phoneContact: company.phoneContact,
+          address: company.address,
+          provinceId: company.provinceId,
+          logoUrl: company.logoUrl,
+          bannerUrl: company.bannerUrl,
+          description: company.description,
+          content: company.content,
+          companySize: company.companySize,
+          websiteUrl: company.websiteUrl,
+          facebookUrl: company.facebookUrl,
+          linkedinUrl: company.linkedinUrl,
+          slug: company.slug,
+          images: company.images,
+          createdAt: company.createdAt,
+          updatedAt: company.updatedAt,
+        }
+      : null;
+
+    // Lọc dữ liệu an toàn cho Employer
+    const safeEmployer = employer
+      ? {
+          id: employer.id,
+          fullName: employer.fullName,
+          phoneContact: employer.phoneContact,
+          avatarUrl: employer.avatarUrl,
+          isAdminCompany: employer.isAdminCompany,
+        }
+      : null;
+
+    return {
+      ...jobData,
+      company: safeCompany,
+      employer: safeEmployer,
+    };
   }
 }

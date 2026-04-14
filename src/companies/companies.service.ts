@@ -11,7 +11,7 @@ import { CompanyImageEntity } from './entities/company-image.entity';
 import { CompanyStatusHistoryEntity } from './entities/company-status-history.entity';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { SupabaseService } from '../storage/supabase.service';
-import { sanitizeFilename } from '../common/utils/string.util';
+import { sanitizeFilename, toSlug } from '../common/utils/string.util';
 
 @Injectable()
 export class CompaniesService {
@@ -25,6 +25,39 @@ export class CompaniesService {
     private readonly historyRepo: Repository<CompanyStatusHistoryEntity>,
     private readonly supabaseService: SupabaseService,
   ) {}
+
+  async getCompanyPublicBySlug(slug: string) {
+    const company = await this.companyRepo.findOne({
+      where: { slug },
+      relations: ['images'],
+    });
+
+    if (!company) {
+      throw new NotFoundException('Không tìm thấy thông tin công ty');
+    }
+
+    // Chỉ trả về các trường công khai cho ứng viên
+    return {
+      id: company.id,
+      name: company.name,
+      emailContact: company.emailContact,
+      phoneContact: company.phoneContact,
+      address: company.address,
+      provinceId: company.provinceId,
+      logoUrl: company.logoUrl,
+      bannerUrl: company.bannerUrl,
+      description: company.description,
+      content: company.content,
+      companySize: company.companySize,
+      websiteUrl: company.websiteUrl,
+      facebookUrl: company.facebookUrl,
+      linkedinUrl: company.linkedinUrl,
+      createdAt: company.createdAt,
+      updatedAt: company.updatedAt,
+      slug: company.slug,
+      images: company.images,
+    };
+  }
 
   /**
    * Helper function to find company verifying userCreatorId
@@ -48,6 +81,11 @@ export class CompaniesService {
     const company = await this.getCompanyByUser(userId);
 
     Object.assign(company, dto);
+
+    if (dto.name) {
+      company.slug = toSlug(dto.name);
+    }
+
     await this.companyRepo.save(company);
     return company;
   }

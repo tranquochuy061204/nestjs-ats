@@ -8,7 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { JobApplicationEntity } from './job-application.entity';
-import { EmployerEntity } from '../../employers/entities/employer.entity';
+import { UserEntity } from '../../users/entities/user.entity';
 
 @Entity('application_note')
 export class ApplicationNoteEntity {
@@ -38,7 +38,7 @@ export class ApplicationNoteEntity {
   @JoinColumn({ name: 'application_id' })
   application: JobApplicationEntity;
 
-  @ManyToOne(() => EmployerEntity)
+  @ManyToOne(() => UserEntity)
   @JoinColumn({ name: 'author_id' })
-  author: EmployerEntity;
+  author: UserEntity;
 }

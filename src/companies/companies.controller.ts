@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpStatus,
   Param,
   ParseFilePipeBuilder,
@@ -15,7 +16,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { UserRole } from '../users/entities/user.entity';
@@ -158,5 +165,13 @@ export class CompaniesController {
   ) {
     const user = req.user as { id: number };
     return this.companiesService.uploadBusinessLicense(user.id, file);
+  }
+
+  @Get('slug/:slug')
+  @ApiOperation({ summary: 'Xem chi tiết thông tin công ty qua Slug (Public)' })
+  @ApiResponse({ status: 200, description: 'Thông tin công ty và gallery' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy công ty' })
+  getCompanyPublicBySlug(@Param('slug') slug: string) {
+    return this.companiesService.getCompanyPublicBySlug(slug);
   }
 }

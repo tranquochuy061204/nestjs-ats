@@ -107,6 +107,14 @@ export class CompanyEntity {
   @Column({ name: 'verified_at', type: 'timestamp', nullable: true })
   verifiedAt: Date;
 
+  @Column({
+    type: 'varchar',
+    length: 255,
+    unique: true,
+    nullable: true, // Để nullable để migration dễ dàng hơn cho dữ liệu cũ
+  })
+  slug: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

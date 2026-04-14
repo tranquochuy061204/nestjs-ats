@@ -9,6 +9,7 @@ import {
 import * as bcrypt from 'bcrypt';
 
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
+import { EmployerEntity } from '../../employers/entities/employer.entity';
 
 export const BCRYPT_SALT_ROUNDS = 10;
 
@@ -45,6 +46,9 @@ export class UserEntity {
 
   @OneToOne(() => CandidateEntity, (candidate) => candidate.user)
   candidate: CandidateEntity;
+
+  @OneToOne(() => EmployerEntity, (employer) => employer.user)
+  employer: EmployerEntity;
 
   @BeforeInsert()
   async hashPassword() {

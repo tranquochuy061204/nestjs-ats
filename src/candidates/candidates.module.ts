@@ -5,6 +5,7 @@ import { CandidateProfileService } from './services/candidate-profile.service';
 import { CandidateExperienceService } from './services/candidate-experience.service';
 import { CandidateSkillsService } from './services/candidate-skills.service';
 import { CandidateCertificatesService } from './services/candidate-certificates.service';
+import { CandidateCvParserService } from './services/candidate-cv-parser.service';
 import { CandidateEntity } from './entities/candidate.entity';
 import { WorkExperienceEntity } from './entities/work-experience.entity';
 import { EducationEntity } from './entities/education.entity';
@@ -41,6 +42,7 @@ import { JobTypeMetadataEntity } from '../metadata/job-types/job-type.entity';
     CandidateExperienceService,
     CandidateSkillsService,
     CandidateCertificatesService,
+    CandidateCvParserService,
   ],
 })
 export class CandidatesModule {}
