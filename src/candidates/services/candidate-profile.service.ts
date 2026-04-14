@@ -10,6 +10,7 @@ import { CandidateSkillTagEntity } from '../entities/candidate-skill-tag.entity'
 import { CertificateEntity } from '../entities/certificate.entity';
 import { CandidateJobCategoryEntity } from '../entities/candidate-job-category.entity';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
+import { STORAGE_PATHS } from '../../common/constants/storage-paths.constant';
 
 @Injectable()
 export class CandidateProfileService {
@@ -96,13 +97,28 @@ export class CandidateProfileService {
     return this.candidateRepository.save(candidate);
   }
 
+  async updateVisibility(userId: number, isPublic: boolean) {
+    const candidate = await this.candidateRepository.findOne({
+      where: { userId },
+    });
+
+    if (!candidate) throw new NotFoundException('Candidate profile not found');
+
+    candidate.isPublic = isPublic;
+    await this.candidateRepository.save(candidate);
+    return {
+      message: isPublic ? 'Hồ sơ đã bật công khai' : 'Hồ sơ đã được ẩn',
+      isPublic,
+    };
+  }
+
   async uploadCv(userId: number, file: Express.Multer.File) {
     const candidate = await this.findCandidateByUserId(userId);
 
     const uniqueId = Date.now();
-    const filePath = `candidates/${userId}/cv_${uniqueId}.pdf`;
+    const filePath = `${STORAGE_PATHS.CANDIDATES.BASE}/${userId}/cv_${uniqueId}.pdf`;
     const oldFilePath = candidate.cvUrl
-      ? `candidates/${userId}/${candidate.cvUrl.split('/').pop()}`
+      ? `${STORAGE_PATHS.CANDIDATES.BASE}/${userId}/${candidate.cvUrl.split('/').pop()}`
       : undefined;
 
     const { result } = await this.supabaseService.atomicUploadAndUpdate(
@@ -123,9 +139,9 @@ export class CandidateProfileService {
     const candidate = await this.findCandidateByUserId(userId);
 
     const ext = file.originalname.split('.').pop() ?? 'jpg';
-    const filePath = `candidates/${userId}/avatar_${Date.now()}.${ext}`;
+    const filePath = `${STORAGE_PATHS.CANDIDATES.BASE}/${userId}/avatar_${Date.now()}.${ext}`;
     const oldFilePath = candidate.avatarUrl
-      ? `candidates/${userId}/${candidate.avatarUrl.split('/').pop()}`
+      ? `${STORAGE_PATHS.CANDIDATES.BASE}/${userId}/${candidate.avatarUrl.split('/').pop()}`
       : undefined;
 
     const { result } = await this.supabaseService.atomicUploadAndUpdate(
@@ -140,6 +156,22 @@ export class CandidateProfileService {
     );
 
     return result;
+  }
+
+  async createCoreProfile(data: {
+    userId: number;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    provinceId: number;
+  }) {
+    const candidate = this.candidateRepository.create({
+      userId: data.userId,
+      fullName: `${data.lastName} ${data.firstName}`,
+      phone: data.phone,
+      provinceId: data.provinceId,
+    });
+    return this.candidateRepository.save(candidate);
   }
 
   private async findCandidateByUserId(userId: number) {

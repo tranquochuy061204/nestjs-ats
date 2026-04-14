@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class FixApplicationNoteAuthorForeignKey1776000000000
-  implements MigrationInterface
-{
+export class FixApplicationNoteAuthorForeignKey1776000000000 implements MigrationInterface {
   name = 'FixApplicationNoteAuthorForeignKey1776000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

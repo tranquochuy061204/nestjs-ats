@@ -10,6 +10,7 @@ import {
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { Response, Request } from 'express';
 import { UserEntity } from '../users/entities/user.entity';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
@@ -20,16 +21,6 @@ import { RegisterDto } from './dto/register.dto';
 import { RegisterEmployerDto } from './dto/register-employer.dto';
 import { LoginDto } from './dto/login.dto';
 import { LocalAuthGuard } from './guards/local.guard';
-
-// Định nghĩa Interface để tránh lỗi 'any' khi truy cập req.user
-interface RequestWithUser extends Request {
-  user: {
-    id: number;
-    email: string;
-    role: string;
-    refreshToken?: string;
-  };
-}
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -127,10 +118,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Làm mới Access Token (Silent Refresh)' })
   async refresh(
-    @Req() req: RequestWithUser,
+    @Req() req: Request,
+    @CurrentUser() user: { id: number; refreshToken?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { id, refreshToken } = req.user;
+    const { id, refreshToken } = user;
     if (!refreshToken) {
       throw new UnauthorizedException('No refresh token provided');
     }
@@ -151,10 +143,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đăng xuất' })
   async logout(
-    @Req() req: RequestWithUser,
+    @CurrentUser() user: { id: number; refreshToken?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { id, refreshToken } = req.user;
+    const { id, refreshToken } = user;
     if (refreshToken) {
       await this.authService.logout(id, refreshToken);
     }
@@ -166,7 +158,7 @@ export class AuthController {
   @ApiAuth()
   @ApiOperation({ summary: 'Kiểm tra trạng thái đăng nhập' })
   @ApiResponse({ status: 200, description: 'Trả về thông tin user hiện tại' })
-  getStatus(@Req() req: Request) {
-    return req.user;
+  getStatus(@CurrentUser() user: Record<string, unknown>) {
+    return user;
   }
 }

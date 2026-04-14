@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobEntity } from './entities/job.entity';
 import { JobSkillTagEntity } from './entities/job-skill-tag.entity';
 import { JobStatusHistoryEntity } from './entities/job-status-history.entity';
+import { JobInvitationEntity } from './entities/job-invitation.entity';
 import { MetadataModule } from '../metadata/metadata.module';
 import { EmployersModule } from '../employers/employers.module';
 import { JobSkillsService } from './job-skills.service';
@@ -24,6 +25,7 @@ import { AdminJobsController } from './controllers/admin-jobs.controller';
       JobEntity,
       JobSkillTagEntity,
       JobStatusHistoryEntity,
+      JobInvitationEntity,
     ]),
     MetadataModule,
     EmployersModule,

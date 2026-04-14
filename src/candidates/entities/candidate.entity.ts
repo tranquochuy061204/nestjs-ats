@@ -77,6 +77,18 @@ export class CandidateEntity {
   @Column({ name: 'year_working_experience', type: 'int', nullable: true })
   yearWorkingExperience: number;
 
+  @Column({ name: 'is_public', type: 'boolean', default: false })
+  isPublic: boolean;
+
+  @Column({ name: 'linkedin_url', type: 'varchar', length: 255, nullable: true })
+  linkedinUrl: string;
+
+  @Column({ name: 'github_url', type: 'varchar', length: 255, nullable: true })
+  githubUrl: string;
+
+  @Column({ name: 'portfolio_url', type: 'varchar', length: 255, nullable: true })
+  portfolioUrl: string;
+
   @OneToOne(() => UserEntity, (user) => user.candidate, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: UserEntity;

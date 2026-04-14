@@ -1,10 +1,15 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity, UserRole } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterEmployerDto } from './dto/register-employer.dto';
-import { CandidateEntity } from '../candidates/entities/candidate.entity';
+import { CandidateProfileService } from '../candidates/services/candidate-profile.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
@@ -17,8 +22,8 @@ export class AuthService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
-    @InjectRepository(CandidateEntity)
-    private readonly candidateRepository: Repository<CandidateEntity>,
+    @Inject(forwardRef(() => CandidateProfileService))
+    private readonly candidateProfileService: CandidateProfileService,
     @InjectRepository(RefreshTokenEntity)
     private readonly refreshTokenRepository: Repository<RefreshTokenEntity>,
     private readonly jwtService: JwtService,
@@ -46,13 +51,13 @@ export class AuthService {
     });
     const savedUser = await this.userRepository.save(user);
 
-    const candidate = this.candidateRepository.create({
+    const candidate = await this.candidateProfileService.createCoreProfile({
       userId: savedUser.id,
-      fullName: `${lastName} ${firstName}`,
+      firstName,
+      lastName,
       phone,
       provinceId,
     });
-    await this.candidateRepository.save(candidate);
 
     return {
       message: 'User registered successfully',
@@ -121,13 +126,15 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_EXPIRES_TIME') as any,
+        expiresIn: this.configService.get<string>(
+          'JWT_EXPIRES_TIME',
+        ) as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
       }),
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
         expiresIn: this.configService.get<string>(
           'JWT_REFRESH_EXPIRES_TIME',
-        ) as any,
+        ) as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
       }),
     ]);
 

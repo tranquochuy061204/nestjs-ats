@@ -16,6 +16,10 @@ const UpdateProfileSchema = z.object({
   salaryMax: z.number().optional(),
   jobTypeId: z.number().int().optional(),
   yearWorkingExperience: z.number().int().min(0).optional(),
+  isPublic: z.boolean().optional(),
+  linkedinUrl: z.string().max(255).url().optional().or(z.literal('')),
+  githubUrl: z.string().max(255).url().optional().or(z.literal('')),
+  portfolioUrl: z.string().max(255).url().optional().or(z.literal('')),
 });
 
 export class UpdateProfileDto extends createZodDto(UpdateProfileSchema) {
@@ -89,4 +93,28 @@ export class UpdateProfileDto extends createZodDto(UpdateProfileSchema) {
     minimum: 0,
   })
   yearWorkingExperience?: number;
+
+  @ApiPropertyOptional({
+    description: 'Bật/Tắt trạng thái public hồ sơ',
+    example: true,
+  })
+  isPublic?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Link Hồ sơ LinkedIn',
+    example: 'https://linkedin.com/in/username',
+  })
+  linkedinUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Link Hồ sơ Github',
+    example: 'https://github.com/username',
+  })
+  githubUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Link Hồ sơ Cá nhân / Portfolio',
+    example: 'https://myportfolio.com',
+  })
+  portfolioUrl?: string;
 }

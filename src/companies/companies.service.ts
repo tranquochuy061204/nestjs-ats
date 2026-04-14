@@ -12,6 +12,7 @@ import { CompanyStatusHistoryEntity } from './entities/company-status-history.en
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { SupabaseService } from '../storage/supabase.service';
 import { sanitizeFilename, toSlug } from '../common/utils/string.util';
+import { STORAGE_PATHS } from '../common/constants/storage-paths.constant';
 
 @Injectable()
 export class CompaniesService {
@@ -95,9 +96,9 @@ export class CompaniesService {
     const company = await this.getCompanyByUser(userId);
 
     const originalName = sanitizeFilename(file.originalname);
-    const filePath = `companies/logos/${company.id}-${Date.now()}-${originalName}`;
+    const filePath = `${STORAGE_PATHS.COMPANIES.LOGOS}/${company.id}-${Date.now()}-${originalName}`;
     const oldFilePath = company.logoUrl
-      ? `companies/logos/${company.logoUrl.split('/').pop()}`
+      ? `${STORAGE_PATHS.COMPANIES.LOGOS}/${company.logoUrl.split('/').pop()}`
       : undefined;
 
     const { result } = await this.supabaseService.atomicUploadAndUpdate(
@@ -119,9 +120,9 @@ export class CompaniesService {
     const company = await this.getCompanyByUser(userId);
 
     const originalName = sanitizeFilename(file.originalname);
-    const filePath = `companies/banners/${company.id}-${Date.now()}-${originalName}`;
+    const filePath = `${STORAGE_PATHS.COMPANIES.BANNERS}/${company.id}-${Date.now()}-${originalName}`;
     const oldFilePath = company.bannerUrl
-      ? `companies/banners/${company.bannerUrl.split('/').pop()}`
+      ? `${STORAGE_PATHS.COMPANIES.BANNERS}/${company.bannerUrl.split('/').pop()}`
       : undefined;
 
     const { result } = await this.supabaseService.atomicUploadAndUpdate(
@@ -150,7 +151,7 @@ export class CompaniesService {
 
     for (const file of files) {
       const originalName = sanitizeFilename(file.originalname);
-      const filePath = `companies/images/${company.id}-${Date.now()}-${originalName}`;
+      const filePath = `${STORAGE_PATHS.COMPANIES.IMAGES}/${company.id}-${Date.now()}-${originalName}`;
       const imageUrl = await this.supabaseService.uploadFile(file, filePath);
       uploadedPaths.push(filePath);
 
@@ -209,9 +210,9 @@ export class CompaniesService {
     const company = await this.getCompanyByUser(userId);
 
     const originalName = sanitizeFilename(file.originalname);
-    const filePath = `companies/licenses/${company.id}-${Date.now()}-${originalName}`;
+    const filePath = `${STORAGE_PATHS.COMPANIES.LICENSES}/${company.id}-${Date.now()}-${originalName}`;
     const oldFilePath = company.businessLicenseUrl
-      ? `companies/licenses/${company.businessLicenseUrl.split('/').pop()}`
+      ? `${STORAGE_PATHS.COMPANIES.LICENSES}/${company.businessLicenseUrl.split('/').pop()}`
       : undefined;
 
     const { result } = await this.supabaseService.atomicUploadAndUpdate(

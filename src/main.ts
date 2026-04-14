@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,6 +22,9 @@ async function bootstrap() {
 
   // Áp dụng ZodValidationPipe toàn cục để tự động validate schema
   app.useGlobalPipes(new ZodValidationPipe());
+
+  // Áp dụng Global Exception Filter
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Cấu hình Swagger
   const config = new DocumentBuilder()
