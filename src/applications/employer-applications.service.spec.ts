@@ -89,7 +89,7 @@ describe('EmployerApplicationsService', () => {
     });
 
     it('should create and save a new note', async () => {
-      const mockEmployer = { id: 1, companyId: 1 };
+      const mockEmployer = { id: 10, companyId: 1 }; // Employer ID is 10
       const mockApp = { id: 1, job: { companyId: 1 } };
       const mockDto = { content: 'New review' };
 
@@ -97,16 +97,16 @@ describe('EmployerApplicationsService', () => {
       mockAppRepo.findOne.mockResolvedValue(mockApp);
       mockNoteRepo.create.mockReturnValue({
         ...mockDto,
-        authorId: 1,
+        authorId: 10,
         applicationId: 1,
       });
       mockNoteRepo.save.mockResolvedValue({ id: 100, ...mockDto });
 
-      const result = await service.addNote(1, 1, mockDto);
+      const result = await service.addNote(5, 1, mockDto); // User ID is 5
 
       expect(noteRepo.create).toHaveBeenCalledWith({
         applicationId: 1,
-        authorId: 1,
+        authorId: 10, // Must use Employer ID
         content: mockDto.content,
       });
       expect(noteRepo.save).toHaveBeenCalled();
@@ -129,10 +129,10 @@ describe('EmployerApplicationsService', () => {
     });
 
     it('should update note content', async () => {
-      const mockEmployer = { id: 1, companyId: 1 };
+      const mockEmployer = { id: 10, companyId: 1 };
       const mockNote = {
         id: 100,
-        authorId: 1,
+        authorId: 10,
         content: 'old',
         application: { job: { companyId: 1 } },
       };
@@ -141,7 +141,7 @@ describe('EmployerApplicationsService', () => {
       mockNoteRepo.findOne.mockResolvedValue(mockNote);
       mockNoteRepo.save.mockImplementation((n) => n);
 
-      const result = await service.updateNote(1, 100, {
+      const result = await service.updateNote(5, 100, {
         content: 'new content',
       });
 
