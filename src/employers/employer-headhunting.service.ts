@@ -116,10 +116,9 @@ export class EmployerHeadhuntingService {
 
     // FIX #7: Guard NULL provinceId
     if (job.provinceId) {
-      rawQb.andWhere(
-        '(c.provinceId = :provinceId OR c.provinceId IS NULL)',
-        { provinceId: job.provinceId },
-      );
+      rawQb.andWhere('(c.provinceId = :provinceId OR c.provinceId IS NULL)', {
+        provinceId: job.provinceId,
+      });
     }
 
     // FIX #8: ORDER BY dùng expression đầy đủ thay vì alias (PostgreSQL strict)
@@ -187,12 +186,9 @@ export class EmployerHeadhuntingService {
 
     if (jobCategoryId) {
       // FIX: ON condition dùng property name để TypeORM map đúng
-      qb.innerJoin(
-        'c.jobCategories',
-        'cjc',
-        'cjc.jobCategoryId = :catId',
-        { catId: jobCategoryId },
-      );
+      qb.innerJoin('c.jobCategories', 'cjc', 'cjc.jobCategoryId = :catId', {
+        catId: jobCategoryId,
+      });
     }
 
     if (keyword) {

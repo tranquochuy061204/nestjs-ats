@@ -5,9 +5,12 @@ async function check() {
   const ds = new DataSource(config);
   await ds.initialize();
   
-  const c16 = await ds.query('SELECT id, "full_name", "province_id", "job_type_id", "year_working_experience" FROM candidate WHERE id = 16');
-  console.log('Candidate 16 Detail:', c16);
+  const indexes = await ds.query("SELECT indexname FROM pg_indexes WHERE tablename = 'candidate'");
+  console.log('Candidate Indexes:', indexes.map((i: any) => i.indexname));
   
+  const catIndexes = await ds.query("SELECT indexname FROM pg_indexes WHERE tablename = 'candidate_job_category'");
+  console.log('CandidateJobCategory Indexes:', catIndexes.map((i: any) => i.indexname));
+
   await ds.destroy();
 }
 
