@@ -105,7 +105,7 @@ export class EmployerHeadhuntingService {
       });
     }
 
-    rawQb.andWhere('c.yearWorkingExperience >= :minExp', {
+    rawQb.andWhere('COALESCE(c.yearWorkingExperience, 0) >= :minExp', {
       minExp: job.yearsOfExperience ?? 0,
     });
 
@@ -212,7 +212,7 @@ export class EmployerHeadhuntingService {
     }
 
     if (minExperience !== undefined) {
-      qb.andWhere('c.yearWorkingExperience >= :minExp', {
+      qb.andWhere('COALESCE(c.yearWorkingExperience, 0) >= :minExp', {
         minExp: minExperience,
       });
     }
