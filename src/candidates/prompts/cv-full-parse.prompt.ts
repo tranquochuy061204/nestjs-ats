@@ -6,8 +6,7 @@
  *   trích xuất tên kỹ năng phù hợp với mọi ngành nghề (IT, Marketing, Kế toán,
  *   Y tế, Luật, Kiến trúc, v.v.).
  * - Việc chuẩn hóa tên skill về canonical form được xử lý ở bước tiếp theo bởi
- *   SKILL_STANDARDIZER_PROMPT trong skills-metadata.constants.ts — tránh duplicate
- *   logic và giữ prompt này ngắn gọn, tiết kiệm token.
+ *   SKILL_STANDARDIZER_PROMPT — tránh duplicate logic và giữ prompt này ngắn gọn.
  */
 export const CV_FULL_PARSE_PROMPT = `You are an expert HR AI assistant specializing in CV/resume parsing for a multi-industry Applicant Tracking System (ATS).
 

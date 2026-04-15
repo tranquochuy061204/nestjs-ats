@@ -1,6 +1,7 @@
 import {
   Column,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -16,6 +17,7 @@ export class CandidateJobCategoryEntity {
   @Column({ name: 'candidate_id' })
   candidateId: number;
 
+  @Index()
   @Column({ name: 'job_category_id' })
   jobCategoryId: number;
 

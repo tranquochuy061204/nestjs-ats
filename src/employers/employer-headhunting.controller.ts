@@ -16,7 +16,10 @@ import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
 import { HeadhuntingFilterDto } from './dto/headhunting-filter.dto';
 import { SaveCandidateDto } from './dto/save-candidate.dto';
 
+import { UserRole } from '../users/entities/user.entity';
+
 @ApiTags('Employers - Headhunting')
+@ApiAuth(UserRole.EMPLOYER)
 @Controller('employers/headhunting')
 export class EmployerHeadhuntingController {
   constructor(
@@ -24,7 +27,6 @@ export class EmployerHeadhuntingController {
   ) {}
 
   @Get('jobs/:jobId/suggested-candidates')
-  @ApiAuth()
   @ApiOperation({
     summary: 'Lấy danh sách ứng viên đề xuất tự động cho một công việc',
   })
@@ -40,7 +42,6 @@ export class EmployerHeadhuntingController {
   }
 
   @Get('candidates')
-  @ApiAuth()
   @ApiOperation({ summary: 'Tìm kiếm ứng viên tự do (Headhunting Search)' })
   @ApiResponse({ status: 200, description: 'Danh sách ứng viên theo bộ lọc' })
   searchCandidates(
@@ -51,7 +52,6 @@ export class EmployerHeadhuntingController {
   }
 
   @Get('candidates/:id')
-  @ApiAuth()
   @ApiOperation({ summary: 'Xem chi tiết hồ sơ ứng viên (VIP - Không che)' })
   @ApiResponse({ status: 200, description: 'Full Profile Ứng viên' })
   getCandidateDetail(
@@ -62,7 +62,6 @@ export class EmployerHeadhuntingController {
   }
 
   @Get('saved-candidates')
-  @ApiAuth()
   @ApiOperation({ summary: 'Lấy danh sách ứng viên trong Talent Pool' })
   @ApiResponse({ status: 200, description: 'Danh sách ứng viên đã lưu' })
   getSavedCandidates(@CurrentUser() user: { id: number }) {
@@ -70,7 +69,6 @@ export class EmployerHeadhuntingController {
   }
 
   @Post('saved-candidates/:candidateId')
-  @ApiAuth()
   @ApiOperation({ summary: 'Lưu ứng viên vào Talent Pool' })
   @ApiResponse({ status: 201, description: 'Lưu thành công' })
   saveCandidate(
@@ -82,7 +80,6 @@ export class EmployerHeadhuntingController {
   }
 
   @Delete('saved-candidates/:candidateId')
-  @ApiAuth()
   @ApiOperation({ summary: 'Xóa ứng viên khỏi Talent Pool' })
   @ApiResponse({ status: 200, description: 'Xóa thành công' })
   unsaveCandidate(
@@ -93,7 +90,6 @@ export class EmployerHeadhuntingController {
   }
 
   @Post('invitations')
-  @ApiAuth()
   @ApiOperation({ summary: 'Gửi thư mời ứng tuyển cho ứng viên' })
   @ApiResponse({ status: 201, description: 'Gửi thành công' })
   sendInvitation(
@@ -104,7 +100,6 @@ export class EmployerHeadhuntingController {
   }
 
   @Get('invitations')
-  @ApiAuth()
   @ApiOperation({ summary: 'Lấy danh sách thư mời đã gửi' })
   @ApiResponse({ status: 200, description: 'Danh sách thư mời' })
   getSentInvitations(@CurrentUser() user: { id: number }) {

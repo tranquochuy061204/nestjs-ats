@@ -5,6 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
   Unique,
+  Index,
 } from 'typeorm';
 import { CandidateEntity } from './candidate.entity';
 import { SkillMetadataEntity } from '../../metadata/skills/skill-metadata.entity';
@@ -18,6 +19,7 @@ export class CandidateSkillTagEntity {
   @Column({ name: 'candidate_id' })
   candidateId: number;
 
+  @Index()
   @Column({ name: 'skill_metadata_id' })
   skillMetadataId: number;
 

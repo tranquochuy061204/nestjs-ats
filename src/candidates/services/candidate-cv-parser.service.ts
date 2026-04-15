@@ -17,11 +17,11 @@ import { CertificateEntity } from '../entities/certificate.entity';
 import { SkillsMetadataService } from '../../metadata/skills/skills-metadata.service';
 import {
   CvFullParseResult,
-  ParsedEducation,
-  ParsedProject,
-  ParsedWorkExperience,
-} from '../interfaces/cv-parse.interface';
-import { CV_FULL_PARSE_PROMPT } from '../prompts/cv-parse.prompt';
+} from '../interfaces/cv-full-parse.interface';
+import { ParsedEducation } from '../interfaces/parsed-education.interface';
+import { ParsedProject } from '../interfaces/parsed-project.interface';
+import { ParsedWorkExperience } from '../interfaces/parsed-work-experience.interface';
+import { CV_FULL_PARSE_PROMPT } from '../prompts/cv-full-parse.prompt';
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 

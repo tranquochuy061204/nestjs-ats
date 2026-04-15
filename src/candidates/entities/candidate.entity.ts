@@ -2,6 +2,7 @@ import { UserEntity } from '../../users/entities/user.entity';
 import {
   Column,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -43,6 +44,7 @@ export class CandidateEntity {
   @Column({ type: 'text', nullable: true })
   bio: string;
 
+  @Index()
   @Column({ name: 'province_id', type: 'int', nullable: true })
   provinceId: number;
 
@@ -67,6 +69,7 @@ export class CandidateEntity {
   })
   salaryMax: number;
 
+  @Index()
   @Column({ name: 'job_type_id', type: 'int', nullable: true })
   jobTypeId: number;
 
@@ -74,9 +77,11 @@ export class CandidateEntity {
   @JoinColumn({ name: 'job_type_id' })
   jobType: JobTypeMetadataEntity;
 
+  @Index()
   @Column({ name: 'year_working_experience', type: 'int', nullable: true })
   yearWorkingExperience: number;
 
+  @Index()
   @Column({ name: 'is_public', type: 'boolean', default: false })
   isPublic: boolean;
 

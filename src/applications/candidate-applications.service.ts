@@ -19,9 +19,11 @@ import { ApplicationFilterDto } from './dto/application-filter.dto';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
-  CANDIDATE_MATCH_SCORE_PROMPT,
-  CV_MATCH_SCORE_PROMPT,
-} from './applications.constants';
+  MatchScoreResult,
+  CvMatchScoreResult,
+} from './interfaces/matching.interface';
+import { CANDIDATE_MATCH_SCORE_PROMPT } from './prompts/candidate-match-score.prompt';
+import { CV_MATCH_SCORE_PROMPT } from './prompts/cv-match-score.prompt';
 
 @Injectable()
 export class CandidateApplicationsService {
@@ -351,10 +353,7 @@ export class CandidateApplicationsService {
         throw new Error('No JSON object found in AI response');
       }
 
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        matchScore: number;
-        reasoning: string;
-      };
+      const parsed = JSON.parse(jsonMatch[0]) as MatchScoreResult;
 
       if (typeof parsed.matchScore === 'number') {
         // Fix Race Condition by updating only specific columns
@@ -414,10 +413,7 @@ export class CandidateApplicationsService {
         throw new Error('No JSON object found in AI CV response');
       }
 
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        cvMatchScore: number;
-        reasoning: string;
-      };
+      const parsed = JSON.parse(jsonMatch[0]) as CvMatchScoreResult;
 
       if (typeof parsed.cvMatchScore === 'number') {
         // Fix Race Condition by updating only specific columns

@@ -4,7 +4,7 @@ import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SkillMetadataEntity, SkillType } from './skill-metadata.entity';
-import { SKILL_STANDARDIZER_PROMPT } from './skills-metadata.constants';
+import { SKILL_STANDARDIZER_PROMPT } from './prompts/skill-standardizer.prompt';
 import { toSlug } from '../../common/utils/string.util';
 
 @Injectable()

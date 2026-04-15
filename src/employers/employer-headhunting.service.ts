@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -21,6 +22,8 @@ import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
 
 @Injectable()
 export class EmployerHeadhuntingService {
+  private readonly logger = new Logger(EmployerHeadhuntingService.name);
+
   constructor(
     @InjectRepository(CandidateEntity)
     private readonly candidateRepo: Repository<CandidateEntity>,
@@ -50,10 +53,10 @@ export class EmployerHeadhuntingService {
       );
     }
 
-    // Guard: categoryId required for suggestions
+    // Guard: categoryId missing - log warning but keep going (fallback to skill-only)
     if (!job.categoryId) {
-      throw new BadRequestException(
-        'Tin tuyển dụng chưa được phân ngành nghề, không thể gợi ý ứng viên',
+      this.logger.warn(
+        `Job #${jobId} missing categoryId. Results will be less accurate.`,
       );
     }
 
@@ -66,9 +69,15 @@ export class EmployerHeadhuntingService {
     //   Bước 1: Raw query chỉ lấy candidate_id + scores (GROUP BY c.id OK)
     //   Bước 2: Fetch full entities theo danh sách IDs
     // ----------------------------------------------------------------
-    const rawQb = this.candidateRepo
-      .createQueryBuilder('c')
-      .innerJoin('c.jobCategories', 'cjc') // INNER: bắt buộc có ngành
+    const rawQb = this.candidateRepo.createQueryBuilder('c');
+
+    if (job.categoryId) {
+      rawQb.innerJoin('c.jobCategories', 'cjc');
+    } else {
+      rawQb.leftJoin('c.jobCategories', 'cjc'); // Optional if no category set
+    }
+
+    rawQb
       .leftJoin(
         'c.skills',
         'cst',
@@ -88,14 +97,17 @@ export class EmployerHeadhuntingService {
       }, 'certBonus')
 
       // LỚP 1: LỌC CỨNG
-      .where('c.isPublic = true')
-      // FIX #5: Dùng property name (jobCategoryId) trong ON condition
-      .andWhere('cjc.jobCategoryId = :jobCategoryId', {
+      .where('c.isPublic = true');
+
+    if (job.categoryId) {
+      rawQb.andWhere('cjc.jobCategoryId = :jobCategoryId', {
         jobCategoryId: job.categoryId,
-      })
-      .andWhere('c.yearWorkingExperience >= :minExp', {
-        minExp: job.yearsOfExperience ?? 0,
       });
+    }
+
+    rawQb.andWhere('c.yearWorkingExperience >= :minExp', {
+      minExp: job.yearsOfExperience ?? 0,
+    });
 
     // FIX #6: Guard NULL jobTypeId (không thêm điều kiện nếu job chưa set)
     if (job.jobTypeId) {
@@ -128,7 +140,7 @@ export class EmployerHeadhuntingService {
     const orderedIds = rawRows.map((r) => Number(r.candidateId));
     const scoreMap = new Map(
       rawRows.map((r) => [
-        Number(r.candidateId),
+        parseInt(String(r.candidateId), 10),
         {
           matchedSkillsCount: parseInt(r.matchedSkills || '0', 10),
           certificateBonusCount: parseInt(r.certBonus || '0', 10),
