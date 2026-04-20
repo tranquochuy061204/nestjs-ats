@@ -55,9 +55,9 @@ export class SocketGateway
         return;
       }
 
-      const payload = (await this.jwtService.verifyAsync(token, {
+      const payload = await this.jwtService.verifyAsync(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
-      })) as JwtPayload;
+      });
 
       // 2. Lưu thông tin user vào socket data
       client.data.user = payload;

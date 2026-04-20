@@ -13,6 +13,7 @@ import { StorageModule } from '../storage/storage.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmployerHeadhuntingService } from './employer-headhunting.service';
 import { EmployerHeadhuntingController } from './employer-headhunting.controller';
+import { UserEntity } from '../users/entities/user.entity';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { EmployerHeadhuntingController } from './employer-headhunting.controller
       JobEntity,
       JobInvitationEntity,
       CertificateEntity,
+      UserEntity,
     ]),
     StorageModule,
     NotificationsModule,
