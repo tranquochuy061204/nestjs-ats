@@ -115,7 +115,7 @@ export class AuthService {
     return user;
   }
 
-  async generateTokenPair(user: UserEntity) {
+  async generateTokenPair(user: UserEntity, jti?: string) {
     const payload = {
       id: user.id,
       email: user.email,
@@ -130,12 +130,15 @@ export class AuthService {
           'JWT_EXPIRES_TIME',
         ) as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
       }),
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get<string>(
-          'JWT_REFRESH_EXPIRES_TIME',
-        ) as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
-      }),
+      this.jwtService.signAsync(
+        { ...payload, jti },
+        {
+          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+          expiresIn: this.configService.get<string>(
+            'JWT_REFRESH_EXPIRES_TIME',
+          ) as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
+        },
+      ),
     ]);
 
     return {
@@ -147,6 +150,7 @@ export class AuthService {
   async storeRefreshToken(
     userId: number,
     token: string,
+    jti: string,
     userAgent?: string,
     ipAddress?: string,
   ) {
@@ -156,6 +160,7 @@ export class AuthService {
     expiresAt.setDate(expiresAt.getDate() + 7);
 
     const refreshToken = this.refreshTokenRepository.create({
+      id: jti,
       userId,
       token: hashedToken,
       expiresAt,
@@ -168,6 +173,7 @@ export class AuthService {
 
   async refreshTokens(
     userId: number,
+    jti: string,
     rawRefreshToken: string,
     userAgent?: string,
     ipAddress?: string,
@@ -178,33 +184,31 @@ export class AuthService {
     });
     if (!user) throw new ConflictException('User not found');
 
-    // Tìm xem token này có trong DB không
-    const savedTokens = await this.refreshTokenRepository.find({
-      where: { userId, isRevoked: false },
+    // O(1) Lookup: Tìm chính xác bản ghi theo JTI (ID)
+    const tokenRecord = await this.refreshTokenRepository.findOne({
+      where: { id: jti, userId, isRevoked: false },
     });
 
-    // So khớp token đã hash
-    let matchedTokenRecord = null;
-    for (const record of savedTokens) {
-      const isMatch = await bcrypt.compare(rawRefreshToken, record.token);
-      if (isMatch) {
-        matchedTokenRecord = record;
-        break;
-      }
-    }
-
-    if (!matchedTokenRecord) {
+    if (!tokenRecord) {
       throw new ConflictException('Invalid Refresh Token');
     }
 
+    // Verify hash (Security Layer)
+    const isMatch = await bcrypt.compare(rawRefreshToken, tokenRecord.token);
+    if (!isMatch) {
+      throw new ConflictException('Invalid Refresh Token Content');
+    }
+
     // Xoay vòng (Rotation): Xóa bản ghi cũ
-    await this.refreshTokenRepository.remove(matchedTokenRecord);
+    await this.refreshTokenRepository.remove(tokenRecord);
 
     // Tạo cặp mới
-    const tokens = await this.generateTokenPair(user);
+    const newJti = crypto.randomUUID();
+    const tokens = await this.generateTokenPair(user, newJti);
     await this.storeRefreshToken(
       user.id,
       tokens.refresh_token,
+      newJti,
       userAgent,
       ipAddress,
     );
@@ -212,18 +216,9 @@ export class AuthService {
     return tokens;
   }
 
-  async logout(userId: number, rawRefreshToken: string) {
-    const savedTokens = await this.refreshTokenRepository.find({
-      where: { userId, isRevoked: false },
-    });
-
-    for (const record of savedTokens) {
-      const isMatch = await bcrypt.compare(rawRefreshToken, record.token);
-      if (isMatch) {
-        await this.refreshTokenRepository.remove(record);
-        break;
-      }
-    }
+  async logout(userId: number, jti?: string) {
+    if (!jti) return;
+    await this.refreshTokenRepository.delete({ id: jti, userId });
   }
 
   setRefreshTokenCookie(res: Response, token: string) {
@@ -240,10 +235,12 @@ export class AuthService {
   }
 
   async login(user: UserEntity) {
-    const tokens = await this.generateTokenPair(user);
+    const jti = crypto.randomUUID();
+    const tokens = await this.generateTokenPair(user, jti);
     return {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
+      jti,
       user: {
         id: user.id,
         email: user.email,
@@ -270,6 +267,7 @@ export class AuthService {
     }
 
     // 4. Trả về Token Admin
-    return this.login(user);
+    const result = await this.login(user); // Use unified login to get tokens + jti
+    return result;
   }
 }

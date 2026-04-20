@@ -30,26 +30,30 @@ export class JobTasksService {
 
       if (overdueJobs.length === 0) return;
 
-      await this.dataSource.transaction(async (manager) => {
-        const jobIds = overdueJobs.map((j) => j.id);
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < overdueJobs.length; i += CHUNK_SIZE) {
+        const chunk = overdueJobs.slice(i, i + CHUNK_SIZE);
+        const jobIds = chunk.map((j) => j.id);
 
-        await manager.update(
-          JobEntity,
-          { id: In(jobIds) },
-          { status: JobStatus.CLOSED },
-        );
+        await this.dataSource.transaction(async (manager) => {
+          await manager.update(
+            JobEntity,
+            { id: In(jobIds) },
+            { status: JobStatus.CLOSED },
+          );
 
-        const histories = overdueJobs.map((j) =>
-          manager.create(JobStatusHistoryEntity, {
-            jobId: j.id,
-            oldStatus: j.status,
-            newStatus: JobStatus.CLOSED,
-            reason: 'Tự động đóng do quá hạn nộp hồ sơ',
-          }),
-        );
+          const histories = chunk.map((j) =>
+            manager.create(JobStatusHistoryEntity, {
+              jobId: j.id,
+              oldStatus: j.status,
+              newStatus: JobStatus.CLOSED,
+              reason: 'Tự động đóng do quá hạn nộp hồ sơ',
+            }),
+          );
 
-        await manager.insert(JobStatusHistoryEntity, histories);
-      });
+          await manager.insert(JobStatusHistoryEntity, histories);
+        });
+      }
 
       this.logger.log(`Closed ${overdueJobs.length} overdue jobs.`);
     } catch (error) {

@@ -68,6 +68,7 @@ export class AuthController {
     await this.authService.storeRefreshToken(
       user.id,
       result.refresh_token,
+      result.jti,
       req.headers['user-agent'],
       req.ip,
     );
@@ -101,6 +102,7 @@ export class AuthController {
       await this.authService.storeRefreshToken(
         user.id,
         result.refresh_token,
+        result.jti,
         req.headers['user-agent'],
         req.ip,
       );
@@ -119,7 +121,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Làm mới Access Token (Silent Refresh)' })
   async refresh(
     @Req() req: Request,
-    @CurrentUser() user: { id: number; refreshToken?: string },
+    @CurrentUser() user: { id: number; refreshToken?: string; jti: string },
     @Res({ passthrough: true }) res: Response,
   ) {
     const { id, refreshToken } = user;
@@ -129,6 +131,7 @@ export class AuthController {
 
     const tokens = await this.authService.refreshTokens(
       id,
+      user.jti,
       refreshToken,
       req.headers['user-agent'],
       req.ip,
@@ -143,13 +146,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đăng xuất' })
   async logout(
-    @CurrentUser() user: { id: number; refreshToken?: string },
+    @CurrentUser() user: { id: number; refreshToken?: string; jti?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { id, refreshToken } = user;
-    if (refreshToken) {
-      await this.authService.logout(id, refreshToken);
-    }
+    const { id, jti } = user;
+    await this.authService.logout(id, jti);
     this.authService.clearRefreshTokenCookie(res);
     return { message: 'Logged out successfully' };
   }

@@ -21,7 +21,9 @@
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:run": "npm run typeorm migration:run -- -d typeorm.config.ts",
     "migration:generate": "npm run typeorm migration:generate -- -d typeorm.config.ts",
-    "seed:admin": "ts-node src/common/scripts/seed-admin.ts"
+    "seed:admin": "ts-node src/common/scripts/seed-admin.ts",
+    "doc:generate": "npx @compodoc/compodoc -p tsconfig.json -s",
+    "doc:json": "npx @compodoc/compodoc -p tsconfig.json -d ./documentation --exportFormat json"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -56,6 +58,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@compodoc/compodoc": "^1.1.16",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.1",

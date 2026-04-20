@@ -441,17 +441,32 @@ export class CandidateApplicationsService {
     url: string | null,
   ): Promise<{ base64: string; mimeType: string } | null> {
     if (!url || !url.startsWith('http')) return null;
+
+    // --- SSRF Protection Start ---
+    const supabaseUrl = this.configService.get<string>('SUPABASE_PROJECT_URL');
+    if (supabaseUrl) {
+      try {
+        const urlHost = new URL(url).host;
+        const supabaseHost = new URL(supabaseUrl).host;
+        if (urlHost !== supabaseHost) {
+          this.logger.warn(
+            `SSRF Blocked: URL host ${urlHost} does not match ${supabaseHost}`,
+          );
+          return null;
+        }
+      } catch {
+        return null;
+      }
+    }
+    // --- SSRF Protection End ---
+
     try {
-      // Dùng method fetch standard
       const res = await fetch(url);
       if (!res.ok) return null;
 
-      // Check Content-Length to prevent memory leak
       const contentLength = res.headers.get('content-length');
       if (contentLength && parseInt(contentLength, 10) > 10 * 1024 * 1024) {
-        this.logger.warn(
-          `CV file is too large (${contentLength} bytes), skipping AI CV scan to prevent memory issues: ${url}`,
-        );
+        this.logger.warn(`CV too large (${contentLength} bytes): ${url}`);
         return null; // Ignore files > 10MB
       }
 
@@ -463,8 +478,8 @@ export class CandidateApplicationsService {
       const arrayBuffer = await res.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       return { base64: buffer.toString('base64'), mimeType };
-    } catch (e) {
-      this.logger.error('Fetch CV Error: ' + url, e);
+    } catch (e: unknown) {
+      this.logger.error('Fetch CV failed: ' + url, e);
       return null;
     }
   }

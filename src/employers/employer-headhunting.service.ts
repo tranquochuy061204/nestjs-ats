@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { CandidateEntity } from '../candidates/entities/candidate.entity';
 import { CertificateEntity } from '../candidates/entities/certificate.entity';
 import { SavedCandidateEntity } from './entities/saved-candidate.entity';
@@ -50,6 +50,12 @@ export class EmployerHeadhuntingService {
     if (!job) {
       throw new NotFoundException(
         'Tin tuyển dụng không tồn tại hoặc không thuộc công ty của bạn',
+      );
+    }
+
+    if (job.status !== (JobStatus.PUBLISHED as string)) {
+      throw new BadRequestException(
+        'Chỉ có thể gợi ý ứng viên cho tin tuyển dụng đang đăng tuyển (PUBLISHED)',
       );
     }
 
@@ -121,11 +127,11 @@ export class EmployerHeadhuntingService {
       });
     }
 
-    // FIX #8: ORDER BY dùng expression đầy đủ thay vì alias (PostgreSQL strict)
+    // FIX #8: Dùng alias đã select và hàm aggregate cho các cột không nằm trong GROUP BY
     rawQb
       .groupBy('c.id')
-      .orderBy('COUNT(DISTINCT cst.skillMetadataId)', 'DESC')
-      .addOrderBy('c.yearWorkingExperience', 'DESC')
+      .orderBy('matchedSkills', 'DESC')
+      .addOrderBy('MAX(c.yearWorkingExperience)', 'DESC')
       .limit(50);
 
     const rawRows = await rawQb.getRawMany<{
@@ -149,7 +155,7 @@ export class EmployerHeadhuntingService {
 
     // Bước 2: Fetch full entities theo IDs đã có score
     const entities = await this.candidateRepo.find({
-      where: orderedIds.map((id) => ({ id })),
+      where: { id: In(orderedIds) },
       relations: ['skills', 'skills.skillMetadata', 'jobCategories', 'jobType'],
     });
 

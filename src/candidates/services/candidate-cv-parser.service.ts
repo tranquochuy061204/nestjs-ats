@@ -15,13 +15,12 @@ import { EducationEntity } from '../entities/education.entity';
 import { ProjectEntity } from '../entities/project.entity';
 import { CertificateEntity } from '../entities/certificate.entity';
 import { SkillsMetadataService } from '../../metadata/skills/skills-metadata.service';
-import {
-  CvFullParseResult,
-} from '../interfaces/cv-full-parse.interface';
+import { CvFullParseResult } from '../interfaces/cv-full-parse.interface';
 import { ParsedEducation } from '../interfaces/parsed-education.interface';
 import { ParsedProject } from '../interfaces/parsed-project.interface';
 import { ParsedWorkExperience } from '../interfaces/parsed-work-experience.interface';
 import { CV_FULL_PARSE_PROMPT } from '../prompts/cv-full-parse.prompt';
+import { toSlug } from '../../common/utils/string.util';
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
@@ -347,33 +346,30 @@ export class CandidateCvParserService {
     const uniqueRawSkills = Array.from(
       new Set(skillNames.map((s) => s.trim()).filter((s) => s)),
     );
-    const knownSkills = [];
-    const unknownRawSkills: string[] = [];
+    // 1. Phân loại kỹ năng đã có trong hệ thống và lạ (Sử dụng BATCH lookup)
+    const foundSkills =
+      await this.skillsMetadataService.findManyByFuzzy(uniqueRawSkills);
 
-    // 1. Phân loại kỹ năng đã có trong hệ thống và lạ
-    for (const raw of uniqueRawSkills) {
-      const found = await this.skillsMetadataService.findByFuzzy(raw);
-      if (found) {
-        knownSkills.push(found);
-      } else {
-        unknownRawSkills.push(raw);
-      }
-    }
+    const foundSkillSlugs = new Set(foundSkills.map((s) => s.slug));
+    const knownSkillsList = [...foundSkills];
+    const unknownRawSkillsList = uniqueRawSkills.filter(
+      (raw) => !foundSkillSlugs.has(toSlug(raw)),
+    );
 
     // 2. Gom tất cả kỹ năng lạ gọi AI 1 LẦN DUY NHẤT để khỏi dính Too Many Requests
-    if (unknownRawSkills.length > 0) {
+    if (unknownRawSkillsList.length > 0) {
       try {
         const formatted =
-          await this.skillsMetadataService.formatWithAI(unknownRawSkills);
+          await this.skillsMetadataService.formatWithAI(unknownRawSkillsList);
         for (let i = 0; i < formatted.length; i++) {
-          const raw = unknownRawSkills[i] || formatted[i].name;
+          const raw = unknownRawSkillsList[i] || formatted[i].name;
           const { name, type } = formatted[i];
           const newSkill = await this.skillsMetadataService.upsertSkill(
             name,
             type,
             raw,
           );
-          knownSkills.push(newSkill);
+          knownSkillsList.push(newSkill);
         }
       } catch (err: unknown) {
         this.logger.error('Failed to batch format skills with AI', err);
@@ -382,7 +378,7 @@ export class CandidateCvParserService {
 
     // 3. Gắn tag cho ứng viên
     let added = 0;
-    for (const skill of knownSkills) {
+    for (const skill of knownSkillsList) {
       if (!skill) continue;
       const existing = await this.skillTagRepo.findOne({
         where: { candidateId, skillMetadataId: skill.id },
@@ -405,6 +401,25 @@ export class CandidateCvParserService {
     url: string | null,
   ): Promise<{ base64: string; mimeType: string } | null> {
     if (!url || !url.startsWith('http')) return null;
+
+    // --- SSRF Protection Start ---
+    const supabaseUrl = this.configService.get<string>('SUPABASE_PROJECT_URL');
+    if (supabaseUrl) {
+      try {
+        const urlHost = new URL(url).host;
+        const supabaseHost = new URL(supabaseUrl).host;
+        if (urlHost !== supabaseHost) {
+          this.logger.warn(
+            `SSRF Blocked: URL host ${urlHost} does not match ${supabaseHost}`,
+          );
+          return null;
+        }
+      } catch {
+        return null;
+      }
+    }
+    // --- SSRF Protection End ---
+
     try {
       const res = await fetch(url);
       if (!res.ok) return null;
@@ -420,7 +435,7 @@ export class CandidateCvParserService {
 
       const buffer = Buffer.from(await res.arrayBuffer());
       return { base64: buffer.toString('base64'), mimeType };
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error('Fetch CV failed: ' + url, e);
       return null;
     }

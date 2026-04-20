@@ -7,6 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { CompanyEntity } from '../../companies/entities/company.entity';
 import { EmployerEntity } from '../../employers/entities/employer.entity';
@@ -29,9 +30,11 @@ export class JobEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column({ name: 'company_id' })
   companyId: number;
 
+  @Index()
   @Column({ name: 'employer_id' })
   employerId: number;
 
@@ -47,10 +50,22 @@ export class JobEntity {
   @Column({ type: 'text', nullable: true })
   benefits: string;
 
-  @Column({ name: 'salary_min', type: 'int', nullable: true })
+  @Column({
+    name: 'salary_min',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    nullable: true,
+  })
   salaryMin: number;
 
-  @Column({ name: 'salary_max', type: 'int', nullable: true })
+  @Column({
+    name: 'salary_max',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    nullable: true,
+  })
   salaryMax: number;
 
   @Column({ type: 'varchar', length: 10, default: 'VND' })
@@ -59,15 +74,19 @@ export class JobEntity {
   @Column({ name: 'years_of_experience', type: 'int', nullable: true })
   yearsOfExperience: number;
 
+  @Index()
   @Column({ name: 'province_id', nullable: true })
   provinceId: number;
 
+  @Index()
   @Column({ name: 'category_id', nullable: true })
   categoryId: number;
 
+  @Index()
   @Column({ name: 'job_type_id', nullable: true })
   jobTypeId: number;
 
+  @Index()
   @Column({ type: 'varchar', length: 20, default: JobStatus.DRAFT })
   status: string;
 

@@ -58,19 +58,46 @@ export class SkillsMetadataService {
    * Tìm trong canonical_name + aliases.
    */
   async findByFuzzy(rawName: string) {
-    const slug = toSlug(rawName);
+    const results = await this.findManyByFuzzy([rawName]);
+    return results[0] || null;
+  }
 
-    // Exact slug match trước
-    const exact = await this.findBySlug(slug);
-    if (exact) return exact;
+  /**
+   * Batch fuzzy search cho nhiều raw skill names.
+   * Giúp tránh lỗi N+1 query khi parse CV.
+   */
+  async findManyByFuzzy(rawNames: string[]): Promise<SkillMetadataEntity[]> {
+    if (!rawNames.length) return [];
+    const trimmedNames = rawNames.map((n) => n.trim()).filter((n) => n);
+    if (!trimmedNames.length) return [];
 
-    // Fuzzy: search trong aliases
-    return this.skillMetadataRepository
+    const slugs = trimmedNames.map((n) => toSlug(n));
+
+    // 1. Tìm chính xác theo slug (Batch)
+    const exactMatches = await this.skillMetadataRepository.find({
+      where: { slug: In(slugs) },
+    });
+
+    const foundSlugs = new Set(exactMatches.map((m) => m.slug));
+    const remainingNames = trimmedNames.filter(
+      (n) => !foundSlugs.has(toSlug(n)),
+    );
+
+    if (remainingNames.length === 0) return exactMatches;
+
+    // 2. Tìm fuzzy trong aliases (Sử dụng 1 query duy nhất với ANY)
+    const fuzzyResults = await this.skillMetadataRepository
       .createQueryBuilder('skill')
-      .where('skill.aliases::text ILIKE :q', {
-        q: `%${rawName.trim()}%`,
+      .where('skill.aliases::text ILIKE ANY(:queries)', {
+        queries: remainingNames.map((n) => `%${n}%`),
       })
-      .getOne();
+      .getMany();
+
+    // Gộp kết quả và trả về (unique by ID)
+    const allResults = [...exactMatches, ...fuzzyResults];
+    const uniqueMap = new Map(allResults.map((r) => [r.id, r]));
+
+    return Array.from(uniqueMap.values());
   }
 
   /**
@@ -120,7 +147,7 @@ export class SkillsMetadataService {
 
   /**
    * Upsert skill vào metadata.
-   * Dùng ON CONFLICT (slug) DO UPDATE để xử lý race condition.
+   * Sử dụng ON CONFLICT (slug) để đảm bảo tính nhất quán (Atomicity).
    */
   async upsertSkill(
     name: string,
@@ -128,40 +155,33 @@ export class SkillsMetadataService {
     alias?: string,
   ): Promise<SkillMetadataEntity> {
     const slug = toSlug(name);
-    this.logger.log(
-      `Upserting skill: ${name} (slug: ${slug}, alias: ${alias})`,
-    );
+    const cleanAlias = alias?.trim();
 
-    // Kiểm tra xem đã tồn tại chưa
-    let skill = await this.findBySlug(slug);
+    // Dùng QueryBuilder để thực hiện UPSERT (ON CONFLICT DO UPDATE)
+    await this.skillMetadataRepository
+      .createQueryBuilder()
+      .insert()
+      .into(SkillMetadataEntity)
+      .values({
+        canonicalName: name,
+        slug,
+        type,
+        aliases: cleanAlias ? [cleanAlias] : [],
+        useCount: 1,
+      })
+      .onConflict(
+        `("slug") DO UPDATE SET 
+         "use_count" = "skill_metadata"."use_count" + 1,
+         "aliases" = CASE 
+           WHEN NOT ("skill_metadata"."aliases" ? :alias) AND :alias IS NOT NULL 
+           THEN "skill_metadata"."aliases" || jsonb_build_array(:alias)
+           ELSE "skill_metadata"."aliases"
+         END`,
+      )
+      .setParameter('alias', cleanAlias)
+      .execute();
 
-    if (skill) {
-      // Đã có → tăng use_count và thêm alias
-      skill.useCount += 1;
-      if (alias && !skill.aliases.includes(alias)) {
-        skill.aliases = [...skill.aliases, alias];
-      }
-      await this.skillMetadataRepository.save(skill);
-    } else {
-      // Chưa có → Insert mới
-      try {
-        skill = this.skillMetadataRepository.create({
-          canonicalName: name,
-          slug,
-          type,
-          aliases: alias ? [alias] : [],
-          useCount: 1,
-        });
-        skill = await this.skillMetadataRepository.save(skill);
-      } catch (e) {
-        // Có thể do race condition, thử tìm lại
-        skill = await this.findBySlug(slug);
-        if (skill) return this.upsertSkill(name, type, alias);
-        throw e;
-      }
-    }
-
-    return skill;
+    return this.findBySlug(slug) as Promise<SkillMetadataEntity>;
   }
 
   /**

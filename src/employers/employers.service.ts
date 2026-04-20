@@ -39,30 +39,24 @@ export class EmployersService {
 
     try {
       // 1. Create Company
-      const company = this.companyRepo.create({
+      const company = queryRunner.manager.create(CompanyEntity, {
         userCreatorId: userId,
         categoryId: dto.categoryId,
         name: dto.companyName,
         provinceId: dto.provinceId,
         address: dto.address,
       });
-      const savedCompany = await queryRunner.manager.save(
-        CompanyEntity,
-        company,
-      );
+      const savedCompany = await queryRunner.manager.save(company);
 
       // 2. Create Employer linked to User & Company
-      const employer = this.employerRepo.create({
+      const employer = queryRunner.manager.create(EmployerEntity, {
         userId,
         companyId: savedCompany.id,
         fullName: dto.fullName,
         phoneContact: dto.phoneContact,
         isAdminCompany: true,
       });
-      const savedEmployer = await queryRunner.manager.save(
-        EmployerEntity,
-        employer,
-      );
+      const savedEmployer = await queryRunner.manager.save(employer);
 
       await queryRunner.commitTransaction();
 
@@ -71,8 +65,8 @@ export class EmployersService {
         employer: savedEmployer,
         company: savedCompany,
       };
-    } catch (error) {
-      console.log(error);
+    } catch (error: unknown) {
+      this.logger.error('Lỗi trong quá trình khởi tạo công ty', error);
       await queryRunner.rollbackTransaction();
       throw new BadRequestException('Lỗi trong quá trình khởi tạo công ty');
     } finally {
@@ -121,30 +115,23 @@ export class EmployersService {
     }
 
     const originalName = file.originalname.replace(/\s+/g, '_');
-    const filePath = `employers/avatars/${userId}-${Date.now()}-${originalName}`;
-    const avatarUrl = await this.supabaseService.uploadFile(file, filePath);
+    const uploadPath = `employers/avatars/${userId}-${Date.now()}-${originalName}`;
 
-    try {
-      const oldAvatarUrl = employer.avatarUrl;
-      employer.avatarUrl = avatarUrl;
-      await this.employerRepo.save(employer);
+    const { publicUrl } = await this.supabaseService.atomicUploadAndUpdate(
+      file,
+      uploadPath,
+      async (url) => {
+        employer.avatarUrl = url;
+        return this.employerRepo.save(employer);
+      },
+      employer.avatarUrl
+        ? `employers/avatars/${employer.avatarUrl.split('/').pop()}`
+        : undefined,
+    );
 
-      // Orphan Fix: delete old avatar after successful save
-      if (oldAvatarUrl) {
-        const fileName = oldAvatarUrl.split('/').pop();
-        await this.supabaseService
-          .deleteFile(`employers/avatars/${fileName}`)
-          .catch((e: Error) =>
-            this.logger.error(`Error deleting old avatar: ${e.message}`),
-          );
-      }
-
-      return { message: 'Cập nhật ảnh đại diện thành công', avatarUrl };
-    } catch (dbError) {
-      // Orphan Fix: DB failed → delete newly uploaded file
-      this.logger.error(`Failed to save employer, deleting orphaned avatar...`);
-      await this.supabaseService.deleteFile(filePath).catch(() => null);
-      throw dbError;
-    }
+    return {
+      message: 'Cập nhật ảnh đại diện thành công',
+      avatarUrl: publicUrl,
+    };
   }
 }

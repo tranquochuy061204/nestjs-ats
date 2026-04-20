@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   BeforeInsert,
   OneToOne,
+  Index,
 } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
@@ -35,9 +36,11 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 255 })
   password: string;
 
+  @Index()
   @Column({ type: 'varchar', length: 20, default: UserRole.CANDIDATE })
   role: UserRole;
 
+  @Index()
   @Column({ type: 'varchar', length: 20, default: UserStatus.ACTIVE })
   status: UserStatus;
 

@@ -9,8 +9,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Cấu hình CORS để cho phép Cookies
+  const corsOrigin = process.env.CORS_ORIGIN;
   app.enableCors({
-    origin: true, // Trong thực tế nên để domain cụ thể
+    origin: corsOrigin === '*' ? true : corsOrigin?.split(',') || true,
     credentials: true,
   });
 
