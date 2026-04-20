@@ -7,6 +7,9 @@ const SaveCandidateSchema = z.object({
 });
 
 export class SaveCandidateDto extends createZodDto(SaveCandidateSchema) {
-  @ApiPropertyOptional({ description: 'Ghi chú về ứng viên này', example: 'Ứng viên tiềm năng cho vị trí Backend' })
+  @ApiPropertyOptional({
+    description: 'Ghi chú về ứng viên này',
+    example: 'Ứng viên tiềm năng cho vị trí Backend',
+  })
   note?: string;
 }

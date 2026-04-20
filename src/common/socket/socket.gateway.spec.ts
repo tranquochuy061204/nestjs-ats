@@ -90,7 +90,9 @@ describe('SocketGateway', () => {
   describe('Room Management', () => {
     it('should allow joining job kanban room', async () => {
       const customSocket = { ...mockSocket, data: { user: { id: 1 } } } as any;
-      const result = await gateway.handleJoinJobKanban(customSocket, { jobId: 123 });
+      const result = await gateway.handleJoinJobKanban(customSocket, {
+        jobId: 123,
+      });
 
       expect(customSocket.join).toHaveBeenCalledWith('job_kanban_123');
       expect(result).toEqual({ status: 'success', room: 'job_kanban_123' });
@@ -98,10 +100,15 @@ describe('SocketGateway', () => {
 
     it('should allow joining application detail room', async () => {
       const customSocket = { ...mockSocket, data: { user: { id: 1 } } } as any;
-      const result = await gateway.handleJoinApplicationDetail(customSocket, { applicationId: 456 });
+      const result = await gateway.handleJoinApplicationDetail(customSocket, {
+        applicationId: 456,
+      });
 
       expect(customSocket.join).toHaveBeenCalledWith('application_detail_456');
-      expect(result).toEqual({ status: 'success', room: 'application_detail_456' });
+      expect(result).toEqual({
+        status: 'success',
+        room: 'application_detail_456',
+      });
     });
   });
 
@@ -109,13 +116,17 @@ describe('SocketGateway', () => {
     it('should emit to specific user', () => {
       gateway.sendToUser(1, 'test_event', { data: 'hello' });
       expect(mockServer.to).toHaveBeenCalledWith('user_1');
-      expect(mockServer.emit).toHaveBeenCalledWith('test_event', { data: 'hello' });
+      expect(mockServer.emit).toHaveBeenCalledWith('test_event', {
+        data: 'hello',
+      });
     });
 
     it('should emit to job board', () => {
       gateway.sendToJobBoard(123, 'kanban_update', { data: 'update' });
       expect(mockServer.to).toHaveBeenCalledWith('job_kanban_123');
-      expect(mockServer.emit).toHaveBeenCalledWith('kanban_update', { data: 'update' });
+      expect(mockServer.emit).toHaveBeenCalledWith('kanban_update', {
+        data: 'update',
+      });
     });
   });
 });

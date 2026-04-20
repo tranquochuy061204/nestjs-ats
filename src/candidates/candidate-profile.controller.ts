@@ -59,7 +59,9 @@ export class CandidateProfileController {
   @ApiTags('Candidates - Profile')
   @Put('profile/visibility')
   @ApiAuth()
-  @ApiOperation({ summary: 'Bật/Tắt chế độ công khai hồ sơ cho Employer Headhunting' })
+  @ApiOperation({
+    summary: 'Bật/Tắt chế độ công khai hồ sơ cho Employer Headhunting',
+  })
   @ApiResponse({ status: 200, description: 'Cập nhật trạng thái thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy hồ sơ ứng viên' })
   updateVisibility(

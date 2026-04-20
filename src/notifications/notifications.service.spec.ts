@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsService } from './notifications.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotificationEntity, NotificationType } from './entities/notification.entity';
+import {
+  NotificationEntity,
+  NotificationType,
+} from './entities/notification.entity';
 import { SocketGateway } from '../common/socket/socket.gateway';
 
 describe('NotificationsService', () => {
@@ -54,7 +57,7 @@ describe('NotificationsService', () => {
         content: 'Content',
       };
       const savedNotification = { ...data, id: 100, isRead: false };
-      
+
       repo.create.mockReturnValue(savedNotification);
       repo.save.mockResolvedValue(savedNotification);
 
@@ -62,12 +65,21 @@ describe('NotificationsService', () => {
 
       expect(repo.create).toHaveBeenCalledWith({ ...data, isRead: false });
       expect(repo.save).toHaveBeenCalledWith(savedNotification);
-      expect(gateway.sendToUser).toHaveBeenCalledWith(1, 'notification', savedNotification);
+      expect(gateway.sendToUser).toHaveBeenCalledWith(
+        1,
+        'notification',
+        savedNotification,
+      );
       expect(result).toEqual(savedNotification);
     });
 
     it('should not throw if socket emission fails', async () => {
-      const data = { userId: 1, type: NotificationType.SYSTEM, title: 'T', content: 'C' };
+      const data = {
+        userId: 1,
+        type: NotificationType.SYSTEM,
+        title: 'T',
+        content: 'C',
+      };
       repo.create.mockReturnValue(data);
       repo.save.mockResolvedValue(data);
       gateway.sendToUser.mockImplementation(() => {
@@ -100,7 +112,10 @@ describe('NotificationsService', () => {
   describe('Unread Logic', () => {
     it('should mark as read', async () => {
       await service.markAsRead(1, 100);
-      expect(repo.update).toHaveBeenCalledWith({ id: 100, userId: 1 }, { isRead: true });
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 100, userId: 1 },
+        { isRead: true },
+      );
     });
 
     it('should get unread count', async () => {

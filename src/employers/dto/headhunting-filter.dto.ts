@@ -12,7 +12,9 @@ const HeadhuntingFilterSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(10),
 });
 
-export class HeadhuntingFilterDto extends createZodDto(HeadhuntingFilterSchema) {
+export class HeadhuntingFilterDto extends createZodDto(
+  HeadhuntingFilterSchema,
+) {
   @ApiPropertyOptional({
     description: 'Từ khóa tìm kiếm (tên, vị trí, bio)',
     example: 'Nodejs',

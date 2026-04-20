@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { NotificationEntity, NotificationType } from './entities/notification.entity';
+import {
+  NotificationEntity,
+  NotificationType,
+} from './entities/notification.entity';
 import { SocketGateway } from '../common/socket/socket.gateway';
 
 @Injectable()

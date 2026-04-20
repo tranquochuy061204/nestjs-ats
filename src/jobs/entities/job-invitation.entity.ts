@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { JobEntity } from './job.entity';
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
 import { EmployerEntity } from '../../employers/entities/employer.entity';
