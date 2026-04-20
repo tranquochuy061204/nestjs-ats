@@ -9,6 +9,8 @@ import { JobEntity, JobStatus } from '../entities/job.entity';
 import { JobStatusHistoryEntity } from '../entities/job-status-history.entity';
 import { JobFilterDto } from '../dto/job-filter.dto';
 import { getPaginatedResult } from '../../common/utils/pagination.util';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/entities/notification.entity';
 
 @Injectable()
 export class AdminJobsService {
@@ -18,10 +20,14 @@ export class AdminJobsService {
     @InjectRepository(JobStatusHistoryEntity)
     private readonly historyRepo: Repository<JobStatusHistoryEntity>,
     private readonly dataSource: DataSource,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async approveJob(jobId: number) {
-    const job = await this.jobRepository.findOne({ where: { id: jobId } });
+    const job = await this.jobRepository.findOne({
+      where: { id: jobId },
+      relations: ['employer'],
+    });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
     if (job.status === (JobStatus.PUBLISHED as string)) {
@@ -46,11 +52,26 @@ export class AdminJobsService {
       );
     });
 
+    // --- REAL-TIME NOTIFICATION ---
+    await this.notificationsService.createNotification({
+      userId: job.employer.userId,
+      type: NotificationType.JOB_APPROVAL,
+      title: 'Tin tuyển dụng đã được duyệt',
+      content: `Tin tuyển dụng "${job.title}" của bạn đã được quản trị viên phê duyệt và hiển thị công khai.`,
+      metadata: {
+        jobId: job.id,
+        status: JobStatus.PUBLISHED,
+      },
+    });
+
     return { message: 'Đã duyệt tin tuyển dụng' };
   }
 
   async rejectJob(jobId: number, reason: string) {
-    const job = await this.jobRepository.findOne({ where: { id: jobId } });
+    const job = await this.jobRepository.findOne({
+      where: { id: jobId },
+      relations: ['employer'],
+    });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
     if (job.status === (JobStatus.REJECTED as string)) {
@@ -74,6 +95,19 @@ export class AdminJobsService {
           reason,
         }),
       );
+    });
+
+    // --- REAL-TIME NOTIFICATION ---
+    await this.notificationsService.createNotification({
+      userId: job.employer.userId,
+      type: NotificationType.JOB_APPROVAL, // Dùng chung type với approval cho gọn hoặc tạo thêm JOB_REJECTION nếu cần
+      title: 'Tin tuyển dụng đã bị từ chối',
+      content: `Tin tuyển dụng "${job.title}" của bạn không được phê duyệt. Lý do: ${reason}`,
+      metadata: {
+        jobId: job.id,
+        status: JobStatus.REJECTED,
+        reason,
+      },
     });
 
     return { message: 'Đã từ chối tin tuyển dụng' };

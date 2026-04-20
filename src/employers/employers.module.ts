@@ -10,6 +10,7 @@ import { JobEntity } from '../jobs/entities/job.entity';
 import { JobInvitationEntity } from '../jobs/entities/job-invitation.entity';
 import { CertificateEntity } from '../candidates/entities/certificate.entity';
 import { StorageModule } from '../storage/storage.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { EmployerHeadhuntingService } from './employer-headhunting.service';
 import { EmployerHeadhuntingController } from './employer-headhunting.controller';
 
@@ -25,6 +26,7 @@ import { EmployerHeadhuntingController } from './employer-headhunting.controller
       CertificateEntity,
     ]),
     StorageModule,
+    NotificationsModule,
   ],
   controllers: [EmployersController, EmployerHeadhuntingController],
   providers: [EmployersService, EmployerHeadhuntingService],

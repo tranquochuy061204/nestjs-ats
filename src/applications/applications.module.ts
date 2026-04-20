@@ -11,6 +11,9 @@ import { EmployerApplicationsService } from './employer-applications.service';
 import { CandidateApplicationsController } from './candidate-applications.controller';
 import { EmployerApplicationsController } from './employer-applications.controller';
 
+import { UserEntity } from '../users/entities/user.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -20,7 +23,9 @@ import { EmployerApplicationsController } from './employer-applications.controll
       CandidateEntity,
       JobEntity,
       EmployerEntity,
+      UserEntity,
     ]),
+    NotificationsModule,
   ],
   controllers: [
     CandidateApplicationsController,

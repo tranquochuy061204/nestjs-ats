@@ -25,6 +25,7 @@ import { JobTypeMetadataEntity } from '../metadata/job-types/job-type.entity';
 import { JobInvitationEntity } from '../jobs/entities/job-invitation.entity';
 import { JobApplicationEntity } from '../applications/entities/job-application.entity';
 import { ApplicationStatusHistoryEntity } from '../applications/entities/application-status-history.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ApplicationStatusHistoryEntity } from '../applications/entities/applica
     forwardRef(() => AuthModule),
     MetadataModule,
     StorageModule,
+    NotificationsModule,
   ],
   controllers: [
     CandidateProfileController,

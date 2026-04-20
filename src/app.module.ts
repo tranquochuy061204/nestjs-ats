@@ -12,6 +12,7 @@ import { EmployersModule } from './employers/employers.module';
 import { CompaniesModule } from './companies/companies.module';
 import { JobsModule } from './jobs/jobs.module';
 import { ApplicationsModule } from './applications/applications.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import config from '../typeorm.config';
 
@@ -29,6 +30,7 @@ import config from '../typeorm.config';
     CompaniesModule,
     JobsModule,
     ApplicationsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

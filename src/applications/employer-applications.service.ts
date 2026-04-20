@@ -19,6 +19,10 @@ import { UpdateApplicationStatusDto } from './dto/update-application-status.dto'
 import { ApplicationNoteEntity } from './entities/application-note.entity';
 import { CreateApplicationNoteDto } from './dto/create-application-note.dto';
 import { UpdateApplicationNoteDto } from './dto/update-application-note.dto';
+import { SocketGateway } from '../common/socket/socket.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+import { UserEntity } from '../users/entities/user.entity';
 
 @Injectable()
 export class EmployerApplicationsService {
@@ -35,7 +39,11 @@ export class EmployerApplicationsService {
     private readonly employerRepo: Repository<EmployerEntity>,
     @InjectRepository(ApplicationNoteEntity)
     private readonly noteRepo: Repository<ApplicationNoteEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
     private readonly dataSource: DataSource,
+    private readonly socketGateway: SocketGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getJobApplications(
@@ -256,6 +264,30 @@ export class EmployerApplicationsService {
       }
     });
 
+    // --- REAL-TIME INTEGRATION ---
+    // 1. Cập nhật Bảng Kanban (Real-time cho các Recruiter khác)
+    this.socketGateway.sendToJobBoard(application.jobId, 'kanban_update', {
+      applicationId,
+      oldStatus,
+      newStatus: dto.status,
+      actor: employer.fullName || 'Nhà tuyển dụng',
+    });
+
+    // 2. Thông báo cho Ứng viên (DB Persistence + Real-time)
+    if (application.candidate?.userId) {
+      await this.notificationsService.createNotification({
+        userId: application.candidate.userId,
+        type: NotificationType.APPLICATION_STATUS,
+        title: 'Cập nhật trạng thái ứng tuyển',
+        content: `Hồ sơ của bạn cho vị trí "${application.job.title}" đã được chuyển sang trạng thái: ${dto.status}`,
+        metadata: {
+          jobId: application.jobId,
+          applicationId,
+          status: dto.status,
+        },
+      });
+    }
+
     return {
       message: `Đã cập nhật trạng thái thành "${dto.status}"`,
     };
@@ -311,7 +343,29 @@ export class EmployerApplicationsService {
       content: dto.content,
     });
 
-    return this.noteRepo.save(note);
+    const savedNote = await this.noteRepo.save(note);
+
+    // --- REAL-TIME INTEGRATION ---
+    // Fetch full note with author info for detailed timeline update
+    const fullNote = await this.noteRepo.findOne({
+      where: { id: savedNote.id },
+      relations: ['author', 'author.employer'],
+    });
+
+    // 1. Emit tới phòng chi tiết hồ sơ (Real-time Timeline)
+    this.socketGateway.sendToApplicationDetail(
+      applicationId,
+      'new_note',
+      fullNote,
+    );
+
+    // 2. Emit tới bảng Kanban (Để cập nhật badge hoặc preview)
+    this.socketGateway.sendToJobBoard(application.jobId, 'kanban_note', {
+      applicationId,
+      noteCount: await this.noteRepo.count({ where: { applicationId } }),
+    });
+
+    return savedNote;
   }
 
   async updateNote(

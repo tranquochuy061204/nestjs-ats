@@ -19,6 +19,8 @@ import {
 import { HeadhuntingFilterDto } from './dto/headhunting-filter.dto';
 import { SaveCandidateDto } from './dto/save-candidate.dto';
 import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 
 @Injectable()
 export class EmployerHeadhuntingService {
@@ -37,6 +39,7 @@ export class EmployerHeadhuntingService {
     private readonly jobRepo: Repository<JobEntity>,
     @InjectRepository(JobInvitationEntity)
     private readonly invitationRepo: Repository<JobInvitationEntity>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getSuggestedCandidates(employerUserId: number, jobId: number) {
@@ -355,7 +358,21 @@ export class EmployerHeadhuntingService {
       status: InvitationStatus.PENDING,
     });
 
-    return this.invitationRepo.save(invitation);
+    const savedInvitation = await this.invitationRepo.save(invitation);
+
+    // --- REAL-TIME NOTIFICATION ---
+    await this.notificationsService.createNotification({
+      userId: candidate.userId,
+      type: NotificationType.HEADHUNT_INVITATION,
+      title: 'Lời mời công việc mới',
+      content: `Bạn nhận được lời mời ứng tuyển vào vị trí "${job.title}" từ công ty ${job.company?.name || 'nhà tuyển dụng'}.`,
+      metadata: {
+        jobId: job.id,
+        invitationId: savedInvitation.id,
+      },
+    });
+
+    return savedInvitation;
   }
 
   async getSentInvitations(employerUserId: number) {

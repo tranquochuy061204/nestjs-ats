@@ -15,6 +15,8 @@ import {
   ApplicationStatus,
 } from '../../applications/entities/job-application.entity';
 import { ApplicationStatusHistoryEntity } from '../../applications/entities/application-status-history.entity';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/entities/notification.entity';
 
 @Injectable()
 export class CandidateHeadhuntingService {
@@ -26,6 +28,7 @@ export class CandidateHeadhuntingService {
     @InjectRepository(JobApplicationEntity)
     private readonly applicationRepo: Repository<JobApplicationEntity>,
     private readonly dataSource: DataSource,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getMyInvitations(userId: number) {
@@ -42,6 +45,7 @@ export class CandidateHeadhuntingService {
 
     const invitation = await this.invitationRepo.findOne({
       where: { id: invitationId, candidateId: candidate.id },
+      relations: ['employer', 'job'],
     });
 
     if (!invitation) throw new NotFoundException('Không tìm thấy thư mời');
@@ -92,6 +96,19 @@ export class CandidateHeadhuntingService {
       await manager.save(ApplicationStatusHistoryEntity, history);
     });
 
+    // --- REAL-TIME NOTIFICATION ---
+    await this.notificationsService.createNotification({
+      userId: invitation.employer.userId,
+      type: NotificationType.HEADHUNT_ACCEPT,
+      title: 'Chấp nhận lời mời làm việc',
+      content: `Ứng viên ${candidate.fullName || 'Một ai đó'} đã chấp nhận lời mời ứng tuyển cho vị trí "${invitation.job.title}".`,
+      metadata: {
+        jobId: invitation.jobId,
+        candidateId: candidate.id,
+        invitationId: invitation.id,
+      },
+    });
+
     return { message: 'Đã chấp nhận thư mời và tạo đơn ứng tuyển thành công' };
   }
 
@@ -100,6 +117,7 @@ export class CandidateHeadhuntingService {
 
     const invitation = await this.invitationRepo.findOne({
       where: { id: invitationId, candidateId: candidate.id },
+      relations: ['employer', 'job'],
     });
 
     if (!invitation) throw new NotFoundException('Không tìm thấy thư mời');
@@ -109,6 +127,19 @@ export class CandidateHeadhuntingService {
 
     invitation.status = InvitationStatus.DECLINED;
     await this.invitationRepo.save(invitation);
+
+    // --- REAL-TIME NOTIFICATION ---
+    await this.notificationsService.createNotification({
+      userId: invitation.employer.userId,
+      type: NotificationType.HEADHUNT_REJECT,
+      title: 'Từ chối lời mời làm việc',
+      content: `Ứng viên ${candidate.fullName || 'Một ai đó'} đã từ chối lời mời ứng tuyển cho vị trí "${invitation.job.title}".`,
+      metadata: {
+        jobId: invitation.jobId,
+        candidateId: candidate.id,
+        invitationId: invitation.id,
+      },
+    });
 
     return { message: 'Đã từ chối thư mời' };
   }

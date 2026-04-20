@@ -19,6 +19,8 @@ import { PublicJobsController } from './controllers/public-jobs.controller';
 import { EmployerJobsController } from './controllers/employer-jobs.controller';
 import { AdminJobsController } from './controllers/admin-jobs.controller';
 
+import { NotificationsModule } from '../notifications/notifications.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -29,6 +31,7 @@ import { AdminJobsController } from './controllers/admin-jobs.controller';
     ]),
     MetadataModule,
     EmployersModule,
+    NotificationsModule,
   ],
   controllers: [
     PublicJobsController,
