@@ -32,4 +32,3 @@ import { MailModule } from '../mail/mail.module';
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}
-

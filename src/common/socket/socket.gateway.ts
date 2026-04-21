@@ -84,7 +84,9 @@ export class SocketGateway
 
   handleDisconnect(client: AuthenticatedSocket) {
     const userId = client.data?.user?.id;
-    this.logger.log(`Client ${client.id} (User: ${userId || 'Unauthenticated'}) đã ngắt kết nối`);
+    this.logger.log(
+      `Client ${client.id} (User: ${userId || 'Unauthenticated'}) đã ngắt kết nối`,
+    );
   }
 
   // --- QUẢN LÝ PHÒNG (ROOM MANAGEMENT) ---

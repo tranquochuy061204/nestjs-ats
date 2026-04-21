@@ -147,9 +147,13 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException(
-        'Token không hợp lệ hoặc đã được sử dụng trước đó',
-      );
+      // Trả về 200 OK nếu không tìm thấy token (thường do click 2 lần hoặc tự động prefetch)
+      // Để không quăng lỗi, tránh hiểu lầm là quá trình xác thực thất bại.
+      return {
+        message:
+          'Email đã được xác thực thành công hoặc token đã được sử dụng.',
+        isEmailVerified: true,
+      };
     }
 
     if (user.isEmailVerified) {
