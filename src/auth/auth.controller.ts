@@ -164,8 +164,12 @@ export class AuthController {
   @ApiAuth()
   @ApiOperation({ summary: 'Kiểm tra trạng thái đăng nhập' })
   @ApiResponse({ status: 200, description: 'Trả về thông tin user hiện tại' })
-  getStatus(@CurrentUser() user: Record<string, unknown>) {
-    return user;
+  async getStatus(@CurrentUser() user: Record<string, unknown>) {
+    const isVerified = await this.authService.checkEmailVerified(Number(user.id));
+    return {
+      ...user,
+      isEmailVerified: isVerified,
+    };
   }
 
   // -----------------------------------------------------------------------
