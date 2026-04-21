@@ -35,8 +35,6 @@ export class MailService {
    * Gửi email đặt lại mật khẩu (dùng cho Phase 2 - Account Management)
    */
   async sendPasswordResetEmail(email: string, fullName: string, token: string) {
-    const resetUrl = `${process.env.APP_URL ?? 'http://localhost:3000'}/auth/reset-password?token=${token}`;
-
     try {
       await this.mailerService.sendMail({
         to: email,
@@ -44,8 +42,7 @@ export class MailService {
         template: 'reset-password',
         context: {
           name: fullName || email,
-          resetUrl,
-          expiresIn: '15 phút',
+          token,
         },
       });
       this.logger.log(`Password reset email sent to ${email}`);

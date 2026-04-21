@@ -10,6 +10,7 @@ import {
   UseGuards,
   UnauthorizedException,
   Query,
+  Patch,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { Response, Request } from 'express';
@@ -22,6 +23,9 @@ import { RegisterDto } from './dto/register.dto';
 import { RegisterEmployerDto } from './dto/register-employer.dto';
 import { LoginDto } from './dto/login.dto';
 import { LocalAuthGuard } from './guards/local.guard';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -162,6 +166,49 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Trả về thông tin user hiện tại' })
   getStatus(@CurrentUser() user: Record<string, unknown>) {
     return user;
+  }
+
+  // -----------------------------------------------------------------------
+  // ACCOUNT MANAGEMENT (PHASE 2)
+  // -----------------------------------------------------------------------
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Yêu cầu gửi mã đặt lại mật khẩu' })
+  @ApiResponse({ status: 200, description: 'Đã gửi mã xác minh (nếu có)' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đặt lại mật khẩu với mã PIN 6 số' })
+  @ApiResponse({ status: 200, description: 'Cập nhật mật khẩu thành công' })
+  @ApiResponse({ status: 400, description: 'Mã xác nhận sai hoặc hết hạn' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Patch('change-password')
+  @ApiAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đổi mật khẩu (yêu cầu đăng nhập)' })
+  @ApiResponse({ status: 200, description: 'Đổi mật khẩu thành công' })
+  @ApiResponse({ status: 400, description: 'Mật khẩu cũ không chính xác' })
+  async changePassword(
+    @CurrentUser() user: { id: number },
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(user.id, dto);
+  }
+
+  @Post('logout-all')
+  @ApiAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đăng xuất khỏi tất cả thiết bị' })
+  @ApiResponse({ status: 200, description: 'Đã force logout mọi phiên' })
+  async logoutAll(@CurrentUser() user: { id: number }) {
+    return this.authService.logoutAllDevices(user.id);
   }
 
   // -----------------------------------------------------------------------

@@ -55,6 +55,21 @@ export class UserEntity {
   })
   emailVerificationToken: string | null;
 
+  @Column({
+    name: 'reset_password_token',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  resetPasswordToken: string | null;
+
+  @Column({
+    name: 'reset_password_expires',
+    type: 'timestamp',
+    nullable: true,
+  })
+  resetPasswordExpires: Date | null;
+
   @CreateDateColumn({ type: 'timestamp', default: () => 'now()' })
   created_at: Date;
 

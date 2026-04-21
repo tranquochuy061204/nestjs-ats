@@ -13,6 +13,9 @@ import { RegisterDto } from './dto/register.dto';
 import { RegisterEmployerDto } from './dto/register-employer.dto';
 import { CandidateProfileService } from '../candidates/services/candidate-profile.service';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -378,6 +381,103 @@ export class AuthService {
     // 4. Trả về Token Admin (Admin không yêu cầu verify email)
     const result = await this.login(user);
     return result;
+  }
+
+  // ---------------------
+  // ACCOUNT MANAGEMENT (PHASE 2)
+  // ---------------------
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email },
+      relations: ['candidate'],
+    });
+
+    // Luôn trả về thông báo thành công dù email không tồn tại (Bảo mật: ngăn chặn dò quét email)
+    if (!user) {
+      return {
+        message: 'Nếu email tồn tại, thư cấp lại mật khẩu đã được gửi.',
+      };
+    }
+
+    // Generate 6-digit OTP
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Hash OTP before storing
+    const hashedPin = await bcrypt.hash(pin, 10);
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+    await this.userRepository.update(user.id, {
+      resetPasswordToken: hashedPin,
+      resetPasswordExpires: expiresAt,
+    });
+
+    const displayName = user.candidate?.fullName || user.email;
+    void this.mailService.sendPasswordResetEmail(user.email, displayName, pin);
+
+    return {
+      message: 'Nếu email tồn tại, thư cấp lại mật khẩu đã được gửi.',
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    if (!user || !user.resetPasswordToken || !user.resetPasswordExpires) {
+      throw new BadRequestException('Yêu cầu không hợp lệ hoặc đã hết hạn.');
+    }
+
+    if (new Date() > user.resetPasswordExpires) {
+      throw new BadRequestException('Mã xác nhận đã hết hạn.');
+    }
+
+    const isValid = await bcrypt.compare(dto.token, user.resetPasswordToken);
+    if (!isValid) {
+      throw new BadRequestException('Mã xác nhận không đúng.');
+    }
+
+    const newHashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    await this.userRepository.update(user.id, {
+      password: newHashedPassword,
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
+    });
+
+    // Force Logout All Devices
+    await this.logoutAllDevices(user.id);
+
+    return { message: 'Cập nhật mật khẩu thành công. Vui lòng đăng nhập lại.' };
+  }
+
+  async changePassword(userId: number, dto: ChangePasswordDto) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User không tồn tại');
+
+    const isMatch = await bcrypt.compare(dto.oldPassword, user.password);
+    if (!isMatch) {
+      throw new BadRequestException('Mật khẩu cũ không chính xác.');
+    }
+
+    const newHashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    await this.userRepository.update(userId, {
+      password: newHashedPassword,
+    });
+
+    // Force Logout All Devices
+    await this.logoutAllDevices(userId);
+
+    return {
+      message:
+        'Đổi mật khẩu thành công. Vui lòng đăng nhập lại trên các thiết bị.',
+    };
+  }
+
+  async logoutAllDevices(userId: number) {
+    await this.refreshTokenRepository.delete({ userId });
+    return { message: 'Đã đăng xuất khỏi tất cả thiết bị.' };
   }
 
   // ---------------------
