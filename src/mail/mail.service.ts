@@ -11,7 +11,7 @@ export class MailService {
    * Gửi email xác thực tài khoản sau khi đăng ký
    */
   async sendVerificationEmail(email: string, fullName: string, token: string) {
-    const verifyUrl = `${process.env.APP_URL ?? 'http://localhost:3000'}/auth/verify-email?token=${token}`;
+    const verifyUrl = `${process.env.APP_URL ?? 'http://localhost:3000'}/api/auth/verify-email?token=${token}`;
 
     try {
       await this.mailerService.sendMail({
