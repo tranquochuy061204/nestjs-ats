@@ -34,7 +34,7 @@ const getAdapter = () =>
           template: {
             // Sử dụng path tương đối từ root dự án để đảm bảo tìm thấy template
             // Cho dù chạy từ `src` (nest start) hay `dist` (node dist/main)
-            dir: join(process.cwd(), 'src', 'mail', 'templates'),
+            dir: join(__dirname, 'templates'),
             adapter: new HandlebarsAdapter() as never,
             options: { strict: true },
           },
