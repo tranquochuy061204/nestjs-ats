@@ -20,6 +20,8 @@ import { EmployerJobsController } from './controllers/employer-jobs.controller';
 import { AdminJobsController } from './controllers/admin-jobs.controller';
 
 import { NotificationsModule } from '../notifications/notifications.module';
+import { UserEntity } from '../users/entities/user.entity';
+import { CommonGuardsModule } from '../common/guards/common-guards.module';
 
 @Module({
   imports: [
@@ -28,10 +30,12 @@ import { NotificationsModule } from '../notifications/notifications.module';
       JobSkillTagEntity,
       JobStatusHistoryEntity,
       JobInvitationEntity,
+      UserEntity,
     ]),
     MetadataModule,
     EmployersModule,
     NotificationsModule,
+    CommonGuardsModule,
   ],
   controllers: [
     PublicJobsController,

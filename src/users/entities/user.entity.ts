@@ -44,6 +44,17 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 20, default: UserStatus.ACTIVE })
   status: UserStatus;
 
+  @Column({ name: 'is_email_verified', type: 'boolean', default: false })
+  isEmailVerified: boolean;
+
+  @Column({
+    name: 'email_verification_token',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  emailVerificationToken: string | null;
+
   @CreateDateColumn({ type: 'timestamp', default: () => 'now()' })
   created_at: Date;
 

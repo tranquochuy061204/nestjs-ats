@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Xác thực Email</title>
+  <style>
+    body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center; }
+    .header h1 { color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+    .header p { color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 14px; }
+    .body { padding: 40px 30px; }
+    .greeting { font-size: 16px; color: #1a1a2e; margin-bottom: 16px; }
+    .message { font-size: 15px; color: #555; line-height: 1.7; margin-bottom: 32px; }
+    .btn-wrap { text-align: center; margin: 32px 0; }
+    .btn { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff !important; text-decoration: none; padding: 14px 36px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.2px; }
+    .expire-note { background: #fff8e1; border-left: 4px solid #ffc107; padding: 12px 16px; border-radius: 4px; font-size: 13px; color: #7a6000; margin-bottom: 24px; }
+    .fallback { font-size: 12px; color: #999; word-break: break-all; margin-top: 16px; }
+    .footer { background: #f8f9fa; padding: 20px 30px; text-align: center; font-size: 12px; color: #aaa; border-top: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>✉️ ATS System</h1>
+      <p>Hệ thống quản lý tuyển dụng</p>
+    </div>
+    <div class="body">
+      <p class="greeting">Xin chào, <strong>{{name}}</strong> 👋</p>
+      <p class="message">
+        Cảm ơn bạn đã đăng ký tài khoản trên <strong>ATS System</strong>.<br/>
+        Để bắt đầu sử dụng đầy đủ tính năng, vui lòng xác thực địa chỉ email của bạn bằng cách nhấn vào nút bên dưới.
+      </p>
+
+      <div class="expire-note">
+        ⏰ Đường link xác thực sẽ hết hạn sau <strong>{{expiresIn}}</strong>. Vui lòng xác thực sớm.
+      </div>
+
+      <div class="btn-wrap">
+        <a href="{{verifyUrl}}" class="btn">✅ Xác Thực Email Ngay</a>
+      </div>
+
+      <p class="message">
+        Nếu bạn không đăng ký tài khoản này, vui lòng bỏ qua email và không nhấn vào đường link trên.
+      </p>
+
+      <p class="fallback">
+        Nếu nút không hoạt động, copy đường link sau vào trình duyệt:<br/>
+        <a href="{{verifyUrl}}">{{verifyUrl}}</a>
+      </p>
+    </div>
+    <div class="footer">
+      © 2025 ATS System. Email này được gửi tự động, vui lòng không trả lời.
+    </div>
+  </div>
+</body>
+</html>

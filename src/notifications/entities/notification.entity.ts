@@ -16,6 +16,7 @@ export enum NotificationType {
   HEADHUNT_ACCEPT = 'headhunt_accept',
   HEADHUNT_REJECT = 'headhunt_reject',
   JOB_APPROVAL = 'job_approval',
+  JOB_REJECTION = 'job_rejection',
   NEW_NOTE = 'new_note',
   SYSTEM = 'system',
 }
@@ -30,8 +31,8 @@ export class NotificationEntity {
   userId: number;
 
   @Column({
-    type: 'varchar',
-    length: 50,
+    type: 'enum',
+    enum: NotificationType,
   })
   type: NotificationType;
 

@@ -9,6 +9,7 @@ import {
   Res,
   UseGuards,
   UnauthorizedException,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { Response, Request } from 'express';
@@ -161,5 +162,29 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Trả về thông tin user hiện tại' })
   getStatus(@CurrentUser() user: Record<string, unknown>) {
     return user;
+  }
+
+  // -----------------------------------------------------------------------
+  // EMAIL VERIFICATION
+  // -----------------------------------------------------------------------
+
+  @Get('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xác thực email qua token (click link từ email)' })
+  @ApiResponse({ status: 200, description: 'Xác thực thành công' })
+  @ApiResponse({ status: 400, description: 'Token không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Token không tồn tại hoặc đã dùng' })
+  verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiAuth()
+  @ApiOperation({ summary: 'Gửi lại email xác thực (yêu cầu đăng nhập)' })
+  @ApiResponse({ status: 200, description: 'Email xác thực đã được gửi lại' })
+  @ApiResponse({ status: 400, description: 'Email đã được xác thực rồi' })
+  resendVerification(@CurrentUser() user: { id: number }) {
+    return this.authService.resendVerificationEmail(user.id);
   }
 }

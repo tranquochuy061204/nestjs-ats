@@ -9,6 +9,7 @@ import {
   ParseFilePipeBuilder,
   HttpStatus,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import {
@@ -25,6 +26,7 @@ import { CandidateCvParserService } from './services/candidate-cv-parser.service
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
 import { FILE_SIZES } from '../common/constants/storage-paths.constant';
+import { VerifiedEmailGuard } from '../common/guards/verified-email.guard';
 
 @Controller('candidates')
 export class CandidateProfileController {
@@ -72,8 +74,8 @@ export class CandidateProfileController {
   }
 
   @ApiTags('Candidates - Profile')
+  @ApiAuth([], true)
   @Post('cv')
-  @ApiAuth()
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload CV (PDF) Ứng viên' })

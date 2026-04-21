@@ -265,27 +265,34 @@ export class EmployerApplicationsService {
     });
 
     // --- REAL-TIME INTEGRATION ---
-    // 1. Cập nhật Bảng Kanban (Real-time cho các Recruiter khác)
-    this.socketGateway.sendToJobBoard(application.jobId, 'kanban_update', {
-      applicationId,
-      oldStatus,
-      newStatus: dto.status,
-      actor: employer.fullName || 'Nhà tuyển dụng',
-    });
-
-    // 2. Thông báo cho Ứng viên (DB Persistence + Real-time)
-    if (application.candidate?.userId) {
-      await this.notificationsService.createNotification({
-        userId: application.candidate.userId,
-        type: NotificationType.APPLICATION_STATUS,
-        title: 'Cập nhật trạng thái ứng tuyển',
-        content: `Hồ sơ của bạn cho vị trí "${application.job.title}" đã được chuyển sang trạng thái: ${dto.status}`,
-        metadata: {
-          jobId: application.jobId,
-          applicationId,
-          status: dto.status,
-        },
+    try {
+      // 1. Cập nhật Bảng Kanban (Real-time cho các Recruiter khác)
+      this.socketGateway.sendToJobBoard(application.jobId, 'kanban_update', {
+        applicationId,
+        oldStatus,
+        newStatus: dto.status,
+        actor: employer.fullName || 'Nhà tuyển dụng',
       });
+
+      // 2. Thông báo cho Ứng viên (DB Persistence + Real-time)
+      if (application.candidate?.userId) {
+        await this.notificationsService.createNotification({
+          userId: application.candidate.userId,
+          type: NotificationType.APPLICATION_STATUS,
+          title: 'Cập nhật trạng thái ứng tuyển',
+          content: `Hồ sơ của bạn cho vị trí "${application.job.title}" đã được chuyển sang trạng thái: ${dto.status}`,
+          metadata: {
+            jobId: application.jobId,
+            applicationId,
+            status: dto.status,
+          },
+        });
+      }
+    } catch (error) {
+      this.logger.error(
+        'Real-time integration failed in update status',
+        error instanceof Error ? error.stack : String(error),
+      );
     }
 
     return {
@@ -346,24 +353,32 @@ export class EmployerApplicationsService {
     const savedNote = await this.noteRepo.save(note);
 
     // --- REAL-TIME INTEGRATION ---
-    // Fetch full note with author info for detailed timeline update
-    const fullNote = await this.noteRepo.findOne({
-      where: { id: savedNote.id },
-      relations: ['author', 'author.employer'],
-    });
+    try {
+      // Fetch full note with author info for detailed timeline update
+      const fullNote = await this.noteRepo.findOne({
+        where: { id: savedNote.id },
+        relations: ['author', 'author.employer'],
+      });
 
-    // 1. Emit tới phòng chi tiết hồ sơ (Real-time Timeline)
-    this.socketGateway.sendToApplicationDetail(
-      applicationId,
-      'new_note',
-      fullNote,
-    );
+      // 1. Emit tới phòng chi tiết hồ sơ (Real-time Timeline)
+      this.socketGateway.sendToApplicationDetail(
+        applicationId,
+        'new_note',
+        fullNote,
+      );
 
-    // 2. Emit tới bảng Kanban (Để cập nhật badge hoặc preview)
-    this.socketGateway.sendToJobBoard(application.jobId, 'kanban_note', {
-      applicationId,
-      noteCount: await this.noteRepo.count({ where: { applicationId } }),
-    });
+      // 2. Emit tới bảng Kanban (Để cập nhật badge hoặc preview)
+      const noteCount = await this.noteRepo.count({ where: { applicationId } });
+      this.socketGateway.sendToJobBoard(application.jobId, 'kanban_note', {
+        applicationId,
+        noteCount,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Real-time emit failed for add note',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
 
     return savedNote;
   }

@@ -31,8 +31,8 @@ export class EmployerJobsController {
     return this.employerJobsService.getEmployerJobs(user.id, filterDto);
   }
 
+  @ApiAuth(UserRole.EMPLOYER, true)
   @Post()
-  @ApiAuth(UserRole.EMPLOYER)
   @ApiOperation({ summary: 'Tạo mới một tin tuyển dụng (Lưu nháp)' })
   createJob(@Req() req: Request, @Body() createJobDto: CreateJobDto) {
     const user = req.user as { id: number };

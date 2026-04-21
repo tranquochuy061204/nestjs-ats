@@ -24,8 +24,8 @@ export class CandidateApplicationsController {
     private readonly applicationsService: CandidateApplicationsService,
   ) {}
 
+  @ApiAuth(UserRole.CANDIDATE, true)
   @Post(':jobId')
-  @ApiAuth(UserRole.CANDIDATE)
   @ApiOperation({ summary: 'Ứng tuyển công việc' })
   @ApiParam({ name: 'jobId', description: 'ID tin tuyển dụng' })
   @ApiResponse({ status: 201, description: 'Ứng tuyển thành công' })

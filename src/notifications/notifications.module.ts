@@ -6,10 +6,7 @@ import { NotificationsController } from './notifications.controller';
 import { SocketModule } from '../common/socket/socket.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([NotificationEntity]),
-    SocketModule, // Will be created in next tasks
-  ],
+  imports: [TypeOrmModule.forFeature([NotificationEntity]), SocketModule],
   controllers: [NotificationsController],
   providers: [NotificationsService],
   exports: [NotificationsService],

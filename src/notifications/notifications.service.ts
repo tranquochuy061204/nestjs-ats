@@ -48,11 +48,14 @@ export class NotificationsService {
   }
 
   async getMyNotifications(userId: number, page = 1, limit = 20) {
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safePage = Math.max(page, 1);
+
     const [data, total] = await this.notificationRepo.findAndCount({
       where: { userId },
       order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
+      skip: (safePage - 1) * safeLimit,
+      take: safeLimit,
     });
 
     return {

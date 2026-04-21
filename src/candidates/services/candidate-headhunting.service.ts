@@ -97,17 +97,21 @@ export class CandidateHeadhuntingService {
     });
 
     // --- REAL-TIME NOTIFICATION ---
-    await this.notificationsService.createNotification({
-      userId: invitation.employer.userId,
-      type: NotificationType.HEADHUNT_ACCEPT,
-      title: 'Chấp nhận lời mời làm việc',
-      content: `Ứng viên ${candidate.fullName || 'Một ai đó'} đã chấp nhận lời mời ứng tuyển cho vị trí "${invitation.job.title}".`,
-      metadata: {
-        jobId: invitation.jobId,
-        candidateId: candidate.id,
-        invitationId: invitation.id,
-      },
-    });
+    try {
+      await this.notificationsService.createNotification({
+        userId: invitation.employer.userId,
+        type: NotificationType.HEADHUNT_ACCEPT,
+        title: 'Chấp nhận lời mời làm việc',
+        content: `Ứng viên ${candidate.fullName || 'Một ai đó'} đã chấp nhận lời mời ứng tuyển cho vị trí "${invitation.job.title}".`,
+        metadata: {
+          jobId: invitation.jobId,
+          candidateId: candidate.id,
+          invitationId: invitation.id,
+        },
+      });
+    } catch (error) {
+      // Ignore non-critical error
+    }
 
     return { message: 'Đã chấp nhận thư mời và tạo đơn ứng tuyển thành công' };
   }
@@ -129,17 +133,21 @@ export class CandidateHeadhuntingService {
     await this.invitationRepo.save(invitation);
 
     // --- REAL-TIME NOTIFICATION ---
-    await this.notificationsService.createNotification({
-      userId: invitation.employer.userId,
-      type: NotificationType.HEADHUNT_REJECT,
-      title: 'Từ chối lời mời làm việc',
-      content: `Ứng viên ${candidate.fullName || 'Một ai đó'} đã từ chối lời mời ứng tuyển cho vị trí "${invitation.job.title}".`,
-      metadata: {
-        jobId: invitation.jobId,
-        candidateId: candidate.id,
-        invitationId: invitation.id,
-      },
-    });
+    try {
+      await this.notificationsService.createNotification({
+        userId: invitation.employer.userId,
+        type: NotificationType.HEADHUNT_REJECT,
+        title: 'Từ chối lời mời làm việc',
+        content: `Ứng viên ${candidate.fullName || 'Một ai đó'} đã từ chối lời mời ứng tuyển cho vị trí "${invitation.job.title}".`,
+        metadata: {
+          jobId: invitation.jobId,
+          candidateId: candidate.id,
+          invitationId: invitation.id,
+        },
+      });
+    } catch (error) {
+      // Ignore non-critical error
+    }
 
     return { message: 'Đã từ chối thư mời' };
   }

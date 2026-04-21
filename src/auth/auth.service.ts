@@ -3,6 +3,8 @@ import {
   ConflictException,
   Inject,
   forwardRef,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -16,6 +18,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { Response } from 'express';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +31,7 @@ export class AuthService {
     private readonly refreshTokenRepository: Repository<RefreshTokenEntity>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -43,11 +47,16 @@ export class AuthService {
       throw new ConflictException('Email đã được sử dụng');
     }
 
+    // Tạo token xác thực email (random hex 32 bytes = 64 chars)
+    const verificationToken = this.generateVerificationToken();
+
     // Tạo user mới - role mặc định là candidate
     const user = this.userRepository.create({
       email,
       password,
       role: UserRole.CANDIDATE,
+      emailVerificationToken: verificationToken,
+      isEmailVerified: false,
     });
     const savedUser = await this.userRepository.save(user);
 
@@ -59,12 +68,21 @@ export class AuthService {
       provinceId,
     });
 
+    // Gửi mail xác thực (fire-and-forget, không block response)
+    void this.mailService.sendVerificationEmail(
+      email,
+      candidate.fullName,
+      verificationToken,
+    );
+
     return {
-      message: 'User registered successfully',
+      message:
+        'Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.',
       user: {
         id: savedUser.id,
         email: savedUser.email,
         role: savedUser.role,
+        isEmailVerified: false,
         fullName: candidate.fullName,
         phone: candidate.phone,
         provinceId: candidate.provinceId,
@@ -83,21 +101,108 @@ export class AuthService {
       throw new ConflictException('Email đã được sử dụng');
     }
 
+    const verificationToken = this.generateVerificationToken();
+
     const user = this.userRepository.create({
       email,
       password,
       role: UserRole.EMPLOYER,
+      emailVerificationToken: verificationToken,
+      isEmailVerified: false,
     });
     const savedUser = await this.userRepository.save(user);
 
+    // Gửi mail xác thực (fire-and-forget)
+    void this.mailService.sendVerificationEmail(
+      email,
+      email, // Employer chưa có fullName tại bước này
+      verificationToken,
+    );
+
     return {
-      message: 'Tài khoản Employer được tạo thành công',
+      message:
+        'Tài khoản Employer được tạo thành công. Vui lòng kiểm tra email để xác thực tài khoản.',
       user: {
         id: savedUser.id,
         email: savedUser.email,
         role: savedUser.role,
+        isEmailVerified: false,
       },
     };
+  }
+
+  /**
+   * Xác thực email từ token trong link
+   */
+  async verifyEmail(token: string) {
+    if (!token) {
+      throw new BadRequestException('Token xác thực không hợp lệ');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { emailVerificationToken: token },
+    });
+
+    if (!user) {
+      throw new NotFoundException(
+        'Token không hợp lệ hoặc đã được sử dụng trước đó',
+      );
+    }
+
+    if (user.isEmailVerified) {
+      return { message: 'Email đã được xác thực trước đó' };
+    }
+
+    await this.userRepository.update(user.id, {
+      isEmailVerified: true,
+      emailVerificationToken: null,
+    });
+
+    return {
+      message:
+        'Xác thực email thành công! Tài khoản của bạn đã được kích hoạt.',
+    };
+  }
+
+  /**
+   * Gửi lại email xác thực (yêu cầu đăng nhập)
+   */
+  async resendVerificationEmail(userId: number) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email đã được xác thực rồi');
+    }
+
+    // Tạo token mới
+    const newToken = this.generateVerificationToken();
+    await this.userRepository.update(userId, {
+      emailVerificationToken: newToken,
+    });
+
+    // Lấy tên hiển thị
+    const displayName = user.email;
+    void this.mailService.sendVerificationEmail(
+      user.email,
+      displayName,
+      newToken,
+    );
+
+    return {
+      message: 'Email xác thực đã được gửi lại. Vui lòng kiểm tra hộp thư.',
+    };
+  }
+
+  /**
+   * Kiểm tra user đã xác thực email chưa (dùng trong VerifiedEmailGuard)
+   */
+  async checkEmailVerified(userId: number): Promise<boolean> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'isEmailVerified'],
+    });
+    return user?.isEmailVerified ?? false;
   }
 
   async validateUser({ email, password }: LoginDto) {
@@ -112,6 +217,10 @@ export class AuthService {
     if (!isPasswordValid) {
       return null;
     }
+
+    // Cho phép đăng nhập dù chưa verify — FE sẽ biết thông qua data request và hiển thị banner yêu cầu verify.
+    // Lớp bảo vệ thực sự nằm ở `VerifiedEmailGuard` chặn các tài nguyên quan trọng.
+
     return user;
   }
 
@@ -266,8 +375,21 @@ export class AuthService {
       throw new ConflictException('Mật khẩu không chính xác');
     }
 
-    // 4. Trả về Token Admin
-    const result = await this.login(user); // Use unified login to get tokens + jti
+    // 4. Trả về Token Admin (Admin không yêu cầu verify email)
+    const result = await this.login(user);
     return result;
+  }
+
+  // ---------------------
+  // PRIVATE HELPERS
+  // ---------------------
+
+  private generateVerificationToken(): string {
+    // Tạo 32 random bytes → hex string 64 ký tự
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
   }
 }

@@ -100,7 +100,7 @@ export class AdminJobsService {
     // --- REAL-TIME NOTIFICATION ---
     await this.notificationsService.createNotification({
       userId: job.employer.userId,
-      type: NotificationType.JOB_APPROVAL, // Dùng chung type với approval cho gọn hoặc tạo thêm JOB_REJECTION nếu cần
+      type: NotificationType.JOB_REJECTION,
       title: 'Tin tuyển dụng đã bị từ chối',
       content: `Tin tuyển dụng "${job.title}" của bạn không được phê duyệt. Lý do: ${reason}`,
       metadata: {

@@ -42,6 +42,7 @@
     "@supabase/supabase-js": "^2.99.3",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
+    "handlebars": "^4.7.9",
     "multer": "^2.1.1",
     "mysql2": "^3.20.0",
     "nestjs-zod": "^5.1.1",

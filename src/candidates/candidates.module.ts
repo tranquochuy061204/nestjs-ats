@@ -26,6 +26,8 @@ import { JobInvitationEntity } from '../jobs/entities/job-invitation.entity';
 import { JobApplicationEntity } from '../applications/entities/job-application.entity';
 import { ApplicationStatusHistoryEntity } from '../applications/entities/application-status-history.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CommonGuardsModule } from '../common/guards/common-guards.module';
+import { UserEntity } from '../users/entities/user.entity';
 
 @Module({
   imports: [
@@ -42,11 +44,13 @@ import { NotificationsModule } from '../notifications/notifications.module';
       JobInvitationEntity,
       JobApplicationEntity,
       ApplicationStatusHistoryEntity,
+      UserEntity,
     ]),
     forwardRef(() => AuthModule),
     MetadataModule,
     StorageModule,
     NotificationsModule,
+    CommonGuardsModule,
   ],
   controllers: [
     CandidateProfileController,

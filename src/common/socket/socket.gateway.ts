@@ -27,7 +27,11 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Trong môi trường production, nên giới hạn lại theo CORS_ORIGIN trong .env
+    origin:
+      process.env.CORS_ORIGIN === '*'
+        ? true
+        : process.env.CORS_ORIGIN?.split(',') || true,
+    credentials: true,
   },
 })
 export class SocketGateway
@@ -79,8 +83,8 @@ export class SocketGateway
   }
 
   handleDisconnect(client: AuthenticatedSocket) {
-    const userId = client.data.user?.id;
-    this.logger.log(`Client ${client.id} (User: ${userId}) đã ngắt kết nối`);
+    const userId = client.data?.user?.id;
+    this.logger.log(`Client ${client.id} (User: ${userId || 'Unauthenticated'}) đã ngắt kết nối`);
   }
 
   // --- QUẢN LÝ PHÒNG (ROOM MANAGEMENT) ---
@@ -90,6 +94,9 @@ export class SocketGateway
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: { jobId: number },
   ) {
+    if (client.data?.user?.role !== 'employer') {
+      return { status: 'error', message: 'Không có quyền truy cập phòng này' };
+    }
     const room = `job_kanban_${data.jobId}`;
     await client.join(room);
     this.logger.log(`User ${client.data.user?.id} đã tham gia phòng ${room}`);

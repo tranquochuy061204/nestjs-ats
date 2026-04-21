@@ -4,11 +4,13 @@ import {
   Param,
   Patch,
   Query,
-  UseGuards,
   Req,
+  ParseIntPipe,
+  DefaultValuePipe,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
-import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { ApiAuth } from '../common/decorators/api-auth.decorator';
 
 interface RequestWithUser extends Request {
   user: {
@@ -18,21 +20,22 @@ interface RequestWithUser extends Request {
   };
 }
 
+@ApiTags('Notifications')
 @Controller('notifications')
-@UseGuards(JwtAuthGuard)
+@ApiAuth()
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
   async getMyNotifications(
     @Req() req: RequestWithUser,
-    @Query('page') page: string,
-    @Query('limit') limit: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
     return this.notificationsService.getMyNotifications(
       req.user.id,
-      page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
+      page,
+      limit,
     );
   }
 
@@ -47,7 +50,10 @@ export class NotificationsController {
   }
 
   @Patch(':id/read')
-  async markAsRead(@Req() req: RequestWithUser, @Param('id') id: string) {
-    return this.notificationsService.markAsRead(req.user.id, parseInt(id, 10));
+  async markAsRead(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.notificationsService.markAsRead(req.user.id, id);
   }
 }

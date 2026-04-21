@@ -13,6 +13,8 @@ import { EmployerApplicationsController } from './employer-applications.controll
 
 import { UserEntity } from '../users/entities/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CommonGuardsModule } from '../common/guards/common-guards.module';
+import { SocketModule } from '../common/socket/socket.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
       UserEntity,
     ]),
     NotificationsModule,
+    CommonGuardsModule,
+    SocketModule,
   ],
   controllers: [
     CandidateApplicationsController,
