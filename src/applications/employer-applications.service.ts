@@ -150,7 +150,7 @@ export class EmployerApplicationsService {
     const application = await this.applicationRepo.findOne({
       where: {
         id: applicationId,
-        job: { companyId: employer.companyId as number }, // Early Check Authorization
+        job: { companyId: employer.companyId }, // Early Check Authorization
       },
       relations: [
         'job',

@@ -51,8 +51,14 @@ describe('EmployersService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmployersService,
-        { provide: getRepositoryToken(EmployerEntity), useValue: mockEmployerRepo },
-        { provide: getRepositoryToken(CompanyEntity), useValue: mockCompanyRepo },
+        {
+          provide: getRepositoryToken(EmployerEntity),
+          useValue: mockEmployerRepo,
+        },
+        {
+          provide: getRepositoryToken(CompanyEntity),
+          useValue: mockCompanyRepo,
+        },
         { provide: getRepositoryToken(UserEntity), useValue: mockUserRepo },
         { provide: DataSource, useValue: mockDataSource },
         { provide: SupabaseService, useValue: mockSupabaseService },
@@ -76,14 +82,21 @@ describe('EmployersService', () => {
     };
 
     it('should throw BadRequest if inviter is not an admin', async () => {
-      employerRepo.findOne.mockResolvedValue({ ...adminEmployer, isAdminCompany: false });
-      await expect(service.addMember(adminUserId, dto)).rejects.toThrow(BadRequestException);
+      employerRepo.findOne.mockResolvedValue({
+        ...adminEmployer,
+        isAdminCompany: false,
+      });
+      await expect(service.addMember(adminUserId, dto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw Conflict if email is used by a Candidate', async () => {
       employerRepo.findOne.mockResolvedValue(adminEmployer);
       userRepo.findOne.mockResolvedValue({ role: UserRole.CANDIDATE });
-      await expect(service.addMember(adminUserId, dto)).rejects.toThrow(ConflictException);
+      await expect(service.addMember(adminUserId, dto)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('should link existing Employer to company if they are currently unlinked', async () => {
@@ -95,22 +108,29 @@ describe('EmployersService', () => {
       const result = await service.addMember(adminUserId, dto);
 
       expect(employerRepo.save).toHaveBeenCalled();
-      expect(result.message).toContain('Đã thêm thành viên vào công ty thành công');
+      expect(result.message).toContain(
+        'Đã thêm thành viên vào công ty thành công',
+      );
     });
 
     it('should create a new User and Employer if email does not exist', async () => {
       employerRepo.findOne.mockResolvedValue(adminEmployer);
       userRepo.findOne.mockResolvedValue(null);
-      
-      mockQueryRunner.manager.create.mockReturnValueOnce({ id: 2, email: dto.email }); // Mock User
+
+      mockQueryRunner.manager.create.mockReturnValueOnce({
+        id: 2,
+        email: dto.email,
+      }); // Mock User
       mockQueryRunner.manager.save.mockResolvedValueOnce({ id: 2 });
       mockQueryRunner.manager.create.mockReturnValueOnce({ id: 20 }); // Mock Employer
-      
+
       const result = await service.addMember(adminUserId, dto);
 
       expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
-      expect(result.message).toContain('Đã tạo tài khoản và thêm thành viên mới thành công');
+      expect(result.message).toContain(
+        'Đã tạo tài khoản và thêm thành viên mới thành công',
+      );
     });
   });
 
@@ -118,7 +138,7 @@ describe('EmployersService', () => {
     it('should unlink member from company', async () => {
       const admin = { userId: 1, companyId: 10, isAdminCompany: true };
       const member = { id: 20, userId: 2, companyId: 10 };
-      
+
       employerRepo.findOne
         .mockResolvedValueOnce(admin)
         .mockResolvedValueOnce(member);

@@ -100,7 +100,7 @@ export class EmployerJobsService {
       );
     }
 
-    const { status, ...otherJobData } = updateJobDto;
+    const { status } = updateJobDto;
 
     // VALIDATE ALLOWED STATUS
     const employerAllowedStatuses = [
@@ -119,7 +119,7 @@ export class EmployerJobsService {
     const isCompanyVerified = job.company?.status === CompanyStatus.APPROVED;
     let finalStatus = (status as string) ?? job.status;
 
-    if (status === (JobStatus.PUBLISHED as string) && !isCompanyVerified) {
+    if (status === JobStatus.PUBLISHED && !isCompanyVerified) {
       finalStatus = JobStatus.PENDING;
     }
 

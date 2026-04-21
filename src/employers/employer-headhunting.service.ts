@@ -384,7 +384,9 @@ export class EmployerHeadhuntingService {
     });
   }
 
-  private async findEmployerByUserId(userId: number): Promise<EmployerEntity & { companyId: number }> {
+  private async findEmployerByUserId(
+    userId: number,
+  ): Promise<EmployerEntity & { companyId: number }> {
     const employer = await this.employerRepo.findOne({ where: { userId } });
     if (!employer) {
       throw new ForbiddenException('Tài khoản không phải nhà tuyển dụng');
