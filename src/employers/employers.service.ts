@@ -282,7 +282,7 @@ export class EmployersService {
     }
 
     // Gỡ liên kết công ty
-    member.companyId = -1;
+    member.companyId = null;
     member.isAdminCompany = false;
     await this.employerRepo.save(member);
 

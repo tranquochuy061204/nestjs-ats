@@ -150,7 +150,7 @@ export class EmployerApplicationsService {
     const application = await this.applicationRepo.findOne({
       where: {
         id: applicationId,
-        job: { companyId: employer.companyId }, // Early Check Authorization
+        job: { companyId: employer.companyId as number }, // Early Check Authorization
       },
       relations: [
         'job',
@@ -406,11 +406,11 @@ export class EmployerApplicationsService {
     if (!employer) {
       throw new ForbiddenException('Tài khoản không phải nhà tuyển dụng');
     }
-    if (!employer.companyId) {
+    if (employer.companyId === null || employer.companyId === undefined) {
       throw new ForbiddenException(
         'Bạn phải tham gia vào một công ty trước khi quản lý ứng tuyển',
       );
     }
-    return employer;
+    return employer as EmployerEntity & { companyId: number };
   }
 }

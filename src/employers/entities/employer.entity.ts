@@ -20,7 +20,7 @@ export class EmployerEntity {
   userId: number;
 
   @Column({ name: 'company_id', nullable: true })
-  companyId: number;
+  companyId: number | null;
 
   @Column({ name: 'full_name', type: 'varchar', length: 255 })
   fullName: string;

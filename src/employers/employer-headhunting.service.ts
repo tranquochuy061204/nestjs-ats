@@ -384,14 +384,14 @@ export class EmployerHeadhuntingService {
     });
   }
 
-  private async findEmployerByUserId(userId: number): Promise<EmployerEntity> {
+  private async findEmployerByUserId(userId: number): Promise<EmployerEntity & { companyId: number }> {
     const employer = await this.employerRepo.findOne({ where: { userId } });
     if (!employer) {
       throw new ForbiddenException('Tài khoản không phải nhà tuyển dụng');
     }
-    if (!employer.companyId) {
+    if (employer.companyId === null || employer.companyId === undefined) {
       throw new ForbiddenException('Tài khoản chưa thuộc công ty nào');
     }
-    return employer;
+    return employer as EmployerEntity & { companyId: number };
   }
 }

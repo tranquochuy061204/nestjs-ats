@@ -14,6 +14,7 @@ import { UpdateJobDto } from '../dto/update-job.dto';
 import { JobFilterDto } from '../dto/job-filter.dto';
 import { JobSkillsService } from '../job-skills.service';
 import { EmployersService } from '../../employers/employers.service';
+import { EmployerEntity } from '../../employers/entities/employer.entity';
 import { CompanyStatus } from '../../companies/entities/company.entity';
 import { getPaginatedResult } from '../../common/utils/pagination.util';
 
@@ -34,12 +35,14 @@ export class EmployerJobsService {
   async createJob(employerUserId: number, createJobDto: CreateJobDto) {
     const employer = await this.employersService.getProfile(employerUserId);
 
-    if (!employer.companyId) {
+    if (employer.companyId === null || employer.companyId === undefined) {
       throw new ForbiddenException(
         'Bạn phải tham gia vào một công ty trước khi đăng tin tuyển dụng',
       );
     }
-    if (!employer.isAdminCompany) {
+    const emp = employer as EmployerEntity & { companyId: number };
+
+    if (!emp.isAdminCompany) {
       throw new ForbiddenException(
         'Bạn không có quyền đăng tin (Yêu cầu tài khoản HR Admin)',
       );
@@ -51,8 +54,8 @@ export class EmployerJobsService {
 
         const newJob = manager.create(JobEntity, {
           ...jobData,
-          employerId: employer.id,
-          companyId: employer.companyId,
+          employerId: emp.id,
+          companyId: emp.companyId,
           status: JobStatus.DRAFT,
         });
         const savedJob = await manager.save(newJob);
@@ -80,6 +83,10 @@ export class EmployerJobsService {
       throw new ForbiddenException(
         'Bạn không có quyền chỉnh sửa tin (Yêu cầu tài khoản HR Admin)',
       );
+    }
+
+    if (employer.companyId === null || employer.companyId === undefined) {
+      throw new ForbiddenException('Bạn phải tham gia vào một công ty');
     }
 
     const job = await this.jobRepository.findOne({
@@ -160,14 +167,17 @@ export class EmployerJobsService {
   async getEmployerJobs(employerUserId: number, filterDto: JobFilterDto) {
     const employer = await this.employersService.getProfile(employerUserId);
 
-    if (!employer.companyId) return { data: [], total: 0 };
+    if (employer.companyId === null || employer.companyId === undefined)
+      return { data: [], total: 0 };
 
     const { page = 1, limit = 10, keyword, status } = filterDto;
 
     const qb = this.jobRepository
       .createQueryBuilder('job')
       .leftJoinAndSelect('job.category', 'category')
-      .where('job.companyId = :companyId', { companyId: employer.companyId });
+      .where('job.companyId = :companyId', {
+        companyId: employer.companyId,
+      });
 
     if (keyword) {
       qb.andWhere('job.title ILIKE :keyword', { keyword: `%${keyword}%` });
@@ -184,6 +194,10 @@ export class EmployerJobsService {
 
   async getEmployerJobHistory(employerUserId: number, jobId: number) {
     const employer = await this.employersService.getProfile(employerUserId);
+    if (employer.companyId === null || employer.companyId === undefined) {
+      throw new ForbiddenException('Bạn phải tham gia vào một công ty');
+    }
+
     const job = await this.jobRepository.findOne({
       where: { id: jobId, companyId: employer.companyId },
     });
