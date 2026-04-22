@@ -36,5 +36,6 @@ import { SocketModule } from '../common/socket/socket.module';
     EmployerApplicationsController,
   ],
   providers: [CandidateApplicationsService, EmployerApplicationsService],
+  exports: [CandidateApplicationsService],
 })
 export class ApplicationsModule {}

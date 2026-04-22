@@ -14,6 +14,8 @@ import { SetupCompanyDto } from './dto/setup-company.dto';
 import { UpdateEmployerProfileDto } from './dto/update-employer-profile.dto';
 import { AddMemberDto, CompanyRole } from './dto/add-member.dto';
 import { SupabaseService } from '../storage/supabase.service';
+import { MailService } from '../mail/mail.service';
+import { sanitizeFilename } from '../common/utils/string.util';
 
 @Injectable()
 export class EmployersService {
@@ -27,6 +29,7 @@ export class EmployersService {
     private readonly userRepo: Repository<UserEntity>,
     private readonly dataSource: DataSource,
     private readonly supabaseService: SupabaseService,
+    private readonly mailService: MailService,
   ) {}
 
   async setupCompany(userId: number, dto: SetupCompanyDto) {
@@ -118,7 +121,7 @@ export class EmployersService {
       );
     }
 
-    const originalName = file.originalname.replace(/\s+/g, '_');
+    const originalName = sanitizeFilename(file.originalname);
     const uploadPath = `employers/avatars/${userId}-${Date.now()}-${originalName}`;
 
     const { publicUrl } = await this.supabaseService.atomicUploadAndUpdate(
@@ -214,10 +217,15 @@ export class EmployersService {
     await queryRunner.startTransaction();
 
     try {
+      // Tạo verification token trước khi tạo user
+      const verificationToken = this.generateVerificationToken();
+
       const newUser = queryRunner.manager.create(UserEntity, {
         email: dto.email,
         password: dto.password,
         role: UserRole.EMPLOYER,
+        emailVerificationToken: verificationToken,
+        isEmailVerified: false,
       });
       const savedUser = await queryRunner.manager.save(newUser);
 
@@ -230,6 +238,14 @@ export class EmployersService {
       await queryRunner.manager.save(newEmployer);
 
       await queryRunner.commitTransaction();
+
+      // Gửi email xác thực (fire-and-forget - không block response)
+      void this.mailService.sendVerificationEmail(
+        dto.email,
+        dto.fullName,
+        verificationToken,
+      );
+
       return {
         message: 'Đã tạo tài khoản và thêm thành viên mới thành công',
         userId: savedUser.id,
@@ -287,5 +303,17 @@ export class EmployersService {
     await this.employerRepo.save(member);
 
     return { message: 'Đã gỡ thành viên khỏi công ty thành công' };
+  }
+
+  // ---------------------
+  // PRIVATE HELPERS
+  // ---------------------
+
+  private generateVerificationToken(): string {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
   }
 }

@@ -267,7 +267,8 @@ export class CandidateApplicationsService {
     return candidate;
   }
 
-  private async calculateAiMatchScore(applicationId: number) {
+  // Exposed as public để CandidateHeadhuntingService trigger AI scoring khi candidate accept invitation
+  async calculateAiMatchScore(applicationId: number) {
     if (!this.genAI) {
       this.logger.warn('AI API key not configured. Skipping match score.');
       return;

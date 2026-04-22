@@ -5,6 +5,8 @@ import {
   forwardRef,
   BadRequestException,
   NotFoundException,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -272,8 +274,14 @@ export class AuthService {
   ) {
     const hashedToken = await bcrypt.hash(token, 10);
     const expiresAt = new Date();
-    // Giả sử refresh token hết hạn sau 7 ngày (đồng bộ với JWT config)
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    // Đọc từ config để đồng bộ với JWT_REFRESH_EXPIRES_TIME (vd: '7d', '14d', '30d')
+    const refreshExpiresConfig = this.configService.get<string>(
+      'JWT_REFRESH_EXPIRES_TIME',
+      '7d',
+    );
+    const daysMatch = refreshExpiresConfig.match(/^(\d+)d$/);
+    const expiryDays = daysMatch ? parseInt(daysMatch[1], 10) : 7;
+    expiresAt.setDate(expiresAt.getDate() + expiryDays);
 
     const refreshToken = this.refreshTokenRepository.create({
       id: jti,
@@ -298,7 +306,7 @@ export class AuthService {
       where: { id: userId },
       relations: ['candidate'],
     });
-    if (!user) throw new ConflictException('User not found');
+    if (!user) throw new UnauthorizedException('Phiên đăng nhập không hợp lệ');
 
     // O(1) Lookup: Tìm chính xác bản ghi theo JTI (ID)
     const tokenRecord = await this.refreshTokenRepository.findOne({
@@ -306,13 +314,13 @@ export class AuthService {
     });
 
     if (!tokenRecord) {
-      throw new ConflictException('Invalid Refresh Token');
+      throw new UnauthorizedException('Refresh token không hợp lệ');
     }
 
     // Verify hash (Security Layer)
     const isMatch = await bcrypt.compare(rawRefreshToken, tokenRecord.token);
     if (!isMatch) {
-      throw new ConflictException('Invalid Refresh Token Content');
+      throw new UnauthorizedException('Refresh token không hợp lệ');
     }
 
     // Xoay vòng (Rotation): Xóa bản ghi cũ
@@ -374,13 +382,13 @@ export class AuthService {
 
     // 2. Chặn sớm nếu không phải Admin hoặc không tồn tại (Security Requirement)
     if (!user || user.role !== UserRole.ADMIN) {
-      throw new ConflictException('Tài khoản không có quyền quản trị');
+      throw new ForbiddenException('Tài khoản không có quyền quản trị');
     }
 
     // 3. So khớp password (chỉ dành cho Admin)
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
-      throw new ConflictException('Mật khẩu không chính xác');
+      throw new UnauthorizedException('Mật khẩu không chính xác');
     }
 
     // 4. Trả về Token Admin (Admin không yêu cầu verify email)

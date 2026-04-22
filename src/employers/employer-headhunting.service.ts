@@ -43,7 +43,7 @@ export class EmployerHeadhuntingService {
   ) {}
 
   async getSuggestedCandidates(employerUserId: number, jobId: number) {
-    const employer = await this.findEmployerByUserId(employerUserId);
+    const employer = await this.findEmployerWithCompany(employerUserId);
 
     const job = await this.jobRepo.findOne({
       where: { id: jobId, companyId: employer.companyId },
@@ -133,8 +133,8 @@ export class EmployerHeadhuntingService {
     // FIX #8: Dùng alias đã select và hàm aggregate cho các cột không nằm trong GROUP BY
     rawQb
       .groupBy('c.id')
-      .orderBy('matchedSkills', 'DESC')
-      .addOrderBy('MAX(c.yearWorkingExperience)', 'DESC')
+      .orderBy('COUNT(DISTINCT cst.skill_metadata_id)', 'DESC')
+      .addOrderBy('MAX(c.year_working_experience)', 'DESC')
       .limit(50);
 
     const rawRows = await rawQb.getRawMany<{
@@ -174,7 +174,7 @@ export class EmployerHeadhuntingService {
   }
 
   async searchCandidates(employerUserId: number, filter: HeadhuntingFilterDto) {
-    await this.findEmployerByUserId(employerUserId);
+    await this.findEmployerWithCompany(employerUserId);
 
     const {
       keyword,
@@ -231,7 +231,7 @@ export class EmployerHeadhuntingService {
   }
 
   async getCandidateDetail(employerUserId: number, candidateId: number) {
-    await this.findEmployerByUserId(employerUserId);
+    await this.findEmployer(employerUserId);
 
     const candidate = await this.candidateRepo.findOne({
       where: { id: candidateId, isPublic: true },
@@ -262,7 +262,7 @@ export class EmployerHeadhuntingService {
     candidateId: number,
     dto: SaveCandidateDto,
   ) {
-    const employer = await this.findEmployerByUserId(employerUserId);
+    const employer = await this.findEmployerWithCompany(employerUserId);
 
     const candidate = await this.candidateRepo.findOne({
       where: { id: candidateId, isPublic: true },
@@ -289,7 +289,7 @@ export class EmployerHeadhuntingService {
   }
 
   async unsaveCandidate(employerUserId: number, candidateId: number) {
-    const employer = await this.findEmployerByUserId(employerUserId);
+    const employer = await this.findEmployer(employerUserId);
     const result = await this.savedCandidateRepo.delete({
       employerId: employer.id,
       candidateId,
@@ -303,7 +303,7 @@ export class EmployerHeadhuntingService {
   }
 
   async getSavedCandidates(employerUserId: number) {
-    const employer = await this.findEmployerByUserId(employerUserId);
+    const employer = await this.findEmployer(employerUserId);
 
     return this.savedCandidateRepo.find({
       where: { employerId: employer.id },
@@ -319,7 +319,7 @@ export class EmployerHeadhuntingService {
   }
 
   async sendJobInvitation(employerUserId: number, dto: CreateJobInvitationDto) {
-    const employer = await this.findEmployerByUserId(employerUserId);
+    const employer = await this.findEmployerWithCompany(employerUserId);
 
     // FIX: Kiểm tra Job tồn tại + thuộc công ty + đang PUBLISHED
     const job = await this.jobRepo.findOne({
@@ -376,7 +376,7 @@ export class EmployerHeadhuntingService {
   }
 
   async getSentInvitations(employerUserId: number) {
-    const employer = await this.findEmployerByUserId(employerUserId);
+    const employer = await this.findEmployer(employerUserId);
     return this.invitationRepo.find({
       where: { employerId: employer.id },
       relations: ['candidate', 'job'],
@@ -384,15 +384,31 @@ export class EmployerHeadhuntingService {
     });
   }
 
-  private async findEmployerByUserId(
-    userId: number,
-  ): Promise<EmployerEntity & { companyId: number }> {
+  /**
+   * Chỉ kiểm tra tài khoản có phải employer không.
+   * Dùng cho các action cá nhân: xem/quản lý saved candidates, xem profile ứng viên.
+   * Employer bị remove khỏi công ty (companyId = null) vẫn có thể dùng.
+   */
+  private async findEmployer(userId: number): Promise<EmployerEntity> {
     const employer = await this.employerRepo.findOne({ where: { userId } });
     if (!employer) {
       throw new ForbiddenException('Tài khoản không phải nhà tuyển dụng');
     }
+    return employer;
+  }
+
+  /**
+   * Kiểm tra tài khoản là employer VÀ đang thuộc một công ty.
+   * Dùng cho các action liên quan đến job/company: tìm kiếm, gợi ý, gửi thư mời.
+   */
+  private async findEmployerWithCompany(
+    userId: number,
+  ): Promise<EmployerEntity & { companyId: number }> {
+    const employer = await this.findEmployer(userId);
     if (employer.companyId === null || employer.companyId === undefined) {
-      throw new ForbiddenException('Tài khoản chưa thuộc công ty nào');
+      throw new ForbiddenException(
+        'Bạn đã bị xóa khỏi công ty. Vui lòng liên hệ admin để được hỗ trợ.',
+      );
     }
     return employer as EmployerEntity & { companyId: number };
   }

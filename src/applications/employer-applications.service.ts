@@ -191,7 +191,7 @@ export class EmployerApplicationsService {
         id: applicationId,
         job: { companyId: employer.companyId },
       },
-      relations: ['job'],
+      relations: ['job', 'candidate'],
     });
 
     if (!application) {
@@ -200,15 +200,25 @@ export class EmployerApplicationsService {
       );
     }
 
-    if (application.status === (ApplicationStatus.WITHDRAWN as string)) {
-      throw new BadRequestException(
-        'Không thể thay đổi trạng thái đơn đã được ứng viên rút',
-      );
-    }
+    const finalStatuses: string[] = [
+      ApplicationStatus.HIRED,
+      ApplicationStatus.REJECTED,
+      ApplicationStatus.WITHDRAWN,
+    ];
 
-    if (application.status === (ApplicationStatus.REJECTED as string)) {
-      throw new BadRequestException(
+    const finalStatusMessages: Record<string, string> = {
+      [ApplicationStatus.HIRED]:
+        'Không thể thay đổi trạng thái đơn đã được tuyển dụng',
+      [ApplicationStatus.REJECTED]:
         'Không thể thay đổi trạng thái đơn đã bị từ chối. Hãy tạo đơn mới nếu cần.',
+      [ApplicationStatus.WITHDRAWN]:
+        'Không thể thay đổi trạng thái đơn đã được ứng viên rút',
+    };
+
+    if (finalStatuses.includes(application.status)) {
+      throw new BadRequestException(
+        finalStatusMessages[application.status] ??
+          'Đơn ứng tuyển đã ở trạng thái cuối, không thể thay đổi',
       );
     }
 

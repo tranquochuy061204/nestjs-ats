@@ -28,6 +28,7 @@ import { ApplicationStatusHistoryEntity } from '../applications/entities/applica
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonGuardsModule } from '../common/guards/common-guards.module';
 import { UserEntity } from '../users/entities/user.entity';
+import { ApplicationsModule } from '../applications/applications.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { UserEntity } from '../users/entities/user.entity';
     StorageModule,
     NotificationsModule,
     CommonGuardsModule,
+    ApplicationsModule,
   ],
   controllers: [
     CandidateProfileController,

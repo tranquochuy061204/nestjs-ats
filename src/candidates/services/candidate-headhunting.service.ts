@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -17,9 +18,12 @@ import {
 import { ApplicationStatusHistoryEntity } from '../../applications/entities/application-status-history.entity';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/entities/notification.entity';
+import { CandidateApplicationsService } from '../../applications/candidate-applications.service';
 
 @Injectable()
 export class CandidateHeadhuntingService {
+  private readonly logger = new Logger(CandidateHeadhuntingService.name);
+
   constructor(
     @InjectRepository(JobInvitationEntity)
     private readonly invitationRepo: Repository<JobInvitationEntity>,
@@ -29,6 +33,7 @@ export class CandidateHeadhuntingService {
     private readonly applicationRepo: Repository<JobApplicationEntity>,
     private readonly dataSource: DataSource,
     private readonly notificationsService: NotificationsService,
+    private readonly candidateApplicationsService: CandidateApplicationsService,
   ) {}
 
   async getMyInvitations(userId: number) {
@@ -70,6 +75,7 @@ export class CandidateHeadhuntingService {
     }
 
     // Chuyển status & Tạo Application trong 1 Transaction
+    let newApplicationId: number;
     await this.dataSource.transaction(async (manager) => {
       // 1. Cập nhật trạng thái thư mời
       invitation.status = InvitationStatus.ACCEPTED;
@@ -84,6 +90,7 @@ export class CandidateHeadhuntingService {
         // Có thể lưu note là "Ứng tuyển từ thư mời" nếu cần
       });
       const savedApp = await manager.save(JobApplicationEntity, application);
+      newApplicationId = savedApp.id;
 
       // 3. Lưu lịch sử trạng thái đơn
       const history = manager.create(ApplicationStatusHistoryEntity, {
@@ -95,6 +102,16 @@ export class CandidateHeadhuntingService {
       });
       await manager.save(ApplicationStatusHistoryEntity, history);
     });
+
+    // --- FIRE AND FORGET: AI Match Scoring ---
+    this.candidateApplicationsService
+      .calculateAiMatchScore(newApplicationId!)
+      .catch((err: unknown) => {
+        this.logger.error(
+          'Error calculating AI match score for invitation-accepted application',
+          err instanceof Error ? err.stack : String(err),
+        );
+      });
 
     // --- REAL-TIME NOTIFICATION ---
     try {
@@ -109,8 +126,8 @@ export class CandidateHeadhuntingService {
           invitationId: invitation.id,
         },
       });
-    } catch (error) {
-      // Ignore non-critical error
+    } catch {
+      // Ignore non-critical notification error
     }
 
     return { message: 'Đã chấp nhận thư mời và tạo đơn ứng tuyển thành công' };
@@ -145,8 +162,8 @@ export class CandidateHeadhuntingService {
           invitationId: invitation.id,
         },
       });
-    } catch (error) {
-      // Ignore non-critical error
+    } catch {
+      // Ignore non-critical notification error
     }
 
     return { message: 'Đã từ chối thư mời' };
