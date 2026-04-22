@@ -3,13 +3,13 @@ import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const CreateEducationSchema = z.object({
-  schoolName: z.string().max(255).nonempty('Tên trường là bắt buộc'),
-  major: z.string().max(255).optional(),
-  degree: z.string().max(100).optional(),
+  schoolName: z.string().trim().min(1, 'Tên trường là bắt buộc').max(255),
+  major: z.string().trim().max(255).optional(),
+  degree: z.string().trim().max(100).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   isStillStudying: z.boolean().optional(),
-  description: z.string().optional(),
+  description: z.string().max(2000, 'Mô tả quá dài').optional(),
 });
 
 export class CreateEducationDto extends createZodDto(CreateEducationSchema) {

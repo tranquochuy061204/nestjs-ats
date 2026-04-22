@@ -4,15 +4,9 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ApplicationStatus } from '../entities/job-application.entity';
 
 const ApplicationFilterSchema = z.object({
-  page: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 1)),
-  limit: z
-    .string()
-    .optional()
-    .transform((val) => Math.min(val ? parseInt(val, 10) : 10, 100)),
-  status: z.nativeEnum(ApplicationStatus).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  status: z.enum(ApplicationStatus).optional(),
 });
 
 export class ApplicationFilterDto extends createZodDto(

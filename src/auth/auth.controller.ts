@@ -9,6 +9,7 @@ import {
   Res,
   UseGuards,
   UnauthorizedException,
+  BadRequestException,
   Query,
   Patch,
 } from '@nestjs/common';
@@ -101,18 +102,15 @@ export class AuthController {
     @Body() loginDto: LoginDto,
   ) {
     const result = await this.authService.loginAdmin(loginDto);
-    const user = await this.authService.validateUser(loginDto);
 
-    if (user) {
-      await this.authService.storeRefreshToken(
-        user.id,
-        result.refresh_token,
-        result.jti,
-        req.headers['user-agent'],
-        req.ip,
-      );
-      this.authService.setRefreshTokenCookie(res, result.refresh_token);
-    }
+    await this.authService.storeRefreshToken(
+      result.user.id,
+      result.refresh_token,
+      result.jti,
+      req.headers['user-agent'],
+      req.ip,
+    );
+    this.authService.setRefreshTokenCookie(res, result.refresh_token);
 
     return {
       access_token: result.access_token,
@@ -228,6 +226,9 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Token không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Token không tồn tại hoặc đã dùng' })
   verifyEmail(@Query('token') token: string) {
+    if (!token || !/^[a-f0-9]{64}$/.test(token)) {
+      throw new BadRequestException('Mã xác thực không đúng định dạng');
+    }
     return this.authService.verifyEmail(token);
   }
 

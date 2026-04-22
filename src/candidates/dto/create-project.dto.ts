@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const CreateProjectSchema = z.object({
-  name: z.string().max(255).nonempty('Tên dự án là bắt buộc'),
+  name: z.string().trim().min(1, 'Tên dự án là bắt buộc').max(255),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().max(2000, 'Mô tả quá dài').optional(),
 });
 
 export class CreateProjectDto extends createZodDto(CreateProjectSchema) {

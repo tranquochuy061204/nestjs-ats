@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 const SaveCandidateSchema = z.object({
-  note: z.string().optional(),
+  note: z.string().max(1000, 'Ghi chú quá dài').optional(),
 });
 
 export class SaveCandidateDto extends createZodDto(SaveCandidateSchema) {

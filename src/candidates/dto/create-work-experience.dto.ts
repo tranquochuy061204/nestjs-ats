@@ -3,12 +3,12 @@ import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const CreateWorkExperienceSchema = z.object({
-  companyName: z.string().max(255).nonempty('Tên công ty là bắt buộc'),
-  position: z.string().max(255).nonempty('Vị trí là bắt buộc'),
+  companyName: z.string().trim().min(1, 'Tên công ty là bắt buộc').max(255),
+  position: z.string().trim().min(1, 'Vị trí là bắt buộc').max(255),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   isWorkingHere: z.boolean().optional(),
-  description: z.string().optional(),
+  description: z.string().max(2000, 'Mô tả quá dài').optional(),
 });
 
 export class CreateWorkExperienceDto extends createZodDto(

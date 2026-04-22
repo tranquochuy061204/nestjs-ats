@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 const HeadhuntingFilterSchema = z.object({
-  keyword: z.string().optional(),
-  provinceId: z.coerce.number().int().optional(),
-  jobCategoryId: z.coerce.number().int().optional(),
-  jobTypeId: z.coerce.number().int().optional(),
+  keyword: z.string().max(100, 'Từ khóa quá dài').optional(),
+  provinceId: z.coerce.number().int().positive().optional(),
+  jobCategoryId: z.coerce.number().int().positive().optional(),
+  jobTypeId: z.coerce.number().int().positive().optional(),
   minExperience: z.coerce.number().int().min(0).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),

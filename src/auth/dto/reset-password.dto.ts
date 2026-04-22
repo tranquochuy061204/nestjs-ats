@@ -3,11 +3,14 @@ import { z } from 'zod';
 import { ApiProperty } from '@nestjs/swagger';
 
 const ResetPasswordSchema = z.object({
-  email: z.email('Email is invalid').nonempty('Email is required'),
-  token: z.string().nonempty('Token is required'),
+  email: z.string().email('Email không hợp lệ').max(255),
+  token: z.string().min(1, 'Mã xác nhận là bắt buộc').max(20),
   newPassword: z
-    .string({ error: 'Password is required' })
-    .min(6, 'Password must be at least 6 characters long'),
+    .string()
+    .min(8, 'Mật khẩu mới phải có ít nhất 8 ký tự')
+    .max(100, 'Mật khẩu quá dài')
+    .regex(/[A-Z]/, 'Mật khẩu phải có ít nhất 1 chữ hoa')
+    .regex(/[0-9]/, 'Mật khẩu phải có ít nhất 1 chữ số'),
 });
 
 export class ResetPasswordDto extends createZodDto(ResetPasswordSchema) {

@@ -2,25 +2,36 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-const UpdateProfileSchema = z.object({
-  fullName: z.string().max(255).optional(),
-  gender: z.enum(['male', 'female', 'other']).optional(),
-  phone: z.string().max(20).optional(),
-  avatarUrl: z.string().max(255).optional(),
-  cvUrl: z.string().max(255).optional(),
-  bio: z.string().optional(),
-  provinceId: z.number().int().optional(),
-  position: z.string().max(255).optional(),
-  // Triệu
-  salaryMin: z.number().optional(),
-  salaryMax: z.number().optional(),
-  jobTypeId: z.number().int().optional(),
-  yearWorkingExperience: z.number().int().min(0).optional(),
-  isPublic: z.boolean().optional(),
-  linkedinUrl: z.string().max(255).url().optional().or(z.literal('')),
-  githubUrl: z.string().max(255).url().optional().or(z.literal('')),
-  portfolioUrl: z.string().max(255).url().optional().or(z.literal('')),
-});
+const UpdateProfileSchema = z
+  .object({
+    fullName: z.string().max(255).optional(),
+    gender: z.enum(['male', 'female', 'other']).optional(),
+    phone: z.string().max(20).optional(),
+    bio: z.string().max(2000).optional(),
+    provinceId: z.number().int().optional(),
+    position: z.string().max(255).optional(),
+    // Triệu
+    salaryMin: z.number().nonnegative().optional(),
+    salaryMax: z.number().nonnegative().optional(),
+    jobTypeId: z.number().int().optional(),
+    yearWorkingExperience: z.number().int().min(0).optional(),
+    isPublic: z.boolean().optional(),
+    linkedinUrl: z.string().max(255).url().optional().or(z.literal('')),
+    githubUrl: z.string().max(255).url().optional().or(z.literal('')),
+    portfolioUrl: z.string().max(255).url().optional().or(z.literal('')),
+  })
+  .refine(
+    (data) => {
+      if (data.salaryMin !== undefined && data.salaryMax !== undefined) {
+        return data.salaryMin <= data.salaryMax;
+      }
+      return true;
+    },
+    {
+      message: 'Mức lương tối thiểu không được lớn hơn mức lương tối đa',
+      path: ['salaryMax'],
+    },
+  );
 
 export class UpdateProfileDto extends createZodDto(UpdateProfileSchema) {
   @ApiPropertyOptional({ description: 'Họ và tên', example: 'Nguyễn Văn A' })
@@ -38,18 +49,6 @@ export class UpdateProfileDto extends createZodDto(UpdateProfileSchema) {
     example: '0901234567',
   })
   phone?: string;
-
-  @ApiPropertyOptional({
-    description: 'URL ảnh đại diện',
-    example: 'https://example.com/avatar.jpg',
-  })
-  avatarUrl?: string;
-
-  @ApiPropertyOptional({
-    description: 'URL file CV',
-    example: 'https://example.com/cv.pdf',
-  })
-  cvUrl?: string;
 
   @ApiPropertyOptional({
     description: 'Giới thiệu bản thân',

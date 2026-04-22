@@ -4,8 +4,14 @@ import { ApiProperty } from '@nestjs/swagger';
 
 const AddSkillsSchema = z.object({
   skills: z
-    .array(z.union([z.number().int(), z.string()]))
-    .nonempty('Phải có ít nhất 1 skill'),
+    .array(
+      z.union([
+        z.number().int().positive(),
+        z.string().trim().min(1, 'Skill không được để trống').max(50),
+      ]),
+    )
+    .min(1, 'Phải có ít nhất 1 skill')
+    .max(20, 'Không được thêm quá 20 skills một lúc'),
 });
 
 export class AddSkillsDto extends createZodDto(AddSkillsSchema) {

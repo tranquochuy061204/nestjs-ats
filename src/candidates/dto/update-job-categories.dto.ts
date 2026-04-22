@@ -3,7 +3,10 @@ import { z } from 'zod';
 import { ApiProperty } from '@nestjs/swagger';
 
 const UpdateJobCategoriesSchema = z.object({
-  categoryIds: z.array(z.number().int().positive()).min(1),
+  categoryIds: z
+    .array(z.number().int().positive())
+    .min(1, 'Phải chọn ít nhất 1 ngành nghề')
+    .max(10, 'Không được chọn quá 10 ngành nghề'),
 });
 
 export class UpdateJobCategoriesDto extends createZodDto(

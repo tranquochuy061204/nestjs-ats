@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 const UpdateEmployerProfileSchema = z.object({
-  fullName: z.string().optional(),
-  phoneContact: z.string().optional(),
+  fullName: z.string().max(100, 'Họ tên quá dài').optional(),
+  phoneContact: z.string().max(20, 'Số điện thoại quá dài').optional(),
 });
 
 export class UpdateEmployerProfileDto extends createZodDto(

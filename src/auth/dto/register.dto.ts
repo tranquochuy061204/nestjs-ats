@@ -3,21 +3,20 @@ import { z } from 'zod';
 import { ApiProperty } from '@nestjs/swagger';
 
 const RegisterSchema = z.object({
-  email: z.email('Email is invalid').nonempty('Email is required'),
+  email: z.string().email('Email không hợp lệ').max(255),
   password: z
-    .string({ error: 'Password is required' })
-    .min(6, 'Password must be at least 6 characters long'),
-  firstName: z
-    .string({ error: 'First name is required' })
-    .nonempty('First name is required'),
-  lastName: z
-    .string({ error: 'Last name is required' })
-    .nonempty('Last name is required'),
+    .string()
+    .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+    .max(100, 'Mật khẩu quá dài')
+    .regex(/[A-Z]/, 'Mật khẩu phải có ít nhất 1 chữ hoa')
+    .regex(/[0-9]/, 'Mật khẩu phải có ít nhất 1 chữ số'),
+  firstName: z.string().min(1, 'Tên không được để trống').max(100),
+  lastName: z.string().min(1, 'Họ không được để trống').max(100),
   phone: z
-    .string({ error: 'Phone is must be a number' })
-    .min(10, 'Phone must be at least 10 digits long')
-    .nonempty('Phone is required'),
-  provinceId: z.number({ error: 'Province is required' }),
+    .string()
+    .min(10, 'Số điện thoại phải có ít nhất 10 số')
+    .max(20, 'Số điện thoại quá dài'),
+  provinceId: z.number().int().positive('Tỉnh thành không hợp lệ'),
 });
 
 export class RegisterDto extends createZodDto(RegisterSchema) {

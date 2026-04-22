@@ -3,12 +3,12 @@ import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const SetupCompanySchema = z.object({
-  fullName: z.string().min(1, 'Họ và tên không được để trống'),
-  phoneContact: z.string().min(1, 'Số điện thoại không được để trống'),
-  companyName: z.string().min(1, 'Tên công ty không được để trống'),
-  categoryId: z.number().int(),
-  provinceId: z.number().int().optional(),
-  address: z.string().optional(),
+  fullName: z.string().min(1, 'Họ và tên không được để trống').max(100),
+  phoneContact: z.string().min(1, 'Số điện thoại không được để trống').max(20),
+  companyName: z.string().min(1, 'Tên công ty không được để trống').max(255),
+  categoryId: z.number().int().positive(),
+  provinceId: z.number().int().positive().optional(),
+  address: z.string().max(500, 'Địa chỉ quá dài').optional(),
 });
 
 export class SetupCompanyDto extends createZodDto(SetupCompanySchema) {

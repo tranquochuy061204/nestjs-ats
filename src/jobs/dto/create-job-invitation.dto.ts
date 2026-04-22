@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const CreateJobInvitationSchema = z.object({
-  jobId: z.coerce.number().int(),
-  candidateId: z.coerce.number().int(),
-  message: z.string().optional(),
+  jobId: z.coerce.number().int().positive('Job ID không hợp lệ'),
+  candidateId: z.coerce.number().int().positive('Candidate ID không hợp lệ'),
+  message: z.string().max(1000, 'Lời nhắn quá dài').optional(),
 });
 
 export class CreateJobInvitationDto extends createZodDto(

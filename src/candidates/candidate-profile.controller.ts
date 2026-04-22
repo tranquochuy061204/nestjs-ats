@@ -8,8 +8,6 @@ import {
   UploadedFile,
   ParseFilePipeBuilder,
   HttpStatus,
-  BadRequestException,
-  UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import {
@@ -26,7 +24,6 @@ import { CandidateCvParserService } from './services/candidate-cv-parser.service
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
 import { FILE_SIZES } from '../common/constants/storage-paths.constant';
-import { VerifiedEmailGuard } from '../common/guards/verified-email.guard';
 
 @Controller('candidates')
 export class CandidateProfileController {
@@ -98,6 +95,9 @@ export class CandidateProfileController {
     @CurrentUser() user: { id: number },
     @UploadedFile(
       new ParseFilePipeBuilder()
+        .addFileTypeValidator({
+          fileType: /^application\/pdf$/,
+        })
         .addMaxSizeValidator({
           maxSize: FILE_SIZES.MAX_CV_SIZE,
         })
@@ -107,9 +107,6 @@ export class CandidateProfileController {
     )
     file: Express.Multer.File,
   ) {
-    if (!file.mimetype.includes('pdf')) {
-      throw new BadRequestException('File không hợp lệ, chỉ hỗ trợ PDF');
-    }
     return this.profileService.uploadCv(user.id, file);
   }
 

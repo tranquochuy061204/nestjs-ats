@@ -1,30 +1,16 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { JobStatus } from '../entities/job.entity';
 
 const JobFilterSchema = z.object({
-  page: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 1)),
-  limit: z
-    .string()
-    .optional()
-    .transform((val) => Math.min(val ? parseInt(val, 10) : 10, 100)),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
   keyword: z.string().max(100).optional(),
-  provinceId: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : undefined)),
-  categoryId: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : undefined)),
-  jobTypeId: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : undefined)),
-  status: z.string().optional(),
+  provinceId: z.coerce.number().int().positive().optional(),
+  categoryId: z.coerce.number().int().positive().optional(),
+  jobTypeId: z.coerce.number().int().positive().optional(),
+  status: z.nativeEnum(JobStatus).optional(),
 });
 
 export class JobFilterDto extends createZodDto(JobFilterSchema) {
@@ -48,6 +34,9 @@ export class JobFilterDto extends createZodDto(JobFilterSchema) {
   })
   jobTypeId: number | undefined;
 
-  @ApiPropertyOptional({ description: 'Lọc theo status (dùng cho nội bộ HR)' })
-  status: string | undefined;
+  @ApiPropertyOptional({
+    description: 'Lọc theo status (dùng cho nội bộ HR)',
+    enum: JobStatus,
+  })
+  status: JobStatus | undefined;
 }

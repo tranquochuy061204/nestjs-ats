@@ -1,4 +1,17 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateCertificateDto } from './create-certificate.dto';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class UpdateCertificateDto extends PartialType(CreateCertificateDto) {}
+const UpdateCertificateSchema = z.object({
+  name: z.string().min(1, 'Tên chứng chỉ là bắt buộc').max(255).optional(),
+});
+
+export class UpdateCertificateDto extends createZodDto(
+  UpdateCertificateSchema,
+) {
+  @ApiPropertyOptional({
+    description: 'Tên chứng chỉ',
+    example: 'AWS Certified Solutions Architect',
+  })
+  name?: string;
+}

@@ -52,7 +52,18 @@ export const CreateJobSchema = z.object({
     )
     .optional()
     .default([]),
-});
+}).refine(
+  (data) => {
+    if (data.salaryMin !== undefined && data.salaryMax !== undefined) {
+      return data.salaryMin <= data.salaryMax;
+    }
+    return true;
+  },
+  {
+    message: 'Lương tối thiểu không được lớn hơn lương tối đa',
+    path: ['salaryMax'],
+  },
+);
 
 export class CreateJobDto extends createZodDto(CreateJobSchema) {
   @ApiProperty({ description: 'Tiêu đề công việc' })
