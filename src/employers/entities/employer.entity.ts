@@ -4,12 +4,18 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+
+export enum EmployerStatus {
+  ACTIVE = 'active',
+  LOCKED = 'locked',
+}
 
 @Entity('employer')
 export class EmployerEntity {
@@ -19,6 +25,7 @@ export class EmployerEntity {
   @Column({ name: 'user_id', unique: true })
   userId: number;
 
+  @Index()
   @Column({ name: 'company_id', nullable: true })
   companyId: number | null;
 
@@ -39,8 +46,8 @@ export class EmployerEntity {
   @Column({ name: 'is_admin_company', default: false })
   isAdminCompany: boolean;
 
-  @Column({ type: 'varchar', length: 20, default: 'active' })
-  status: string;
+  @Column({ type: 'varchar', length: 20, default: EmployerStatus.ACTIVE })
+  status: EmployerStatus;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

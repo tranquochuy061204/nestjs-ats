@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { JobApplicationEntity } from './job-application.entity';
 
@@ -13,6 +14,7 @@ export class ApplicationStatusHistoryEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column({ name: 'application_id' })
   applicationId: number;
 

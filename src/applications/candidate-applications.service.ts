@@ -88,7 +88,6 @@ export class CandidateApplicationsService {
           existing.cvUrlSnapshot = candidate.cvUrl;
           existing.coverLetter = dto.coverLetter ?? null;
           existing.rejectionReason = null;
-          existing.employerNote = null;
           existing.matchScore = null;
           existing.matchReasoning = null;
           existing.cvMatchScore = null;

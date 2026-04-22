@@ -235,11 +235,6 @@ export class EmployerApplicationsService {
       application.rejectionReason = dto.reason ?? null;
     }
 
-    if (dto.note !== undefined && dto.note !== null && dto.note.trim() !== '') {
-      // Logic mới: Tự động tạo note record thay vì ghi đè record cũ
-      application.employerNote = `[Sytem] Trạng thái thay đổi sang ${dto.status}. Note cũ được lưu vào timeline.`;
-    }
-
     await this.dataSource.transaction(async (manager) => {
       await manager.save(JobApplicationEntity, application);
       await manager.save(

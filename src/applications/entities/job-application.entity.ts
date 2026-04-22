@@ -8,6 +8,7 @@ import {
   JoinColumn,
   OneToMany,
   Unique,
+  Index,
 } from 'typeorm';
 import { JobEntity } from '../../jobs/entities/job.entity';
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
@@ -32,9 +33,11 @@ export class JobApplicationEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column({ name: 'job_id' })
   jobId: number;
 
+  @Index()
   @Column({ name: 'candidate_id' })
   candidateId: number;
 
@@ -49,6 +52,7 @@ export class JobApplicationEntity {
   @Column({ name: 'cover_letter', type: 'text', nullable: true })
   coverLetter: string | null;
 
+  @Index()
   @Column({
     type: 'varchar',
     default: ApplicationStatus.APPLIED,
@@ -58,9 +62,7 @@ export class JobApplicationEntity {
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })
   rejectionReason: string | null;
 
-  /** @deprecated Use notes instead */
-  @Column({ name: 'employer_note', type: 'text', nullable: true })
-  employerNote: string | null;
+  // employer_note column removed – use ApplicationNoteEntity instead
 
   @Column({ name: 'match_score', type: 'int', nullable: true })
   matchScore: number | null;

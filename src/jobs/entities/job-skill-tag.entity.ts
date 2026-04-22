@@ -4,18 +4,23 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  Index,
+  Unique,
 } from 'typeorm';
 import { JobEntity } from './job.entity';
 import { SkillMetadataEntity } from '../../metadata/skills/skill-metadata.entity';
 
 @Entity('job_skill_tag')
+@Unique('UQ_job_skill_tag_job_skill', ['jobId', 'skillId'])
 export class JobSkillTagEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column({ name: 'job_id' })
   jobId: number;
 
+  @Index()
   @Column({ name: 'skill_id', nullable: true })
   skillId: number;
 

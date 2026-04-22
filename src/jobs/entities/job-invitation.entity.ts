@@ -6,6 +6,7 @@ import {
   ManyToOne,
   JoinColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { JobEntity } from './job.entity';
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
@@ -22,18 +23,22 @@ export class JobInvitationEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column({ name: 'employer_id' })
   employerId: number;
 
+  @Index()
   @Column({ name: 'candidate_id' })
   candidateId: number;
 
+  @Index()
   @Column({ name: 'job_id' })
   jobId: number;
 
   @Column({ type: 'text', nullable: true })
   message: string;
 
+  @Index()
   @Column({
     type: 'enum',
     enum: InvitationStatus,

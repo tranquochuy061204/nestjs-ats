@@ -22,11 +22,11 @@ export enum NotificationType {
 }
 
 @Entity('notification')
+@Index('IDX_notification_user_read', ['userId', 'isRead'])
 export class NotificationEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Index()
   @Column({ name: 'user_id' })
   userId: number;
 
