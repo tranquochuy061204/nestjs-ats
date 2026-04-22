@@ -6,3 +6,4 @@ dist
 req.csv
 database.txt
 *.log
+client
