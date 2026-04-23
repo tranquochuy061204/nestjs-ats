@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { sanitizeRichText } from '../../common/utils/sanitize.util';
 
-export const CreateJobSchema = z.object({
+export const BaseJobSchema = z.object({
   title: z.string().min(1, 'Tiêu đề là bắt buộc').max(255),
 
   // Santize rich text inputs
@@ -52,7 +52,9 @@ export const CreateJobSchema = z.object({
     )
     .optional()
     .default([]),
-}).refine(
+});
+
+export const CreateJobSchema = BaseJobSchema.refine(
   (data) => {
     if (data.salaryMin !== undefined && data.salaryMax !== undefined) {
       return data.salaryMin <= data.salaryMax;

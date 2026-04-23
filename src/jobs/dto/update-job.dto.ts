@@ -1,11 +1,11 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { CreateJobSchema } from './create-job.dto';
+import { BaseJobSchema } from './create-job.dto';
 import { JobStatus } from '../entities/job.entity';
 
-export const UpdateJobSchema = CreateJobSchema.partial().extend({
-  status: z.nativeEnum(JobStatus).optional(),
+export const UpdateJobSchema = BaseJobSchema.partial().extend({
+  status: z.enum(JobStatus).optional(),
 });
 
 export class UpdateJobDto extends createZodDto(UpdateJobSchema) {
