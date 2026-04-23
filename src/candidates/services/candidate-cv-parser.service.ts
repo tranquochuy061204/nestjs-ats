@@ -180,7 +180,9 @@ export class CandidateCvParserService {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('No JSON found in AI response');
 
-      const raw = JSON.parse(jsonMatch[0]);
+      const raw = JSON.parse(jsonMatch[0]) as Partial<CvFullParseResult> & {
+        level?: string;
+      };
 
       // Sanitize to ensure contract is met regardless of model variation
       return {
@@ -195,30 +197,90 @@ export class CandidateCvParserService {
             ? Math.max(0, Math.round(raw.yearWorkingExperience))
             : null,
         workExperiences: Array.isArray(raw.workExperiences)
-          ? raw.workExperiences.filter(
-              (w: any) => w?.companyName && w?.position,
-            )
+          ? (raw.workExperiences as unknown[])
+              .map((w): ParsedWorkExperience | null => {
+                if (!w || typeof w !== 'object') return null;
+                const src = w as Record<string, unknown>;
+                if (typeof src['companyName'] !== 'string') return null;
+                return {
+                  companyName: src['companyName'],
+                  position:
+                    typeof src['position'] === 'string' ? src['position'] : '',
+                  startDate:
+                    typeof src['startDate'] === 'string'
+                      ? src['startDate']
+                      : null,
+                  endDate:
+                    typeof src['endDate'] === 'string' ? src['endDate'] : null,
+                  isWorkingHere: !!src['isWorkingHere'],
+                  description:
+                    typeof src['description'] === 'string'
+                      ? src['description']
+                      : null,
+                };
+              })
+              .filter((w): w is ParsedWorkExperience => !!w)
           : [],
         educations: Array.isArray(raw.educations)
-          ? raw.educations
-              .filter((e: any) => e?.schoolName)
-              .map((e: any) => ({
-                ...e,
-                degree: Object.values(Degree).includes(e.degree as Degree)
-                  ? (e.degree as Degree)
-                  : Degree.NONE,
-              }))
+          ? (raw.educations as unknown[])
+              .map((e): ParsedEducation | null => {
+                if (!e || typeof e !== 'object') return null;
+                const src = e as Record<string, unknown>;
+                if (typeof src['schoolName'] !== 'string') return null;
+                return {
+                  schoolName: src['schoolName'],
+                  major: typeof src['major'] === 'string' ? src['major'] : null,
+                  degree:
+                    typeof src['degree'] === 'string' &&
+                    Object.values(Degree).includes(src['degree'] as Degree)
+                      ? (src['degree'] as Degree)
+                      : Degree.NONE,
+                  startDate:
+                    typeof src['startDate'] === 'string'
+                      ? src['startDate']
+                      : null,
+                  endDate:
+                    typeof src['endDate'] === 'string' ? src['endDate'] : null,
+                  isStillStudying: !!src['isStillStudying'],
+                  description:
+                    typeof src['description'] === 'string'
+                      ? src['description']
+                      : null,
+                };
+              })
+              .filter((e): e is ParsedEducation => !!e)
           : [],
         projects: Array.isArray(raw.projects)
-          ? raw.projects.filter((p: any) => p?.name)
+          ? (raw.projects as unknown[])
+              .map((p): ParsedProject | null => {
+                if (!p || typeof p !== 'object') return null;
+                const src = p as Record<string, unknown>;
+                if (typeof src['name'] !== 'string') return null;
+                return {
+                  name: src['name'],
+                  startDate:
+                    typeof src['startDate'] === 'string'
+                      ? src['startDate']
+                      : null,
+                  endDate:
+                    typeof src['endDate'] === 'string' ? src['endDate'] : null,
+                  description:
+                    typeof src['description'] === 'string'
+                      ? src['description']
+                      : null,
+                };
+              })
+              .filter((p): p is ParsedProject => !!p)
           : [],
         certificates: Array.isArray(raw.certificates)
-          ? raw.certificates.filter(
-              (c: any) => typeof c === 'string' && c.trim(),
-            )
+          ? (raw.certificates as unknown[])
+              .filter((c): c is string => typeof c === 'string' && !!c.trim())
+              .map((c) => c.trim())
           : [],
         skills: Array.isArray(raw.skills)
-          ? raw.skills.filter((s: any) => typeof s === 'string' && s.trim())
+          ? (raw.skills as unknown[])
+              .filter((s): s is string => typeof s === 'string' && !!s.trim())
+              .map((s) => s.trim())
           : [],
       };
     } catch (error: unknown) {
