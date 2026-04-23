@@ -12,6 +12,9 @@ import { JobCategoriesController } from './job-categories/job-categories.control
 import { JobTypeMetadataEntity } from './job-types/job-type.entity';
 import { JobTypesService } from './job-types/job-types.service';
 import { JobTypesController } from './job-types/job-types.controller';
+import { JobLevelMetadataEntity } from './job-levels/job-level.entity';
+import { JobLevelsService } from './job-levels/job-levels.service';
+import { JobLevelsController } from './job-levels/job-levels.controller';
 
 @Module({
   imports: [
@@ -20,6 +23,7 @@ import { JobTypesController } from './job-types/job-types.controller';
       ProvinceMetadataEntity,
       JobCategoryMetadataEntity,
       JobTypeMetadataEntity,
+      JobLevelMetadataEntity,
     ]),
   ],
   controllers: [
@@ -27,18 +31,21 @@ import { JobTypesController } from './job-types/job-types.controller';
     ProvincesController,
     JobCategoriesController,
     JobTypesController,
+    JobLevelsController,
   ],
   providers: [
     SkillsMetadataService,
     ProvincesService,
     JobCategoriesService,
     JobTypesService,
+    JobLevelsService,
   ],
   exports: [
     SkillsMetadataService,
     ProvincesService,
     JobCategoriesService,
     JobTypesService,
+    JobLevelsService,
   ],
 })
 export class MetadataModule {}

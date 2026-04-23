@@ -15,6 +15,8 @@ import { ProvinceMetadataEntity } from '../../metadata/provinces/province.entity
 import { JobCategoryMetadataEntity } from '../../metadata/job-categories/job-category.entity';
 import { JobTypeMetadataEntity } from '../../metadata/job-types/job-type.entity';
 import { JobSkillTagEntity } from './job-skill-tag.entity';
+import { JobLevelMetadataEntity } from '../../metadata/job-levels/job-level.entity';
+import { Degree } from '../../common/enums/degree.enum';
 import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
 
 export enum JobStatus {
@@ -87,6 +89,18 @@ export class JobEntity {
   jobTypeId: number;
 
   @Index()
+  @Column({ name: 'level_id', nullable: true })
+  levelId: number;
+
+  @Column({
+    name: 'required_degree',
+    type: 'enum',
+    enum: Degree,
+    default: Degree.NONE,
+  })
+  requiredDegree: Degree;
+
+  @Index()
   @Column({ type: 'varchar', length: 20, default: JobStatus.DRAFT })
   status: string;
 
@@ -126,6 +140,10 @@ export class JobEntity {
   @ManyToOne(() => JobTypeMetadataEntity)
   @JoinColumn({ name: 'job_type_id' })
   jobType: JobTypeMetadataEntity;
+
+  @ManyToOne(() => JobLevelMetadataEntity)
+  @JoinColumn({ name: 'level_id' })
+  level: JobLevelMetadataEntity;
 
   @OneToMany(() => JobSkillTagEntity, (skillTag) => skillTag.job, {
     cascade: ['insert', 'update', 'remove'],

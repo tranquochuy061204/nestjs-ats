@@ -1,11 +1,12 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Degree } from '../../common/enums/degree.enum';
 
 const CreateEducationSchema = z.object({
   schoolName: z.string().trim().min(1, 'Tên trường là bắt buộc').max(255),
   major: z.string().trim().max(255).optional(),
-  degree: z.string().trim().max(100).optional(),
+  degree: z.nativeEnum(Degree).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   isStillStudying: z.boolean().optional(),
@@ -25,8 +26,12 @@ export class CreateEducationDto extends createZodDto(CreateEducationSchema) {
   })
   major?: string;
 
-  @ApiPropertyOptional({ description: 'Bằng cấp', example: 'Cử nhân' })
-  degree?: string;
+  @ApiPropertyOptional({
+    description: 'Bằng cấp/Học vị',
+    enum: Degree,
+    default: Degree.NONE,
+  })
+  degree?: Degree;
 
   @ApiPropertyOptional({
     description: 'Ngày bắt đầu (YYYY-MM-DD)',

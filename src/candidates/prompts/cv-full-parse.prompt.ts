@@ -48,7 +48,7 @@ Use this EXACT schema (all top-level fields required; use null or [] if not foun
     {
       "schoolName": "string (required)",
       "major": "string or null",
-      "degree": "string — e.g. Bachelor, Master, PhD, Associate, High School, Certificate, Other. Or null.",
+      "degree": "string — MUST be one of: postgraduate, university, college, intermediate, high_school, certificate, none. Map terms like Bachelor to university, Master/Doctor to postgraduate, Associate to college, etc. If not found or Other, default to none.",
       "startDate": "string YYYY-MM-DD or null",
       "endDate": "string YYYY-MM-DD — null if isStillStudying is true.",
       "isStillStudying": "boolean",

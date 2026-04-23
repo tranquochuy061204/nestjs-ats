@@ -7,6 +7,8 @@ import {
 } from 'typeorm';
 import { CandidateEntity } from './candidate.entity';
 
+import { Degree } from '../../common/enums/degree.enum';
+
 @Entity('education')
 export class EducationEntity {
   @PrimaryGeneratedColumn()
@@ -21,8 +23,12 @@ export class EducationEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   major: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  degree: string;
+  @Column({
+    type: 'enum',
+    enum: Degree,
+    default: Degree.NONE,
+  })
+  degree: Degree;
 
   @Column({ name: 'start_date', type: 'date', nullable: true })
   startDate: string;

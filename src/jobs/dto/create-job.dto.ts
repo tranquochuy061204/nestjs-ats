@@ -2,6 +2,7 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { sanitizeRichText } from '../../common/utils/sanitize.util';
+import { Degree } from '../../common/enums/degree.enum';
 
 export const BaseJobSchema = z.object({
   title: z.string().min(1, 'Tiêu đề là bắt buộc').max(255),
@@ -28,6 +29,8 @@ export const BaseJobSchema = z.object({
   provinceId: z.number().int().positive().optional(),
   categoryId: z.number().int().positive().optional(),
   jobTypeId: z.number().int().positive().optional(),
+  levelId: z.number().int().positive().optional(),
+  requiredDegree: z.nativeEnum(Degree).optional().default(Degree.NONE),
 
   slots: z.number().int().positive().optional(),
   deadline: z
@@ -100,6 +103,16 @@ export class CreateJobDto extends createZodDto(CreateJobSchema) {
 
   @ApiPropertyOptional({ description: 'ID Hình thức (Full-time, Part-time)' })
   jobTypeId: number | undefined;
+
+  @ApiPropertyOptional({ description: 'ID Cấp bậc (Intern, Senior...)' })
+  levelId: number | undefined;
+
+  @ApiPropertyOptional({
+    description: 'Yêu cầu bằng cấp tối thiểu',
+    enum: Degree,
+    default: Degree.NONE,
+  })
+  requiredDegree: Degree;
 
   @ApiPropertyOptional({ description: 'Số điểm cần tuyển' })
   slots: number | undefined;
