@@ -1,21 +1,34 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiProperty } from '@nestjs/swagger';
+import { VALIDATION_LIMITS } from '../../common/constants/validation.constant';
 
 const RegisterSchema = z.object({
-  email: z.string().email('Email không hợp lệ').max(255),
+  email: z.email('Email không hợp lệ').max(VALIDATION_LIMITS.EMAIL.MAX),
   password: z
     .string()
-    .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
-    .max(100, 'Mật khẩu quá dài')
+    .min(
+      VALIDATION_LIMITS.PASSWORD.MIN,
+      `Mật khẩu phải có ít nhất ${VALIDATION_LIMITS.PASSWORD.MIN} ký tự`,
+    )
+    .max(VALIDATION_LIMITS.PASSWORD.MAX, 'Mật khẩu quá dài')
     .regex(/[A-Z]/, 'Mật khẩu phải có ít nhất 1 chữ hoa')
     .regex(/[0-9]/, 'Mật khẩu phải có ít nhất 1 chữ số'),
-  firstName: z.string().min(1, 'Tên không được để trống').max(100),
-  lastName: z.string().min(1, 'Họ không được để trống').max(100),
+  firstName: z
+    .string()
+    .min(VALIDATION_LIMITS.NAME.MIN, 'Tên không được để trống')
+    .max(VALIDATION_LIMITS.NAME.MAX),
+  lastName: z
+    .string()
+    .min(VALIDATION_LIMITS.NAME.MIN, 'Họ không được để trống')
+    .max(VALIDATION_LIMITS.NAME.MAX),
   phone: z
     .string()
-    .min(10, 'Số điện thoại phải có ít nhất 10 số')
-    .max(20, 'Số điện thoại quá dài'),
+    .min(
+      VALIDATION_LIMITS.PHONE.MIN,
+      `Số điện thoại phải có ít nhất ${VALIDATION_LIMITS.PHONE.MIN} số`,
+    )
+    .max(VALIDATION_LIMITS.PHONE.MAX, 'Số điện thoại quá dài'),
   provinceId: z.number().int().positive('Tỉnh thành không hợp lệ'),
 });
 

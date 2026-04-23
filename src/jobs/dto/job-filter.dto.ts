@@ -2,11 +2,18 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { JobStatus } from '../entities/job.entity';
+import { PAGINATION_DEFAULTS } from '../../common/constants/headhunting.constant';
+import { VALIDATION_LIMITS } from '../../common/constants/validation.constant';
 
 const JobFilterSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(10),
-  keyword: z.string().max(100).optional(),
+  page: z.coerce.number().int().min(1).default(PAGINATION_DEFAULTS.PAGE),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(PAGINATION_DEFAULTS.MAX_LIMIT)
+    .default(PAGINATION_DEFAULTS.LIMIT),
+  keyword: z.string().max(VALIDATION_LIMITS.NAME.MAX).optional(),
   provinceId: z.coerce.number().int().positive().optional(),
   categoryId: z.coerce.number().int().positive().optional(),
   jobTypeId: z.coerce.number().int().positive().optional(),

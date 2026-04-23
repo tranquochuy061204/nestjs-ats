@@ -1,15 +1,25 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PAGINATION_DEFAULTS } from '../../common/constants/headhunting.constant';
+import { VALIDATION_LIMITS } from '../../common/constants/validation.constant';
 
 const HeadhuntingFilterSchema = z.object({
-  keyword: z.string().max(100, 'Từ khóa quá dài').optional(),
+  keyword: z
+    .string()
+    .max(VALIDATION_LIMITS.NAME.MAX, 'Từ khóa quá dài')
+    .optional(),
   provinceId: z.coerce.number().int().positive().optional(),
   jobCategoryId: z.coerce.number().int().positive().optional(),
   jobTypeId: z.coerce.number().int().positive().optional(),
   minExperience: z.coerce.number().int().min(0).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(10),
+  page: z.coerce.number().int().min(1).default(PAGINATION_DEFAULTS.PAGE),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(PAGINATION_DEFAULTS.MAX_LIMIT)
+    .default(PAGINATION_DEFAULTS.LIMIT),
 });
 
 export class HeadhuntingFilterDto extends createZodDto(

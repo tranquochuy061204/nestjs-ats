@@ -8,7 +8,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { CandidateEntity } from '../candidates/entities/candidate.entity';
-import { CertificateEntity } from '../candidates/entities/certificate.entity';
 import { SavedCandidateEntity } from './entities/saved-candidate.entity';
 import { EmployerEntity } from './entities/employer.entity';
 import { JobEntity, JobStatus } from '../jobs/entities/job.entity';
@@ -21,6 +20,7 @@ import { SaveCandidateDto } from './dto/save-candidate.dto';
 import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { HEADHUNTING_CONFIG } from '../common/constants/headhunting.constant';
 
 @Injectable()
 export class EmployerHeadhuntingService {
@@ -29,8 +29,6 @@ export class EmployerHeadhuntingService {
   constructor(
     @InjectRepository(CandidateEntity)
     private readonly candidateRepo: Repository<CandidateEntity>,
-    @InjectRepository(CertificateEntity)
-    private readonly certificateRepo: Repository<CertificateEntity>,
     @InjectRepository(SavedCandidateEntity)
     private readonly savedCandidateRepo: Repository<SavedCandidateEntity>,
     @InjectRepository(EmployerEntity)
@@ -62,117 +60,215 @@ export class EmployerHeadhuntingService {
       );
     }
 
-    // Guard: categoryId missing - log warning but keep going (fallback to skill-only)
-    if (!job.categoryId) {
-      this.logger.warn(
-        `Job #${jobId} missing categoryId. Results will be less accurate.`,
-      );
-    }
-
     const jobSkillIds = job.skills
       .map((s) => s.skillId)
       .filter((id): id is number => id != null);
+    const totalJobSkills = jobSkillIds.length;
+    const minExp = job.yearsOfExperience ?? 0;
+    const jobSalaryMin = job.salaryMin ? Number(job.salaryMin) : null;
+    const jobSalaryMax = job.salaryMax ? Number(job.salaryMax) : null;
 
     // ----------------------------------------------------------------
-    // FIX #1: Tách thành 2-step query để tránh PostgreSQL GROUP BY crash
-    //   Bước 1: Raw query chỉ lấy candidate_id + scores (GROUP BY c.id OK)
-    //   Bước 2: Fetch full entities theo danh sách IDs
+    // Hệ thống Weighted Composite Scoring (Tổng 100 điểm)
+    //   - Kỹ năng khớp:     0-40 điểm
+    //   - Kinh nghiệm:      0-25 điểm (>= yêu cầu = 25, không đủ = hard block)
+    //   - Lương phù hợp:    0-20 điểm
+    //   - Hồ sơ đầy đủ:    0-10 điểm (CV + Work Exp + Cert)
+    //   - Địa điểm:         0-5  điểm (cùng tỉnh = 5, khác = 0, không block)
     // ----------------------------------------------------------------
-    const rawQb = this.candidateRepo.createQueryBuilder('c');
 
-    if (job.categoryId) {
-      rawQb.innerJoin('c.jobCategories', 'cjc');
+    const { SCORING, THRESHOLDS } = HEADHUNTING_CONFIG;
+
+    // --- 1. SKILL SCORE (0-40) ---
+    let skillScoreExpr: string;
+    if (jobSkillIds.length > 0) {
+      const skillIdList = jobSkillIds.join(',');
+      skillScoreExpr = `
+        LEAST(${SCORING.MAX_SKILL}, COALESCE(
+          (SELECT COUNT(DISTINCT cst.skill_metadata_id)::float
+           FROM candidate_skill_tag cst
+           WHERE cst.candidate_id = c.id
+             AND cst.skill_metadata_id IN (${skillIdList})
+          ) / ${totalJobSkills} * ${SCORING.MAX_SKILL},
+        0))`;
     } else {
-      rawQb.leftJoin('c.jobCategories', 'cjc'); // Optional if no category set
+      // Job chưa set kỹ năng → tất cả đều nhận điểm trung tính
+      skillScoreExpr = `${SCORING.NEUTRAL_SKILL}`;
     }
 
-    rawQb
-      .leftJoin(
-        'c.skills',
-        'cst',
-        // FIX #2: Dùng property name (skillMetadataId) thay vì raw column
-        jobSkillIds.length > 0 ? 'cst.skillMetadataId IN (:...skills)' : '1=0',
-        jobSkillIds.length > 0 ? { skills: jobSkillIds } : {},
-      )
-      // FIX #3: Chỉ select c.id để GROUP BY hoạt động đúng
-      .select('c.id', 'candidateId')
-      .addSelect('COUNT(DISTINCT cst.skillMetadataId)', 'matchedSkills')
-      // FIX #4: Dùng Entity class trong subquery thay vì raw string
-      .addSelect((sub) => {
-        return sub
-          .select('COUNT(cert.id)', 'cnt')
-          .from(CertificateEntity, 'cert')
-          .where('cert.candidateId = c.id');
-      }, 'certBonus')
+    // --- 2. EXPERIENCE SCORE (0-25) ---
+    // Ứng viên không đủ kinh nghiệm bị chặn ở WHERE, nên nếu qua được = 25 điểm
+    const expScoreExpr = `${SCORING.MAX_EXPERIENCE}`;
 
-      // LỚP 1: LỌC CỨNG
-      .where('c.isPublic = true');
+    // --- 3. SALARY SCORE (0-20) ---
+    // Logic: kỳ vọng lương của ứng viên có nằm trong range của Job không?
+    let salaryScoreExpr: string;
+    if (jobSalaryMin == null && jobSalaryMax == null) {
+      // Job không set lương → không phạt ai
+      salaryScoreExpr = `${SCORING.SALARY.PARTIAL}`;
+    } else if (jobSalaryMin != null && jobSalaryMax != null) {
+      salaryScoreExpr = `
+        CASE
+          WHEN c.salary_min IS NULL OR c.salary_max IS NULL THEN ${SCORING.SALARY.PARTIAL}
+          WHEN CAST(c.salary_min AS float) > ${jobSalaryMax} OR CAST(c.salary_max AS float) < ${jobSalaryMin} THEN ${SCORING.SALARY.MISMATCH}
+          WHEN CAST(c.salary_min AS float) >= ${jobSalaryMin} AND CAST(c.salary_max AS float) <= ${jobSalaryMax} THEN ${SCORING.SALARY.MATCH}
+          ELSE ${SCORING.SALARY.PARTIAL}
+        END`;
+    } else {
+      // Chỉ có một mốc lương
+      const salaryBound = jobSalaryMin ?? jobSalaryMax;
+      salaryScoreExpr = `
+        CASE
+          WHEN c.salary_min IS NULL OR c.salary_max IS NULL THEN ${SCORING.SALARY.PARTIAL}
+          WHEN CAST(c.salary_min AS float) <= ${salaryBound} AND CAST(c.salary_max AS float) >= ${salaryBound} THEN ${SCORING.SALARY.MATCH}
+          ELSE ${SCORING.SALARY.MISMATCH}
+        END`;
+    }
 
-    if (job.categoryId) {
-      rawQb.andWhere('cjc.jobCategoryId = :jobCategoryId', {
-        jobCategoryId: job.categoryId,
+    // --- 4. PROFILE COMPLETENESS SCORE (0-10) ---
+    const profileScoreExpr = `(
+      CASE WHEN c.cv_url IS NOT NULL THEN ${SCORING.PROFILE.HAS_CV} ELSE 0 END
+      + CASE WHEN EXISTS(
+          SELECT 1 FROM work_experience we WHERE we.candidate_id = c.id
+        ) THEN ${SCORING.PROFILE.HAS_WORK_EXP} ELSE 0 END
+      + CASE WHEN EXISTS(
+          SELECT 1 FROM certificate cert WHERE cert.candidate_id = c.id
+        ) THEN ${SCORING.PROFILE.HAS_CERTIFICATE} ELSE 0 END
+    )`;
+
+    // --- 5. LOCATION SCORE (0-5, soft — không block) ---
+    const locationScoreExpr =
+      job.provinceId != null
+        ? `CASE WHEN c.province_id = ${job.provinceId} THEN ${SCORING.LOCATION} ELSE 0 END`
+        : `0`;
+
+    const totalScoreExpr = `(
+      ${skillScoreExpr}
+      + ${expScoreExpr}
+      + ${salaryScoreExpr}
+      + ${profileScoreExpr}
+      + ${locationScoreExpr}
+    )`;
+
+    // ----------------------------------------------------------------
+    // Build query
+    // ----------------------------------------------------------------
+    try {
+      const qb = this.candidateRepo
+        .createQueryBuilder('c')
+        .select('c.id', 'candidateId')
+        .addSelect(skillScoreExpr, 'skillScore')
+        .addSelect(expScoreExpr, 'experienceScore')
+        .addSelect(salaryScoreExpr, 'salaryScore')
+        .addSelect(profileScoreExpr, 'profileScore')
+        .addSelect(locationScoreExpr, 'locationScore')
+        .addSelect(totalScoreExpr, 'matchScore')
+
+        // --- HARD FILTERS ---
+        .where('c.is_public = true')
+        .andWhere('COALESCE(c.year_working_experience, 0) >= :minExp', {
+          minExp,
+        })
+
+        // Ngành nghề là tiêu chí quan trọng nhất → giữ là semi-hard filter
+        .andWhere(
+          job.categoryId
+            ? `EXISTS (
+                SELECT 1 FROM candidate_job_category cjc
+                WHERE cjc.candidate_id = c.id AND cjc.job_category_id = :categoryId
+              )`
+            : '1=1',
+          { categoryId: job.categoryId },
+        )
+
+        // Loại bỏ ứng viên đã được mời vào Job này
+        .andWhere(
+          `NOT EXISTS (
+            SELECT 1 FROM job_invitation ji
+            WHERE ji.candidate_id = c.id AND ji.job_id = :jobId
+          )`,
+          { jobId },
+        )
+
+        // Loại bỏ ứng viên đã tự ứng tuyển vào Job này
+        .andWhere(
+          `NOT EXISTS (
+            SELECT 1 FROM job_application ja
+            WHERE ja.candidate_id = c.id AND ja.job_id = :jobIdApp
+          )`,
+          { jobIdApp: jobId },
+        )
+
+        .orderBy(totalScoreExpr, 'DESC')
+        .limit(THRESHOLDS.MAX_SUGGESTIONS);
+
+      const rawRows = await qb.getRawMany<{
+        candidateId: string;
+        skillScore: string;
+        experienceScore: string;
+        salaryScore: string;
+        profileScore: string;
+        locationScore: string;
+        matchScore: string;
+      }>();
+
+      // Lọc ngưỡng tối thiểu để tránh gợi ý ứng viên quá kém phù hợp
+      const qualified = rawRows.filter(
+        (r) => parseFloat(r.matchScore) >= THRESHOLDS.MIN_SUGGESTION_SCORE,
+      );
+
+      if (qualified.length === 0) return [];
+
+      const orderedIds = qualified.map((r) => Number(r.candidateId));
+      const scoreMap = new Map(
+        qualified.map((r) => [
+          parseInt(r.candidateId, 10),
+          {
+            matchScore: Math.round(parseFloat(r.matchScore)),
+            scoreBreakdown: {
+              skillScore: Math.round(parseFloat(r.skillScore || '0')),
+              experienceScore: Math.round(parseFloat(r.experienceScore || '0')),
+              salaryScore: Math.round(parseFloat(r.salaryScore || '0')),
+              profileScore: Math.round(parseFloat(r.profileScore || '0')),
+              locationScore: Math.round(parseFloat(r.locationScore || '0')),
+            },
+          },
+        ]),
+      );
+
+      // Bước 2: Fetch full entities để trả về đầy đủ thông tin
+      const entities = await this.candidateRepo.find({
+        where: { id: In(orderedIds) },
+        relations: [
+          'skills',
+          'skills.skillMetadata',
+          'jobCategories',
+          'jobType',
+        ],
       });
+
+      const entityMap = new Map(entities.map((e) => [e.id, e]));
+
+      return orderedIds
+        .map((id) => {
+          const entity = entityMap.get(id);
+          if (!entity) return null;
+          return { ...entity, ...scoreMap.get(id) };
+        })
+        .filter(Boolean);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `Lỗi khi tính toán gợi ý ứng viên cho Job #${jobId}: ${errorMessage}`,
+        errorStack,
+      );
+      // Với hệ thống gợi ý, nếu lỗi do SQL hoặc logic tính toán, ta có thể trả về mảng rỗng
+      // để không làm sập giao diện của Employer, hoặc throw tùy yêu cầu.
+      return [];
     }
-
-    rawQb.andWhere('COALESCE(c.yearWorkingExperience, 0) >= :minExp', {
-      minExp: job.yearsOfExperience ?? 0,
-    });
-
-    // FIX #6: Guard NULL jobTypeId (không thêm điều kiện nếu job chưa set)
-    if (job.jobTypeId) {
-      rawQb.andWhere('c.jobTypeId = :jobTypeId', { jobTypeId: job.jobTypeId });
-    }
-
-    // FIX #7: Guard NULL provinceId
-    if (job.provinceId) {
-      rawQb.andWhere('(c.provinceId = :provinceId OR c.provinceId IS NULL)', {
-        provinceId: job.provinceId,
-      });
-    }
-
-    // FIX #8: Dùng alias đã select và hàm aggregate cho các cột không nằm trong GROUP BY
-    rawQb
-      .groupBy('c.id')
-      .orderBy('COUNT(DISTINCT cst.skill_metadata_id)', 'DESC')
-      .addOrderBy('MAX(c.year_working_experience)', 'DESC')
-      .limit(50);
-
-    const rawRows = await rawQb.getRawMany<{
-      candidateId: string; // Raw query trả về string
-      matchedSkills: string;
-      certBonus: string;
-    }>();
-
-    if (rawRows.length === 0) return [];
-
-    const orderedIds = rawRows.map((r) => Number(r.candidateId));
-    const scoreMap = new Map(
-      rawRows.map((r) => [
-        parseInt(String(r.candidateId), 10),
-        {
-          matchedSkillsCount: parseInt(r.matchedSkills || '0', 10),
-          certificateBonusCount: parseInt(r.certBonus || '0', 10),
-        },
-      ]),
-    );
-
-    // Bước 2: Fetch full entities theo IDs đã có score
-    const entities = await this.candidateRepo.find({
-      where: { id: In(orderedIds) },
-      relations: ['skills', 'skills.skillMetadata', 'jobCategories', 'jobType'],
-    });
-
-    // Preserve thứ tự theo score
-    const entityMap = new Map(entities.map((e) => [e.id, e]));
-    return orderedIds
-      .map((id) => {
-        const entity = entityMap.get(id);
-        if (!entity) return null;
-        return { ...entity, ...scoreMap.get(id) };
-      })
-      .filter(Boolean);
   }
-
   async searchCandidates(employerUserId: number, filter: HeadhuntingFilterDto) {
     await this.findEmployerWithCompany(employerUserId);
 
@@ -186,48 +282,59 @@ export class EmployerHeadhuntingService {
       limit,
     } = filter;
 
-    const qb = this.candidateRepo
-      .createQueryBuilder('c')
-      .leftJoinAndSelect('c.skills', 'skills')
-      .leftJoinAndSelect('skills.skillMetadata', 'skillMeta')
-      // FIX: Dùng property name thay vì raw column
-      .where('c.isPublic = true');
+    try {
+      const qb = this.candidateRepo
+        .createQueryBuilder('c')
+        .leftJoinAndSelect('c.skills', 'skills')
+        .leftJoinAndSelect('skills.skillMetadata', 'skillMeta')
+        // FIX: Dùng property name thay vì raw column
+        .where('c.isPublic = true');
 
-    if (jobCategoryId) {
-      // FIX: ON condition dùng property name để TypeORM map đúng
-      qb.innerJoin('c.jobCategories', 'cjc', 'cjc.jobCategoryId = :catId', {
-        catId: jobCategoryId,
-      });
-    }
+      if (jobCategoryId) {
+        // FIX: ON condition dùng property name để TypeORM map đúng
+        qb.innerJoin('c.jobCategories', 'cjc', 'cjc.jobCategoryId = :catId', {
+          catId: jobCategoryId,
+        });
+      }
 
-    if (keyword) {
-      // FIX: Dùng property name
-      qb.andWhere(
-        '(c.position ILIKE :kw OR c.bio ILIKE :kw OR c.fullName ILIKE :kw)',
-        { kw: `%${keyword}%` },
+      if (keyword) {
+        // FIX: Dùng property name
+        qb.andWhere(
+          '(c.position ILIKE :kw OR c.bio ILIKE :kw OR c.fullName ILIKE :kw)',
+          { kw: `%${keyword}%` },
+        );
+      }
+
+      if (provinceId) {
+        qb.andWhere('c.provinceId = :provinceId', { provinceId });
+      }
+
+      if (jobTypeId) {
+        qb.andWhere('c.jobTypeId = :jobTypeId', { jobTypeId });
+      }
+
+      if (minExperience !== undefined) {
+        qb.andWhere('COALESCE(c.yearWorkingExperience, 0) >= :minExp', {
+          minExp: minExperience,
+        });
+      }
+
+      qb.orderBy('c.yearWorkingExperience', 'DESC').addOrderBy('c.id', 'DESC');
+
+      const skip = (page - 1) * limit;
+      const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
+
+      return { data, total, page, lastPage: Math.ceil(total / limit) };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `Lỗi khi tìm kiếm ứng viên: ${errorMessage}`,
+        errorStack,
       );
+      throw new Error('Có lỗi xảy ra trong quá trình tìm kiếm ứng viên.');
     }
-
-    if (provinceId) {
-      qb.andWhere('c.provinceId = :provinceId', { provinceId });
-    }
-
-    if (jobTypeId) {
-      qb.andWhere('c.jobTypeId = :jobTypeId', { jobTypeId });
-    }
-
-    if (minExperience !== undefined) {
-      qb.andWhere('COALESCE(c.yearWorkingExperience, 0) >= :minExp', {
-        minExp: minExperience,
-      });
-    }
-
-    qb.orderBy('c.yearWorkingExperience', 'DESC').addOrderBy('c.id', 'DESC');
-
-    const skip = (page - 1) * limit;
-    const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
-
-    return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
 
   async getCandidateDetail(employerUserId: number, candidateId: number) {
