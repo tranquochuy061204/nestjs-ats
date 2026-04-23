@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -275,29 +276,59 @@ export class EmployersService {
   }
 
   async removeMember(adminUserId: number, targetEmployerId: number) {
+    // 1. Lấy thông tin người thực hiện lệnh (admin) và thông tin công ty
     const admin = await this.employerRepo.findOne({
       where: { userId: adminUserId },
+      relations: ['company'],
     });
-    if (!admin || !admin.isAdminCompany) {
-      throw new BadRequestException('Bạn không có quyền quản trị công ty');
+
+    if (
+      !admin ||
+      !admin.isAdminCompany ||
+      admin.companyId === null ||
+      admin.company === null
+    ) {
+      throw new ForbiddenException(
+        'Bạn không có quyền quản trị công ty hoặc chưa thuộc công ty nào',
+      );
     }
 
+    // 2. Lấy thông tin đối tượng bị kick (member)
     const member = await this.employerRepo.findOne({
       where: { id: targetEmployerId },
     });
+
     if (!member || member.companyId !== admin.companyId) {
       throw new NotFoundException(
         'Không tìm thấy thành viên trong công ty của bạn',
       );
     }
 
+    // 3. LOGIC BẢO VỆ PHÂN CẤP (OWNER > ADMIN > MEMBER)
+
+    // Quy tắc 1: Không được tự gỡ chính mình
     if (member.userId === adminUserId) {
       throw new BadRequestException(
         'Bạn không thể tự gỡ chính mình khỏi công ty',
       );
     }
 
-    // Gỡ liên kết công ty
+    // Quy tắc 2: Không ai được gỡ Chủ sở hữu (Owner)
+    if (member.userId === admin.company.userCreatorId) {
+      throw new ForbiddenException(
+        'Không thể gỡ quyền của Chủ sở hữu công ty (Owner)',
+      );
+    }
+
+    // Quy tắc 3: Admin thường không được phép gỡ một Admin khác
+    const isRequesterOwner = adminUserId === admin.company.userCreatorId;
+    if (!isRequesterOwner && member.isAdminCompany) {
+      throw new ForbiddenException(
+        'Bạn không có quyền gỡ một Admin khác. Chỉ Chủ sở hữu mới có quyền này.',
+      );
+    }
+
+    // 4. Thực hiện gỡ liên kết công ty
     member.companyId = null;
     member.isAdminCompany = false;
     await this.employerRepo.save(member);
