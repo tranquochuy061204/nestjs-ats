@@ -23,6 +23,8 @@ import { SocketGateway } from '../common/socket/socket.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { UserEntity } from '../users/entities/user.entity';
+import { MailService } from '../mail/mail.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class EmployerApplicationsService {
@@ -44,6 +46,8 @@ export class EmployerApplicationsService {
     private readonly dataSource: DataSource,
     private readonly socketGateway: SocketGateway,
     private readonly notificationsService: NotificationsService,
+    private readonly mailService: MailService,
+    private readonly configService: ConfigService,
   ) {}
 
   async getJobApplications(
@@ -191,7 +195,7 @@ export class EmployerApplicationsService {
         id: applicationId,
         job: { companyId: employer.companyId },
       },
-      relations: ['job', 'candidate'],
+      relations: ['job', 'job.company', 'candidate', 'candidate.user'],
     });
 
     if (!application) {
@@ -293,9 +297,35 @@ export class EmployerApplicationsService {
           },
         });
       }
+      // 3. Gửi Email thông báo (Chỉ các trạng thái quan trọng)
+      const importantStatuses = [
+        ApplicationStatus.INTERVIEW,
+        ApplicationStatus.OFFER,
+        ApplicationStatus.HIRED,
+        ApplicationStatus.REJECTED,
+      ];
+
+      if (
+        importantStatuses.includes(dto.status) &&
+        application.candidate?.user?.email
+      ) {
+        const appUrl =
+          this.configService.get<string>('APP_URL') || 'http://localhost:3000';
+        const actionUrl = `${appUrl}/candidate/applications/${applicationId}`;
+
+        void this.mailService.sendApplicationStatusEmail(
+          application.candidate.user.email,
+          application.candidate.fullName || 'Ứng viên',
+          application.job.title,
+          dto.status,
+          application.job.company?.name || 'Công ty',
+          actionUrl,
+          dto.reason || undefined,
+        );
+      }
     } catch (error) {
       this.logger.error(
-        'Real-time integration failed in update status',
+        'External notification integration failed in update status',
         error instanceof Error ? error.stack : String(error),
       );
     }

@@ -21,6 +21,8 @@ import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { HEADHUNTING_CONFIG } from '../common/constants/headhunting.constant';
+import { MailService } from '../mail/mail.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class EmployerHeadhuntingService {
@@ -38,6 +40,8 @@ export class EmployerHeadhuntingService {
     @InjectRepository(JobInvitationEntity)
     private readonly invitationRepo: Repository<JobInvitationEntity>,
     private readonly notificationsService: NotificationsService,
+    private readonly mailService: MailService,
+    private readonly configService: ConfigService,
   ) {}
 
   async getSuggestedCandidates(employerUserId: number, jobId: number) {
@@ -431,6 +435,7 @@ export class EmployerHeadhuntingService {
     // FIX: Kiểm tra Job tồn tại + thuộc công ty + đang PUBLISHED
     const job = await this.jobRepo.findOne({
       where: { id: dto.jobId, companyId: employer.companyId },
+      relations: ['company'],
     });
     if (!job) {
       throw new NotFoundException('Tin tuyển dụng không tồn tại');
@@ -443,6 +448,7 @@ export class EmployerHeadhuntingService {
 
     const candidate = await this.candidateRepo.findOne({
       where: { id: dto.candidateId, isPublic: true },
+      relations: ['user'],
     });
     if (!candidate) {
       throw new NotFoundException('Ứng viên không tồn tại hoặc đã ẩn hồ sơ');
@@ -478,6 +484,22 @@ export class EmployerHeadhuntingService {
         invitationId: savedInvitation.id,
       },
     });
+
+    // --- EMAIL NOTIFICATION ---
+    if (candidate.user?.email) {
+      const appUrl =
+        this.configService.get<string>('APP_URL') || 'http://localhost:3000';
+      const actionUrl = `${appUrl}/candidate/invitations/${savedInvitation.id}`;
+
+      void this.mailService.sendJobInvitationEmail(
+        candidate.user.email,
+        candidate.fullName || 'Ứng viên',
+        job.title,
+        job.company?.name || 'Công ty',
+        actionUrl,
+        dto.message || undefined,
+      );
+    }
 
     return savedInvitation;
   }

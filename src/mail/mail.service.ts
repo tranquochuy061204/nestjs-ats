@@ -50,4 +50,69 @@ export class MailService {
       this.logger.error(`Failed to send password reset email to ${email}`, err);
     }
   }
+
+  /**
+   * Gửi email thông báo thay đổi trạng thái đơn ứng tuyển
+   */
+  async sendApplicationStatusEmail(
+    email: string,
+    name: string,
+    jobTitle: string,
+    status: string,
+    companyName: string,
+    actionUrl: string,
+    reason?: string,
+  ) {
+    try {
+      await this.mailerService.sendMail({
+        to: email,
+        subject: `[ATS] Cập nhật trạng thái ứng tuyển: ${jobTitle}`,
+        template: 'application-status',
+        context: {
+          name,
+          jobTitle,
+          status,
+          companyName,
+          actionUrl,
+          reason,
+        },
+      });
+      this.logger.log(`Application status email sent to ${email}`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to send application status email to ${email}`,
+        err,
+      );
+    }
+  }
+
+  /**
+   * Gửi email mời ứng tuyển (Headhunting)
+   */
+  async sendJobInvitationEmail(
+    email: string,
+    name: string,
+    jobTitle: string,
+    companyName: string,
+    actionUrl: string,
+    message?: string,
+  ) {
+    try {
+      await this.mailerService.sendMail({
+        to: email,
+        subject: `[ATS] Cơ hội nghề nghiệp mới từ ${companyName}`,
+        template: 'job-invitation',
+        context: {
+          name,
+          jobTitle,
+          companyName,
+          actionUrl,
+          message,
+        },
+      });
+      this.logger.log(`Job invitation email sent to ${email}`);
+    } catch (err) {
+      this.logger.error(`Failed to send job invitation email to ${email}`, err);
+    }
+  }
 }

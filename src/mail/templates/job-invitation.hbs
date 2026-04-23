@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lời mời cơ hội nghề nghiệp</title>
+  <style>
+    body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .header { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 40px 30px; text-align: center; }
+    .header h1 { color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+    .header p { color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 14px; }
+    .body { padding: 40px 30px; }
+    .greeting { font-size: 16px; color: #1a1a2e; margin-bottom: 16px; }
+    .message { font-size: 15px; color: #555; line-height: 1.7; margin-bottom: 24px; }
+    .invitation-box { border: 2px dashed #38ef7d; background: #f0fff4; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+    .invitation-box h2 { margin: 0 0 10px 0; font-size: 18px; color: #2d3748; }
+    .invitation-box blockquote { margin: 15px 0 0 0; font-style: italic; color: #4a5568; border-left: 3px solid #38ef7d; padding-left: 15px; }
+    .btn-wrap { text-align: center; margin: 32px 0; }
+    .btn { display: inline-block; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: #ffffff !important; text-decoration: none; padding: 14px 36px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.2px; }
+    .footer { background: #f8f9fa; padding: 20px 30px; text-align: center; font-size: 12px; color: #aaa; border-top: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>✨ Cơ Hội Nghề Nghiệp</h1>
+      <p>Lời mời ứng tuyển từ ATS System</p>
+    </div>
+    <div class="body">
+      <p class="greeting">Xin chào, <strong>{{name}}</strong> 👋</p>
+      <p class="message">
+        <strong>{{companyName}}</strong> vừa xem hồ sơ của bạn và nhận thấy bạn rất phù hợp cho vị trí <strong>{{jobTitle}}</strong> họ đang tuyển dụng.
+      </p>
+
+      <div class="invitation-box">
+        <h2>Thông tin lời mời</h2>
+        <p>Vị trí: <strong>{{jobTitle}}</strong></p>
+        <p>Công ty: <strong>{{companyName}}</strong></p>
+        {{#if message}}
+        <blockquote>"{{message}}"</blockquote>
+        {{/if}}
+      </div>
+
+      <p class="message">
+        Bạn có thể xem chi tiết yêu cầu công việc và phản hồi lời mời này bằng cách nhấn vào nút bên dưới.
+      </p>
+
+      <div class="btn-wrap">
+        <a href="{{actionUrl}}" class="btn">Xem Chi Tiết Công Việc</a>
+      </div>
+
+      <p class="message">
+        Đừng bỏ lỡ cơ hội này nhé!<br/>
+        Trân trọng, đội ngũ <strong>ATS System</strong>.
+      </p>
+    </div>
+    <div class="footer">
+      © 2025 ATS System. Email này được gửi tự động, vui lòng không trả lời.
+    </div>
+  </div>
+</body>
+</html>
