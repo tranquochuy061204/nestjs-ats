@@ -2,26 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SkillMetadataEntity, SkillType } from './skill-metadata.entity';
 import { SKILL_STANDARDIZER_PROMPT } from './prompts/skill-standardizer.prompt';
 import { toSlug } from '../../common/utils/string.util';
+import { AiProviderService } from '../../common/ai/ai-provider.service';
 
 @Injectable()
 export class SkillsMetadataService {
   private readonly logger = new Logger(SkillsMetadataService.name);
-  private genAI: GoogleGenerativeAI;
 
   constructor(
     @InjectRepository(SkillMetadataEntity)
     private readonly skillMetadataRepository: Repository<SkillMetadataEntity>,
     private readonly configService: ConfigService,
-  ) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (apiKey) {
-      this.genAI = new GoogleGenerativeAI(apiKey);
-    }
-  }
+    private readonly aiProvider: AiProviderService,
+  ) {}
 
   /**
    * Search skills — exact match trước, fuzzy sau.
@@ -101,28 +96,20 @@ export class SkillsMetadataService {
   }
 
   /**
-   * Batch gọi AI Gemini để format + phân loại nhiều skills.
+   * Batch gọi AI để format + phân loại nhiều skills.
+   * Primary: Gemini, Fallback: GLM-4.5-Air (qua AiProviderService)
    */
   async formatWithAI(
     rawSkills: string[],
   ): Promise<{ name: string; type: SkillType }[]> {
-    if (!this.genAI || rawSkills.length === 0) {
-      // Fallback nếu không có API key: trim + title case
-      return rawSkills.map((s) => ({
-        name: s.trim(),
-        type: SkillType.HARD,
-      }));
+    if (rawSkills.length === 0) {
+      return [];
     }
 
     try {
-      const model = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-      });
-
       const prompt = SKILL_STANDARDIZER_PROMPT(rawSkills);
+      const text = await this.aiProvider.generateText(prompt);
 
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().trim();
       this.logger.log(`AI Response: ${text}`);
 
       // Parse JSON from response

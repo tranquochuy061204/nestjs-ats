@@ -16,6 +16,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import config from '../typeorm.config';
 import { MailModule } from './mail/mail.module';
+import { AiProviderModule } from './common/ai/ai-provider.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { MailModule } from './mail/mail.module';
     JobsModule,
     ApplicationsModule,
     NotificationsModule,
+    AiProviderModule,
     MailModule,
   ],
   controllers: [AppController],

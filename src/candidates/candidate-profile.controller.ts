@@ -96,7 +96,7 @@ export class CandidateProfileController {
     @UploadedFile(
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
-          fileType: /^application\/pdf$/,
+          fileType: 'pdf',
         })
         .addMaxSizeValidator({
           maxSize: FILE_SIZES.MAX_CV_SIZE,

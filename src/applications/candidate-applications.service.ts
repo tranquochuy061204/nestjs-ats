@@ -17,19 +17,17 @@ import { JobEntity, JobStatus } from '../jobs/entities/job.entity';
 import { ApplyJobDto } from './dto/apply-job.dto';
 import { ApplicationFilterDto } from './dto/application-filter.dto';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   MatchScoreResult,
   CvMatchScoreResult,
 } from './interfaces/matching.interface';
 import { CANDIDATE_MATCH_SCORE_PROMPT } from './prompts/candidate-match-score.prompt';
 import { CV_MATCH_SCORE_PROMPT } from './prompts/cv-match-score.prompt';
+import { AiProviderService } from '../common/ai/ai-provider.service';
 
 @Injectable()
 export class CandidateApplicationsService {
   private readonly logger = new Logger(CandidateApplicationsService.name);
-  private genAI: GoogleGenerativeAI;
-  private readonly aiModel: string;
 
   constructor(
     @InjectRepository(JobApplicationEntity)
@@ -42,16 +40,8 @@ export class CandidateApplicationsService {
     private readonly jobRepo: Repository<JobEntity>,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
-  ) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (apiKey) {
-      this.genAI = new GoogleGenerativeAI(apiKey);
-    }
-    this.aiModel = this.configService.get<string>(
-      'GEMINI_MODEL',
-      'gemini-2.5-flash',
-    );
-  }
+    private readonly aiProvider: AiProviderService,
+  ) {}
 
   async apply(userId: number, jobId: number, dto: ApplyJobDto) {
     const candidate = await this.findCandidateByUserId(userId);
@@ -269,11 +259,6 @@ export class CandidateApplicationsService {
 
   // Exposed as public để CandidateHeadhuntingService trigger AI scoring khi candidate accept invitation
   async calculateAiMatchScore(applicationId: number) {
-    if (!this.genAI) {
-      this.logger.warn('AI API key not configured. Skipping match score.');
-      return;
-    }
-
     const application = await this.applicationRepo.findOne({
       where: { id: applicationId },
       relations: [
@@ -342,11 +327,7 @@ export class CandidateApplicationsService {
     const prompt = CANDIDATE_MATCH_SCORE_PROMPT(jobData, candidateData);
 
     try {
-      const model = this.genAI.getGenerativeModel({
-        model: this.aiModel,
-      });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().trim();
+      const text = await this.aiProvider.generateText(prompt);
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -392,21 +373,8 @@ export class CandidateApplicationsService {
       }
 
       const prompt = CV_MATCH_SCORE_PROMPT(jobData);
-      const model = this.genAI.getGenerativeModel({
-        model: this.aiModel,
-      });
 
-      const result = await model.generateContent([
-        {
-          inlineData: {
-            data: fileData.base64,
-            mimeType: fileData.mimeType,
-          },
-        },
-        prompt,
-      ]);
-
-      const text = result.response.text().trim();
+      const text = await this.aiProvider.generateWithFile(prompt, fileData);
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -439,7 +407,7 @@ export class CandidateApplicationsService {
 
   private async fetchBase64Cv(
     url: string | null,
-  ): Promise<{ base64: string; mimeType: string } | null> {
+  ): Promise<{ base64: string; mimeType: string; buffer: Buffer } | null> {
     if (!url || !url.startsWith('http')) return null;
 
     // --- SSRF Protection Start ---
@@ -477,7 +445,7 @@ export class CandidateApplicationsService {
 
       const arrayBuffer = await res.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      return { base64: buffer.toString('base64'), mimeType };
+      return { base64: buffer.toString('base64'), mimeType, buffer };
     } catch (e: unknown) {
       this.logger.error('Fetch CV failed: ' + url, e);
       return null;
