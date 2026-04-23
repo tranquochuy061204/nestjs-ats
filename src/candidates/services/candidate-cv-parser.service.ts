@@ -21,6 +21,7 @@ import { ParsedProject } from '../interfaces/parsed-project.interface';
 import { ParsedWorkExperience } from '../interfaces/parsed-work-experience.interface';
 import { CV_FULL_PARSE_PROMPT } from '../prompts/cv-full-parse.prompt';
 import { toSlug } from '../../common/utils/string.util';
+import { Degree } from '../../common/enums/degree.enum';
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
@@ -58,18 +59,6 @@ export class CandidateCvParserService {
 
   // ─── Public API ──────────────────────────────────────────────────────────
 
-  /**
-   * Người dùng chủ động kích hoạt để AI đọc CV và điền vào profile.
-   * KHÔNG tự động chạy khi upload — chỉ chạy khi user bấm nút "Parse CV".
-   *
-   * Chiến lược ghi dữ liệu:
-   * - Profile fields (fullName, phone, position, bio, yearWorkingExperience):
-   *   GHI ĐÈ nếu AI trích xuất được (≠ null).
-   * - workExperiences, educations, projects:
-   *   CHỈ INSERT nếu bảng chưa có bản ghi nào → tránh xóa data user đã nhập tay.
-   * - certificates: THÊM MỚI theo tên, bỏ qua nếu đã có.
-   * - skills: THÊM MỚI, không bao giờ xóa skill cũ.
-   */
   async parseAndApply(userId: number): Promise<{
     message: string;
     summary: {
@@ -191,7 +180,7 @@ export class CandidateCvParserService {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('No JSON found in AI response');
 
-      const raw = JSON.parse(jsonMatch[0]) as Partial<CvFullParseResult>;
+      const raw = JSON.parse(jsonMatch[0]);
 
       // Sanitize to ensure contract is met regardless of model variation
       return {
@@ -206,19 +195,30 @@ export class CandidateCvParserService {
             ? Math.max(0, Math.round(raw.yearWorkingExperience))
             : null,
         workExperiences: Array.isArray(raw.workExperiences)
-          ? raw.workExperiences.filter((w) => w?.companyName && w?.position)
+          ? raw.workExperiences.filter(
+              (w: any) => w?.companyName && w?.position,
+            )
           : [],
         educations: Array.isArray(raw.educations)
-          ? raw.educations.filter((e) => e?.schoolName)
+          ? raw.educations
+              .filter((e: any) => e?.schoolName)
+              .map((e: any) => ({
+                ...e,
+                degree: Object.values(Degree).includes(e.degree as Degree)
+                  ? (e.degree as Degree)
+                  : Degree.NONE,
+              }))
           : [],
         projects: Array.isArray(raw.projects)
-          ? raw.projects.filter((p) => p?.name)
+          ? raw.projects.filter((p: any) => p?.name)
           : [],
         certificates: Array.isArray(raw.certificates)
-          ? raw.certificates.filter((c) => typeof c === 'string' && c.trim())
+          ? raw.certificates.filter(
+              (c: any) => typeof c === 'string' && c.trim(),
+            )
           : [],
         skills: Array.isArray(raw.skills)
-          ? raw.skills.filter((s) => typeof s === 'string' && s.trim())
+          ? raw.skills.filter((s: any) => typeof s === 'string' && s.trim())
           : [],
       };
     } catch (error: unknown) {
@@ -232,7 +232,7 @@ export class CandidateCvParserService {
     }
   }
 
-  // ─── Upsert: Work Experiences ─────────────────────────────────────────────
+  // ─── Upsert Logic ────────────────────────────────────────────────────────
 
   private async upsertWorkExperiences(
     candidateId: number,
@@ -240,7 +240,7 @@ export class CandidateCvParserService {
   ): Promise<number> {
     if (!items.length) return 0;
     const count = await this.workExpRepo.count({ where: { candidateId } });
-    if (count > 0) return 0; // User đã tự quản lý, không ghi đè
+    if (count > 0) return 0;
 
     const entities = items.map((w) =>
       this.workExpRepo.create({
@@ -257,8 +257,6 @@ export class CandidateCvParserService {
     return entities.length;
   }
 
-  // ─── Upsert: Educations ───────────────────────────────────────────────────
-
   private async upsertEducations(
     candidateId: number,
     items: ParsedEducation[],
@@ -272,7 +270,7 @@ export class CandidateCvParserService {
         candidateId,
         schoolName: e.schoolName,
         major: e.major ?? undefined,
-        degree: e.degree ?? undefined,
+        degree: e.degree ?? Degree.NONE,
         startDate: e.startDate ?? undefined,
         endDate: e.isStillStudying ? undefined : (e.endDate ?? undefined),
         isStillStudying: e.isStillStudying ?? false,
@@ -282,8 +280,6 @@ export class CandidateCvParserService {
     await this.educationRepo.save(entities);
     return entities.length;
   }
-
-  // ─── Upsert: Projects ─────────────────────────────────────────────────────
 
   private async upsertProjects(
     candidateId: number,
@@ -306,19 +302,15 @@ export class CandidateCvParserService {
     return entities.length;
   }
 
-  // ─── Upsert: Certificates ─────────────────────────────────────────────────
-
   private async upsertCertificates(
     candidateId: number,
     names: string[],
   ): Promise<number> {
     if (!names.length) return 0;
-
     const existing = await this.certificateRepo.find({
       where: { candidateId },
     });
     const existingSet = new Set(existing.map((c) => c.name.toLowerCase()));
-
     const newOnes = names
       .map((n) => n.trim())
       .filter((n) => n && !existingSet.has(n.toLowerCase()))
@@ -328,35 +320,22 @@ export class CandidateCvParserService {
     return newOnes.length;
   }
 
-  // ─── Upsert: Skills ───────────────────────────────────────────────────────
-
-  /**
-   * Pipeline chuẩn hoá kỹ năng:
-   *   1. Fuzzy-match với skill_metadata → nếu tìm thấy, upsert tag.
-   *   2. Không tìm thấy → gọi AI formatter (SKILL_STANDARDIZER_PROMPT) → upsert skill mới → upsert tag.
-   * Chạy tuần tự để tránh race condition khi insert vào skill_metadata.
-   * CHỈ THÊM, không bao giờ xóa skill cũ.
-   */
   private async upsertSkills(
     candidateId: number,
     skillNames: string[],
   ): Promise<number> {
     if (!skillNames.length) return 0;
-
     const uniqueRawSkills = Array.from(
       new Set(skillNames.map((s) => s.trim()).filter((s) => s)),
     );
-    // 1. Phân loại kỹ năng đã có trong hệ thống và lạ (Sử dụng BATCH lookup)
     const foundSkills =
       await this.skillsMetadataService.findManyByFuzzy(uniqueRawSkills);
-
     const foundSkillSlugs = new Set(foundSkills.map((s) => s.slug));
     const knownSkillsList = [...foundSkills];
     const unknownRawSkillsList = uniqueRawSkills.filter(
       (raw) => !foundSkillSlugs.has(toSlug(raw)),
     );
 
-    // 2. Gom tất cả kỹ năng lạ gọi AI 1 LẦN DUY NHẤT để khỏi dính Too Many Requests
     if (unknownRawSkillsList.length > 0) {
       try {
         const formatted =
@@ -371,12 +350,11 @@ export class CandidateCvParserService {
           );
           knownSkillsList.push(newSkill);
         }
-      } catch (err: unknown) {
+      } catch (err) {
         this.logger.error('Failed to batch format skills with AI', err);
       }
     }
 
-    // 3. Gắn tag cho ứng viên
     let added = 0;
     for (const skill of knownSkillsList) {
       if (!skill) continue;
@@ -391,51 +369,34 @@ export class CandidateCvParserService {
         added++;
       }
     }
-
     return added;
   }
-
-  // ─── Fetch CV as Base64 ───────────────────────────────────────────────────
 
   private async fetchBase64Cv(
     url: string | null,
   ): Promise<{ base64: string; mimeType: string } | null> {
     if (!url || !url.startsWith('http')) return null;
-
-    // --- SSRF Protection Start ---
     const supabaseUrl = this.configService.get<string>('SUPABASE_PROJECT_URL');
     if (supabaseUrl) {
       try {
         const urlHost = new URL(url).host;
         const supabaseHost = new URL(supabaseUrl).host;
-        if (urlHost !== supabaseHost) {
-          this.logger.warn(
-            `SSRF Blocked: URL host ${urlHost} does not match ${supabaseHost}`,
-          );
-          return null;
-        }
+        if (urlHost !== supabaseHost) return null;
       } catch {
         return null;
       }
     }
-    // --- SSRF Protection End ---
-
     try {
       const res = await fetch(url);
       if (!res.ok) return null;
-
       const contentLength = res.headers.get('content-length');
-      if (contentLength && parseInt(contentLength, 10) > 10 * 1024 * 1024) {
-        this.logger.warn(`CV too large (${contentLength} bytes): ${url}`);
+      if (contentLength && parseInt(contentLength, 10) > 10 * 1024 * 1024)
         return null;
-      }
-
       const mimeType = res.headers.get('content-type') || 'application/pdf';
       if (!mimeType.includes('pdf') && !mimeType.includes('image')) return null;
-
       const buffer = Buffer.from(await res.arrayBuffer());
       return { base64: buffer.toString('base64'), mimeType };
-    } catch (e: unknown) {
+    } catch (e) {
       this.logger.error('Fetch CV failed: ' + url, e);
       return null;
     }
