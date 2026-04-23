@@ -24,6 +24,7 @@ import { ConfigService } from '@nestjs/config';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { Response } from 'express';
 import { MailService } from '../mail/mail.service';
+import { AUTH_CONFIG } from '../common/constants/auth.constant';
 
 @Injectable()
 export class AuthService {
@@ -272,15 +273,17 @@ export class AuthService {
     userAgent?: string,
     ipAddress?: string,
   ) {
-    const hashedToken = await bcrypt.hash(token, 10);
+    const hashedToken = await bcrypt.hash(token, AUTH_CONFIG.SALT_ROUNDS);
     const expiresAt = new Date();
     // Đọc từ config để đồng bộ với JWT_REFRESH_EXPIRES_TIME (vd: '7d', '14d', '30d')
     const refreshExpiresConfig = this.configService.get<string>(
       'JWT_REFRESH_EXPIRES_TIME',
-      '7d',
+      AUTH_CONFIG.REFRESH_TOKEN_DEFAULT_EXPIRY_DAYS.toString() + 'd',
     );
     const daysMatch = refreshExpiresConfig.match(/^(\d+)d$/);
-    const expiryDays = daysMatch ? parseInt(daysMatch[1], 10) : 7;
+    const expiryDays = daysMatch
+      ? parseInt(daysMatch[1], 10)
+      : AUTH_CONFIG.REFRESH_TOKEN_DEFAULT_EXPIRY_DAYS;
     expiresAt.setDate(expiresAt.getDate() + expiryDays);
 
     const refreshToken = this.refreshTokenRepository.create({
@@ -346,16 +349,16 @@ export class AuthService {
   }
 
   setRefreshTokenCookie(res: Response, token: string) {
-    res.cookie('refresh_token', token, {
+    res.cookie(AUTH_CONFIG.COOKIE.REFRESH_TOKEN, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
+      maxAge: AUTH_CONFIG.COOKIE.MAX_AGE_MS,
     });
   }
 
   clearRefreshTokenCookie(res: Response) {
-    res.clearCookie('refresh_token');
+    res.clearCookie(AUTH_CONFIG.COOKIE.REFRESH_TOKEN);
   }
 
   async login(user: UserEntity) {
@@ -417,9 +420,11 @@ export class AuthService {
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Hash OTP before storing
-    const hashedPin = await bcrypt.hash(pin, 10);
+    const hashedPin = await bcrypt.hash(pin, AUTH_CONFIG.SALT_ROUNDS);
     const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+    expiresAt.setMinutes(
+      expiresAt.getMinutes() + AUTH_CONFIG.RESET_PASSWORD_EXPIRES_MIN,
+    );
 
     await this.userRepository.update(user.id, {
       resetPasswordToken: hashedPin,
@@ -452,7 +457,10 @@ export class AuthService {
       throw new BadRequestException('Mã xác nhận không đúng.');
     }
 
-    const newHashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    const newHashedPassword = await bcrypt.hash(
+      dto.newPassword,
+      AUTH_CONFIG.SALT_ROUNDS,
+    );
     await this.userRepository.update(user.id, {
       password: newHashedPassword,
       resetPasswordToken: null,
@@ -474,7 +482,10 @@ export class AuthService {
       throw new BadRequestException('Mật khẩu cũ không chính xác.');
     }
 
-    const newHashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    const newHashedPassword = await bcrypt.hash(
+      dto.newPassword,
+      AUTH_CONFIG.SALT_ROUNDS,
+    );
     await this.userRepository.update(userId, {
       password: newHashedPassword,
     });
@@ -499,7 +510,7 @@ export class AuthService {
 
   private generateVerificationToken(): string {
     // Tạo 32 random bytes → hex string 64 ký tự
-    const array = new Uint8Array(32);
+    const array = new Uint8Array(AUTH_CONFIG.VERIFICATION_TOKEN_BYTES);
     crypto.getRandomValues(array);
     return Array.from(array)
       .map((b) => b.toString(16).padStart(2, '0'))
