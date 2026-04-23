@@ -1,11 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-// pdf-parse exports a CommonJS default — must be imported with require()
+// pdf-parse is a CommonJS module — must be imported via require().
+// Some bundler/TS setups wrap it under `.default`, so we unwrap defensively.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse') as (
-  dataBuffer: Buffer,
-) => Promise<{ text: string; numpages: number }>;
+const _pdfParseModule = require('pdf-parse') as
+  | ((...args: unknown[]) => Promise<{ text: string; numpages: number }>)
+  | {
+      default: (
+        ...args: unknown[]
+      ) => Promise<{ text: string; numpages: number }>;
+    };
+
+const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> =
+  typeof _pdfParseModule === 'function'
+    ? (_pdfParseModule as (
+        buf: Buffer,
+      ) => Promise<{ text: string; numpages: number }>)
+    : (
+        _pdfParseModule as {
+          default: (buf: Buffer) => Promise<{ text: string; numpages: number }>;
+        }
+      ).default;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -83,7 +99,11 @@ export class AiProviderService {
           model: this.geminiModel,
         });
         const result = await model.generateContent(prompt);
-        return result.response.text().trim();
+        const text = result.response.text().trim();
+        this.logger.log(
+          `[AI Primary] Successfully generated text using Gemini (${text.length} chars)`,
+        );
+        return text;
       } catch (geminiError: unknown) {
         this.logger.warn(
           `Gemini generateText failed: ${this._errMsg(geminiError)}. Trying GLM fallback...`,
@@ -116,7 +136,11 @@ export class AiProviderService {
           { inlineData: { data: file.base64, mimeType: file.mimeType } },
           prompt,
         ]);
-        return result.response.text().trim();
+        const text = result.response.text().trim();
+        this.logger.log(
+          `[AI Primary] Successfully generated multimodal content using Gemini (${text.length} chars)`,
+        );
+        return text;
       } catch (geminiError: unknown) {
         this.logger.warn(
           `Gemini generateWithFile failed: ${this._errMsg(geminiError)}. Attempting PDF text-extraction fallback...`,
