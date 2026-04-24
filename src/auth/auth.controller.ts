@@ -13,6 +13,7 @@ import {
   Query,
   Patch,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { Response, Request } from 'express';
 import { UserEntity } from '../users/entities/user.entity';
@@ -31,7 +32,10 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
@@ -220,16 +224,21 @@ export class AuthController {
   // -----------------------------------------------------------------------
 
   @Get('verify-email')
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Xác thực email qua token (click link từ email)' })
-  @ApiResponse({ status: 200, description: 'Xác thực thành công' })
-  @ApiResponse({ status: 400, description: 'Token không hợp lệ' })
-  @ApiResponse({ status: 404, description: 'Token không tồn tại hoặc đã dùng' })
-  verifyEmail(@Query('token') token: string) {
-    if (!token || !/^[a-f0-9]{64}$/.test(token)) {
-      throw new BadRequestException('Mã xác thực không đúng định dạng');
+  @ApiResponse({ status: 302, description: 'Chuyển hướng về Frontend' })
+  async verifyEmail(@Query('token') token: string, @Res() res: Response) {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+
+    try {
+      if (!token || !/^[a-f0-9]{64}$/.test(token)) {
+        throw new BadRequestException('Mã xác thực không đúng định dạng');
+      }
+      await this.authService.verifyEmail(token);
+      return res.redirect(`${frontendUrl}/login?verified=true`);
+    } catch {
+      return res.redirect(`${frontendUrl}/login?error=verify_failed`);
     }
-    return this.authService.verifyEmail(token);
   }
 
   @Post('resend-verification')
