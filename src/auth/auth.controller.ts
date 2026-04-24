@@ -235,9 +235,9 @@ export class AuthController {
         throw new BadRequestException('Mã xác thực không đúng định dạng');
       }
       await this.authService.verifyEmail(token);
-      return res.redirect(`${frontendUrl}/login?verified=true`);
+      return res.redirect(`${frontendUrl}/verify-email?status=success`);
     } catch {
-      return res.redirect(`${frontendUrl}/login?error=verify_failed`);
+      return res.redirect(`${frontendUrl}/verify-email?status=error`);
     }
   }
 
