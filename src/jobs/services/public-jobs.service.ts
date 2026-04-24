@@ -112,7 +112,7 @@ export class PublicJobsService {
         ])
         // Metadata lookups: slim selects
         .leftJoin('job.province', 'province')
-        .addSelect(['province.id', 'province.name'])
+        .addSelect(['province.code', 'province.name'])
         .leftJoin('job.category', 'category')
         .addSelect(['category.id', 'category.name'])
         .leftJoin('job.jobType', 'jobType')

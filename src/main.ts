@@ -27,16 +27,18 @@ async function bootstrap() {
   // Áp dụng Global Exception Filter
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Cấu hình Swagger
-  const config = new DocumentBuilder()
-    .setTitle('NestJS ATS API')
-    .setDescription('API documentation for the Applicant Tracking System')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
+  // Cấu hình Swagger (Chỉ bật trên môi trường dev, sẽ ẩn hoàn toàn trên production)
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('NestJS ATS API')
+      .setDescription('API documentation for the Applicant Tracking System')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   await app.listen(process.env.PORT ?? 3000);
 }
