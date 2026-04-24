@@ -236,7 +236,7 @@ export class PublicJobsService {
       `EXISTS (
         SELECT 1 FROM job_skill_tag jst
         WHERE jst.job_id = job.id
-          AND jst.skill_metadata_id IN (:...skillIds)
+          AND jst.skill_id IN (:...skillIds)
       )`,
       { skillIds },
     );
