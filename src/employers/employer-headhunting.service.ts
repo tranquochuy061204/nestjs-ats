@@ -15,7 +15,6 @@ import {
   JobInvitationEntity,
   InvitationStatus,
 } from '../jobs/entities/job-invitation.entity';
-import { HeadhuntingFilterDto } from './dto/headhunting-filter.dto';
 import { SaveCandidateDto } from './dto/save-candidate.dto';
 import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -271,73 +270,6 @@ export class EmployerHeadhuntingService {
       // Với hệ thống gợi ý, nếu lỗi do SQL hoặc logic tính toán, ta có thể trả về mảng rỗng
       // để không làm sập giao diện của Employer, hoặc throw tùy yêu cầu.
       return [];
-    }
-  }
-  async searchCandidates(employerUserId: number, filter: HeadhuntingFilterDto) {
-    await this.findEmployerWithCompany(employerUserId);
-
-    const {
-      keyword,
-      provinceId,
-      jobCategoryId,
-      jobTypeId,
-      minExperience,
-      page,
-      limit,
-    } = filter;
-
-    try {
-      const qb = this.candidateRepo
-        .createQueryBuilder('c')
-        .leftJoinAndSelect('c.skills', 'skills')
-        .leftJoinAndSelect('skills.skillMetadata', 'skillMeta')
-        // FIX: Dùng property name thay vì raw column
-        .where('c.isPublic = true');
-
-      if (jobCategoryId) {
-        // FIX: ON condition dùng property name để TypeORM map đúng
-        qb.innerJoin('c.jobCategories', 'cjc', 'cjc.jobCategoryId = :catId', {
-          catId: jobCategoryId,
-        });
-      }
-
-      if (keyword) {
-        // FIX: Dùng property name
-        qb.andWhere(
-          '(c.position ILIKE :kw OR c.bio ILIKE :kw OR c.fullName ILIKE :kw)',
-          { kw: `%${keyword}%` },
-        );
-      }
-
-      if (provinceId) {
-        qb.andWhere('c.provinceId = :provinceId', { provinceId });
-      }
-
-      if (jobTypeId) {
-        qb.andWhere('c.jobTypeId = :jobTypeId', { jobTypeId });
-      }
-
-      if (minExperience !== undefined) {
-        qb.andWhere('COALESCE(c.yearWorkingExperience, 0) >= :minExp', {
-          minExp: minExperience,
-        });
-      }
-
-      qb.orderBy('c.yearWorkingExperience', 'DESC').addOrderBy('c.id', 'DESC');
-
-      const skip = (page - 1) * limit;
-      const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
-
-      return { data, total, page, lastPage: Math.ceil(total / limit) };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(
-        `Lỗi khi tìm kiếm ứng viên: ${errorMessage}`,
-        errorStack,
-      );
-      throw new Error('Có lỗi xảy ra trong quá trình tìm kiếm ứng viên.');
     }
   }
 

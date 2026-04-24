@@ -11,7 +11,6 @@ import { CandidateCvParserService } from './services/candidate-cv-parser.service
 import { CandidateHeadhuntingService } from './services/candidate-headhunting.service';
 import { CandidateHeadhuntingController } from './candidate-headhunting.controller';
 import { CandidateSearchService } from './services/candidate-search.service';
-import { CandidateSearchController } from './candidate-search.controller';
 import { CandidateEntity } from './entities/candidate.entity';
 import { WorkExperienceEntity } from './entities/work-experience.entity';
 import { EducationEntity } from './entities/education.entity';
@@ -61,7 +60,6 @@ import { ApplicationsModule } from '../applications/applications.module';
     CandidateExperienceController,
     CandidateSkillsController,
     CandidateHeadhuntingController,
-    CandidateSearchController,
   ],
   providers: [
     CandidateProfileService,
@@ -72,6 +70,6 @@ import { ApplicationsModule } from '../applications/applications.module';
     CandidateHeadhuntingService,
     CandidateSearchService,
   ],
-  exports: [CandidateProfileService],
+  exports: [CandidateProfileService, CandidateSearchService],
 })
 export class CandidatesModule {}

@@ -12,10 +12,10 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { EmployerHeadhuntingService } from './employer-headhunting.service';
+import { CandidateSearchService } from '../candidates/services/candidate-search.service';
+import { CandidateFilterDto } from '../candidates/dto/candidate-filter.dto';
 import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
-import { HeadhuntingFilterDto } from './dto/headhunting-filter.dto';
 import { SaveCandidateDto } from './dto/save-candidate.dto';
-
 import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('Employers - Headhunting')
@@ -24,6 +24,7 @@ import { UserRole } from '../users/entities/user.entity';
 export class EmployerHeadhuntingController {
   constructor(
     private readonly headhuntingService: EmployerHeadhuntingService,
+    private readonly candidateSearchService: CandidateSearchService,
   ) {}
 
   @Get('jobs/:jobId/suggested-candidates')
@@ -42,13 +43,27 @@ export class EmployerHeadhuntingController {
   }
 
   @Get('candidates')
-  @ApiOperation({ summary: 'Tìm kiếm ứng viên tự do (Headhunting Search)' })
-  @ApiResponse({ status: 200, description: 'Danh sách ứng viên theo bộ lọc' })
-  searchCandidates(
-    @CurrentUser() user: { id: number },
-    @Query() filter: HeadhuntingFilterDto,
-  ) {
-    return this.headhuntingService.searchCandidates(user.id, filter);
+  @ApiOperation({
+    summary: 'Tìm kiếm ứng viên đa yếu tố (Headhunting Search)',
+    description: `
+Tìm kiếm ứng viên với nhiều bộ lọc kết hợp:
+- **keyword**: Tìm theo tên / vị trí mong muốn
+- **provinceId**: Lọc theo tỉnh/thành phố
+- **jobTypeId**: Lọc theo hình thức làm việc
+- **skillIds**: Lọc theo skill (OR — có ít nhất 1 skill)
+- **categoryIds**: Lọc theo ngành nghề (OR)
+- **salaryMin / salaryMax**: Overlap với kỳ vọng lương của ứng viên
+- **minExperience**: Số năm kinh nghiệm tối thiểu
+
+Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
+    `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách ứng viên phù hợp (đã ẩn thông tin nhạy cảm)',
+  })
+  searchCandidates(@Query() filterDto: CandidateFilterDto) {
+    return this.candidateSearchService.searchCandidates(filterDto);
   }
 
   @Get('candidates/:id')

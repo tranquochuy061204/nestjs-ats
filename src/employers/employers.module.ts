@@ -15,6 +15,9 @@ import { MailModule } from '../mail/mail.module';
 import { EmployerHeadhuntingService } from './employer-headhunting.service';
 import { EmployerHeadhuntingController } from './employer-headhunting.controller';
 import { UserEntity } from '../users/entities/user.entity';
+import { EmployerDashboardService } from './services/employer-dashboard.service';
+import { EmployerDashboardController } from './employer-dashboard.controller';
+import { CandidatesModule } from '../candidates/candidates.module';
 
 @Module({
   imports: [
@@ -31,9 +34,18 @@ import { UserEntity } from '../users/entities/user.entity';
     StorageModule,
     NotificationsModule,
     MailModule,
+    CandidatesModule,
   ],
-  controllers: [EmployersController, EmployerHeadhuntingController],
-  providers: [EmployersService, EmployerHeadhuntingService],
+  controllers: [
+    EmployersController,
+    EmployerHeadhuntingController,
+    EmployerDashboardController,
+  ],
+  providers: [
+    EmployersService,
+    EmployerHeadhuntingService,
+    EmployerDashboardService,
+  ],
   exports: [EmployersService],
 })
 export class EmployersModule {}
