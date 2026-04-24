@@ -1,27 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-// pdf-parse is a CommonJS module — must be imported via require().
-// Some bundler/TS setups wrap it under `.default`, so we unwrap defensively.
+// pdf-parse version 2.x uses a class-based API
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const _pdfParseModule = require('pdf-parse') as
-  | ((...args: unknown[]) => Promise<{ text: string; numpages: number }>)
-  | {
-      default: (
-        ...args: unknown[]
-      ) => Promise<{ text: string; numpages: number }>;
-    };
-
-const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> =
-  typeof _pdfParseModule === 'function'
-    ? (_pdfParseModule as (
-        buf: Buffer,
-      ) => Promise<{ text: string; numpages: number }>)
-    : (
-        _pdfParseModule as {
-          default: (buf: Buffer) => Promise<{ text: string; numpages: number }>;
-        }
-      ).default;
+const { PDFParse } = require('pdf-parse') as {
+  PDFParse: new (options: { data: Buffer }) => {
+    getText(): Promise<{ text: string }>;
+  };
+};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -182,48 +168,79 @@ export class AiProviderService {
   private async _callOpenRouter(prompt: string): Promise<string> {
     if (!this.openrouterApiKey) {
       throw new Error(
-        'Cả Gemini lẫn GLM fallback đều không khả dụng. ' +
+        'Cả Gemini lẫn fallback đều không khả dụng (thiếu OPENROUTER_API_KEY). ' +
           'Vui lòng liên hệ quản trị viên.',
       );
     }
 
-    this.logger.log(`[AI Fallback] Calling GLM via OpenRouter...`);
+    const MAX_RETRIES = 3;
+    let attempt = 1;
 
-    const response = await fetch(OPENROUTER_BASE_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.openrouterApiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/tranquochuy061204/nestjs-ats',
-        'X-Title': 'NestJS ATS',
-      },
-      body: JSON.stringify({
-        model: this.openrouterModel,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.2,
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
-      throw new Error(
-        `OpenRouter error ${response.status}: ${errBody || response.statusText}`,
+    while (attempt <= MAX_RETRIES) {
+      this.logger.log(
+        `[AI Fallback] Calling OpenRouter (${this.openrouterModel}) - Attempt ${attempt}/${MAX_RETRIES}`,
       );
+
+      const response = await fetch(OPENROUTER_BASE_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.openrouterApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/tranquochuy061204/nestjs-ats',
+          'X-Title': 'NestJS ATS',
+        },
+        body: JSON.stringify({
+          model: this.openrouterModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.2,
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+
+        // Retry for Rate Limited (429) or Server Errors (5xx)
+        if (
+          (response.status === 429 || response.status >= 500) &&
+          attempt < MAX_RETRIES
+        ) {
+          const delay = attempt * 2000;
+          this.logger.warn(
+            `OpenRouter rate limited or temp error (${response.status}). Retrying in ${delay}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          attempt++;
+          continue;
+        }
+
+        throw new Error(
+          `OpenRouter error ${response.status}: ${errBody || response.statusText}`,
+        );
+      }
+
+      const data = (await response.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+
+      const text = data?.choices?.[0]?.message?.content?.trim();
+      if (!text) {
+        // Có thể retry nếu trả về rỗng không hợp lệ
+        if (attempt < MAX_RETRIES) {
+          this.logger.warn(`OpenRouter empty response. Retrying...`);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          attempt++;
+          continue;
+        }
+        throw new Error('OpenRouter returned empty response after all retries');
+      }
+
+      this.logger.log(
+        `[AI Fallback] Fallback response received (${text.length} chars)`,
+      );
+      return text;
     }
 
-    const data = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-
-    const text = data?.choices?.[0]?.message?.content?.trim();
-    if (!text) {
-      throw new Error('OpenRouter returned empty response');
-    }
-
-    this.logger.log(
-      `[AI Fallback] GLM response received (${text.length} chars)`,
-    );
-    return text;
+    throw new Error(`OpenRouter failed after ${MAX_RETRIES} attempts`);
   }
 
   // ─── Private: PDF text extraction ────────────────────────────────────────
@@ -232,7 +249,9 @@ export class AiProviderService {
     try {
       // Ưu tiên dùng buffer nếu có, fallback sang decode base64
       const buf: Buffer = file.buffer ?? Buffer.from(file.base64, 'base64');
-      const parsed = await pdfParse(buf);
+
+      const parser = new PDFParse({ data: buf });
+      const parsed = await parser.getText();
       const text = (parsed.text ?? '').trim();
 
       if (text.length < PDF_TEXT_MIN_LENGTH) {

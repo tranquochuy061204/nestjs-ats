@@ -23,6 +23,7 @@ import { toSlug } from '../../common/utils/string.util';
 import { Degree } from '../../common/enums/degree.enum';
 import { AiProviderService } from '../../common/ai/ai-provider.service';
 import { SkillMetadataEntity } from '../../metadata/skills/skill-metadata.entity';
+import { MAX_SKILLS_PER_CANDIDATE } from './candidate-skills.service';
 
 // ─── Internal Types ───────────────────────────────────────────────────────────
 
@@ -456,10 +457,20 @@ export class CandidateCvParserService {
     candidateId: number,
     skills: SkillMetadataEntity[],
   ): Promise<number> {
+    const currentCount = await this.skillTagRepo.count({
+      where: { candidateId },
+    });
+
     let added = 0;
 
     for (const skill of skills) {
       if (!skill) continue;
+      if (currentCount + added >= MAX_SKILLS_PER_CANDIDATE) {
+        this.logger.warn(
+          `Candidate #${candidateId} reached max skills limit (${MAX_SKILLS_PER_CANDIDATE}). Skipping remaining parsed skills.`,
+        );
+        break;
+      }
 
       const alreadyLinked = await this.skillTagRepo.findOne({
         where: { candidateId, skillMetadataId: skill.id },

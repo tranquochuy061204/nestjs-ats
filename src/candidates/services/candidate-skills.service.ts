@@ -13,6 +13,9 @@ import { JobTypeMetadataEntity } from '../../metadata/job-types/job-type.entity'
 import { SkillsMetadataService } from '../../metadata/skills/skills-metadata.service';
 import { AddSkillsDto } from '../dto/add-skills.dto';
 import { UpdateJobCategoriesDto } from '../dto/update-job-categories.dto';
+import { BadRequestException } from '@nestjs/common';
+
+export const MAX_SKILLS_PER_CANDIDATE = 10;
 
 @Injectable()
 export class CandidateSkillsService {
@@ -43,6 +46,19 @@ export class CandidateSkillsService {
   async addSkills(userId: number, dto: AddSkillsDto) {
     const candidate = await this.findCandidateByUserId(userId);
     const results: CandidateSkillTagEntity[] = [];
+
+    const currentSkillCount = await this.skillTagRepository.count({
+      where: { candidateId: candidate.id },
+    });
+
+    // We approximate the new skill count by adding the dto.skills length
+    // (This might be slightly inaccurate if the DTO contains duplicates or already-existing skills,
+    // but it is a fast and safe upper-bound check)
+    if (currentSkillCount + dto.skills.length > MAX_SKILLS_PER_CANDIDATE) {
+      throw new BadRequestException(
+        `Ứng viên không được có quá ${MAX_SKILLS_PER_CANDIDATE} kỹ năng. Bạn hiện có ${currentSkillCount} kỹ năng. Vui lòng xóa bớt trước khi thêm mới.`,
+      );
+    }
 
     const ids = dto.skills.filter((s): s is number => typeof s === 'number');
     const rawStrings = dto.skills.filter(
