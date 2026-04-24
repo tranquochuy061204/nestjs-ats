@@ -12,6 +12,11 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { EmployerEntity } from '../../employers/entities/employer.entity';
+import { JobEntity } from '../../jobs/entities/job.entity';
+import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
 
 interface JwtPayload {
   id: number;
@@ -43,6 +48,12 @@ export class SocketGateway
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @InjectRepository(EmployerEntity)
+    private readonly employerRepo: Repository<EmployerEntity>,
+    @InjectRepository(JobEntity)
+    private readonly jobRepo: Repository<JobEntity>,
+    @InjectRepository(JobApplicationEntity)
+    private readonly applicationRepo: Repository<JobApplicationEntity>,
   ) {}
 
   afterInit() {
@@ -99,6 +110,23 @@ export class SocketGateway
     if (client.data?.user?.role !== 'employer') {
       return { status: 'error', message: 'Không có quyền truy cập phòng này' };
     }
+
+    const userId = client.data.user.id;
+    const employer = await this.employerRepo.findOne({ where: { userId } });
+    if (!employer || !employer.companyId) {
+      return { status: 'error', message: 'Tài khoản không thuộc công ty nào' };
+    }
+
+    const job = await this.jobRepo.findOne({
+      where: { id: data.jobId, companyId: employer.companyId },
+    });
+    if (!job) {
+      return {
+        status: 'error',
+        message: 'Công việc không tồn tại hoặc không thuộc công ty',
+      };
+    }
+
     const room = `job_kanban_${data.jobId}`;
     await client.join(room);
     this.logger.log(`User ${client.data.user?.id} đã tham gia phòng ${room}`);
@@ -121,6 +149,28 @@ export class SocketGateway
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: { applicationId: number },
   ) {
+    if (client.data?.user?.role !== 'employer') {
+      return { status: 'error', message: 'Không có quyền truy cập phòng này' };
+    }
+
+    const userId = client.data.user.id;
+    const employer = await this.employerRepo.findOne({ where: { userId } });
+    if (!employer || !employer.companyId) {
+      return { status: 'error', message: 'Tài khoản không thuộc công ty nào' };
+    }
+
+    const application = await this.applicationRepo.findOne({
+      where: { id: data.applicationId },
+      relations: ['job'],
+    });
+
+    if (!application || application.job?.companyId !== employer.companyId) {
+      return {
+        status: 'error',
+        message: 'Hồ sơ không tồn tại hoặc không thuộc công ty',
+      };
+    }
+
     const room = `application_detail_${data.applicationId}`;
     await client.join(room);
     this.logger.log(`User ${client.data.user?.id} đã tham gia phòng ${room}`);

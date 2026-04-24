@@ -2,6 +2,10 @@ import { Module, Global } from '@nestjs/common';
 import { SocketGateway } from './socket.gateway';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { EmployerEntity } from '../../employers/entities/employer.entity';
+import { JobEntity } from '../../jobs/entities/job.entity';
+import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
 
 @Global()
 @Module({
@@ -15,6 +19,7 @@ import { ConfigService } from '@nestjs/config';
         },
       }),
     }),
+    TypeOrmModule.forFeature([EmployerEntity, JobEntity, JobApplicationEntity]),
   ],
   providers: [SocketGateway],
   exports: [SocketGateway],

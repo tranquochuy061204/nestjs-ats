@@ -160,10 +160,7 @@ export class EmployerDashboardService {
             byStatus.interview,
             byStatus.shortlisted,
           ),
-          interviewToHired: conversionRate(
-            byStatus.hired,
-            byStatus.interview,
-          ),
+          interviewToHired: conversionRate(byStatus.hired, byStatus.interview),
         },
         trend: {
           last7Days: fillTrendDays(trendRows, DASHBOARD_CONFIG.TREND_DAYS),
@@ -240,10 +237,7 @@ export class EmployerDashboardService {
             byStatus.interview,
             byStatus.shortlisted,
           ),
-          interviewToHired: conversionRate(
-            byStatus.hired,
-            byStatus.interview,
-          ),
+          interviewToHired: conversionRate(byStatus.hired, byStatus.interview),
         },
         trend: {
           last7Days: fillTrendDays(trendRows, DASHBOARD_CONFIG.TREND_DAYS),

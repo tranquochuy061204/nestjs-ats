@@ -1,17 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
-  constructor(private readonly mailerService: MailerService) {}
+  constructor(
+    private readonly mailerService: MailerService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * Gửi email xác thực tài khoản sau khi đăng ký
    */
   async sendVerificationEmail(email: string, fullName: string, token: string) {
-    const verifyUrl = `${process.env.APP_URL ?? 'http://localhost:3000'}/api/auth/verify-email?token=${token}`;
+    const backendUrl =
+      this.configService.get<string>('BACKEND_URL') || 'http://localhost:3000';
+    const verifyUrl = `${backendUrl}/api/auth/verify-email?token=${token}`;
 
     try {
       await this.mailerService.sendMail({

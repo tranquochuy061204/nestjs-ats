@@ -420,7 +420,8 @@ export class EmployerHeadhuntingService {
     // --- EMAIL NOTIFICATION ---
     if (candidate.user?.email) {
       const appUrl =
-        this.configService.get<string>('APP_URL') || 'http://localhost:3000';
+        this.configService.get<string>('FRONTEND_URL') ||
+        'http://localhost:5173';
       const actionUrl = `${appUrl}/candidate/invitations/${savedInvitation.id}`;
 
       void this.mailService.sendJobInvitationEmail(

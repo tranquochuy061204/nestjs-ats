@@ -10,9 +10,7 @@ import { Req } from '@nestjs/common';
 @ApiTags('Employers - Dashboard')
 @Controller('employers/dashboard')
 export class EmployerDashboardController {
-  constructor(
-    private readonly dashboardService: EmployerDashboardService,
-  ) {}
+  constructor(private readonly dashboardService: EmployerDashboardService) {}
 
   @Get('stats')
   @ApiAuth(UserRole.EMPLOYER)
@@ -26,10 +24,7 @@ export class EmployerDashboardController {
     status: 403,
     description: 'Không phải Employer hoặc chưa thuộc công ty',
   })
-  getCompanyStats(
-    @Req() req: Request,
-    @Query() dto: DashboardFilterDto,
-  ) {
+  getCompanyStats(@Req() req: Request, @Query() dto: DashboardFilterDto) {
     const user = req.user as { id: number };
     return this.dashboardService.getCompanyStats(user.id, dto);
   }

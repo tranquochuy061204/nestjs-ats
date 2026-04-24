@@ -310,7 +310,8 @@ export class EmployerApplicationsService {
         application.candidate?.user?.email
       ) {
         const appUrl =
-          this.configService.get<string>('APP_URL') || 'http://localhost:3000';
+          this.configService.get<string>('FRONTEND_URL') ||
+          'http://localhost:5173';
         const actionUrl = `${appUrl}/candidate/applications/${applicationId}`;
 
         void this.mailService.sendApplicationStatusEmail(

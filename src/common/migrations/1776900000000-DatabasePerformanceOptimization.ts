@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class DatabasePerformanceOptimization1776900000000
-  implements MigrationInterface
-{
+export class DatabasePerformanceOptimization1776900000000 implements MigrationInterface {
   name = 'DatabasePerformanceOptimization1776900000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -145,9 +143,7 @@ export class DatabasePerformanceOptimization1776900000000
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_employer_company_id"`);
 
     // Drop job_invitation indexes
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "IDX_job_invitation_status"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_job_invitation_status"`);
     await queryRunner.query(
       `DROP INDEX IF EXISTS "IDX_job_invitation_candidate_id"`,
     );
