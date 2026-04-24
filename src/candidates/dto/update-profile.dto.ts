@@ -16,9 +16,9 @@ const UpdateProfileSchema = z
     jobTypeId: z.number().int().optional(),
     yearWorkingExperience: z.number().int().min(0).optional(),
     isPublic: z.boolean().optional(),
-    linkedinUrl: z.string().max(255).url().optional().or(z.literal('')),
-    githubUrl: z.string().max(255).url().optional().or(z.literal('')),
-    portfolioUrl: z.string().max(255).url().optional().or(z.literal('')),
+    linkedinUrl: z.url().max(255).optional().or(z.literal('')),
+    githubUrl: z.url().max(255).optional().or(z.literal('')),
+    portfolioUrl: z.url().max(255).optional().or(z.literal('')),
   })
   .refine(
     (data) => {

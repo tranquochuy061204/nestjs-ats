@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ApiProperty } from '@nestjs/swagger';
 
 const ResetPasswordSchema = z.object({
-  email: z.string().email('Email không hợp lệ').max(255),
+  email: z.email('Email không hợp lệ').max(255),
   token: z.string().min(1, 'Mã xác nhận là bắt buộc').max(20),
   newPassword: z
     .string()

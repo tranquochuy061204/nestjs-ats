@@ -8,7 +8,7 @@ export enum CompanyRole {
 }
 
 const AddMemberSchema = z.object({
-  email: z.string().email('Email không hợp lệ').max(255),
+  email: z.email('Email không hợp lệ').max(255),
   fullName: z.string().min(1, 'Họ tên không được để trống').max(100),
   role: z.nativeEnum(CompanyRole),
   password: z

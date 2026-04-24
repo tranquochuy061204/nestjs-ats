@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ApiProperty } from '@nestjs/swagger';
 
 const RegisterEmployerSchema = z.object({
-  email: z.string().email('Email không hợp lệ').max(255),
+  email: z.email('Email không hợp lệ').max(255),
   password: z
     .string()
     .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
