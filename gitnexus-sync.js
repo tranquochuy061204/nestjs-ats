@@ -57,7 +57,9 @@ description: "${description}"
 ${body.trim()}`;
 
   fs.writeFileSync(dest, newSkillContent);
-  console.log(`  ✓ Synced: ${skillName} → .agents/skills/gitnexus-${skillName}/`);
+  console.log(
+    `  ✓ Synced: ${skillName} → .agents/skills/gitnexus-${skillName}/`,
+  );
 }
 
 let synced = 0;
