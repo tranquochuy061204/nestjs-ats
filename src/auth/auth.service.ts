@@ -9,7 +9,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { UserEntity, UserRole } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterEmployerDto } from './dto/register-employer.dto';
@@ -25,6 +25,7 @@ import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { Response } from 'express';
 import { MailService } from '../mail/mail.service';
 import { AUTH_CONFIG } from '../common/constants/auth.constant';
+import { generateVerificationToken } from '../common/utils/crypto.util';
 
 @Injectable()
 export class AuthService {
@@ -38,6 +39,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -53,26 +55,29 @@ export class AuthService {
       throw new ConflictException('Email đã được sử dụng');
     }
 
-    // Tạo token xác thực email (random hex 32 bytes = 64 chars)
-    const verificationToken = this.generateVerificationToken();
+    const verificationToken = generateVerificationToken();
 
-    // Tạo user mới - role mặc định là candidate
-    const user = this.userRepository.create({
-      email,
-      password,
-      role: UserRole.CANDIDATE,
-      emailVerificationToken: verificationToken,
-      isEmailVerified: false,
-    });
-    const savedUser = await this.userRepository.save(user);
+    // Tạo user + candidate trong 1 transaction để đảm bảo tính nguyên tử
+    // Nếu bước nào fail, cả 2 đều bị rollback
+    const { savedUser, candidate } = await this.dataSource.transaction(
+      async (manager) => {
+        const user = manager.create(UserEntity, {
+          email,
+          password,
+          role: UserRole.CANDIDATE,
+          emailVerificationToken: verificationToken,
+          isEmailVerified: false,
+        });
+        const savedUser = await manager.save(UserEntity, user);
 
-    const candidate = await this.candidateProfileService.createCoreProfile({
-      userId: savedUser.id,
-      firstName,
-      lastName,
-      phone,
-      provinceId,
-    });
+        const candidate = await this.candidateProfileService.createCoreProfile(
+          { userId: savedUser.id, firstName, lastName, phone, provinceId },
+          manager,
+        );
+
+        return { savedUser, candidate };
+      },
+    );
 
     // Gửi mail xác thực (fire-and-forget, không block response)
     void this.mailService.sendVerificationEmail(
@@ -107,7 +112,7 @@ export class AuthService {
       throw new ConflictException('Email đã được sử dụng');
     }
 
-    const verificationToken = this.generateVerificationToken();
+    const verificationToken = generateVerificationToken();
 
     const user = this.userRepository.create({
       email,
@@ -186,7 +191,7 @@ export class AuthService {
     }
 
     // Tạo token mới
-    const newToken = this.generateVerificationToken();
+    const newToken = generateVerificationToken();
     await this.userRepository.update(userId, {
       emailVerificationToken: newToken,
     });
@@ -502,18 +507,5 @@ export class AuthService {
   async logoutAllDevices(userId: number) {
     await this.refreshTokenRepository.delete({ userId });
     return { message: 'Đã đăng xuất khỏi tất cả thiết bị.' };
-  }
-
-  // ---------------------
-  // PRIVATE HELPERS
-  // ---------------------
-
-  private generateVerificationToken(): string {
-    // Tạo 32 random bytes → hex string 64 ký tự
-    const array = new Uint8Array(AUTH_CONFIG.VERIFICATION_TOKEN_BYTES);
-    crypto.getRandomValues(array);
-    return Array.from(array)
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
   }
 }

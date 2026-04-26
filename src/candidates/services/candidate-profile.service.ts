@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { SupabaseService } from '../../storage/supabase.service';
 import { CandidateEntity } from '../entities/candidate.entity';
 import { WorkExperienceEntity } from '../entities/work-experience.entity';
@@ -158,20 +158,27 @@ export class CandidateProfileService {
     return result;
   }
 
-  async createCoreProfile(data: {
-    userId: number;
-    firstName: string;
-    lastName: string;
-    phone: string;
-    provinceId: number;
-  }) {
-    const candidate = this.candidateRepository.create({
+  async createCoreProfile(
+    data: {
+      userId: number;
+      firstName: string;
+      lastName: string;
+      phone: string;
+      provinceId: number;
+    },
+    manager?: EntityManager,
+  ) {
+    const repo = manager
+      ? manager.getRepository(CandidateEntity)
+      : this.candidateRepository;
+
+    const candidate = repo.create({
       userId: data.userId,
       fullName: `${data.lastName} ${data.firstName}`,
       phone: data.phone,
       provinceId: data.provinceId,
     });
-    return this.candidateRepository.save(candidate);
+    return repo.save(candidate);
   }
 
   private async findCandidateByUserId(userId: number) {

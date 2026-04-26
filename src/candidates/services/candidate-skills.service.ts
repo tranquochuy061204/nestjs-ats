@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { CandidateEntity } from '../entities/candidate.entity';
@@ -140,17 +136,11 @@ export class CandidateSkillsService {
   async deleteSkill(userId: number, skillTagId: number) {
     const candidate = await this.findCandidateByUserId(userId);
     const tag = await this.skillTagRepository.findOne({
-      where: { id: skillTagId },
+      where: { id: skillTagId, candidateId: candidate.id },
     });
 
     if (!tag) {
       throw new NotFoundException('Skill tag not found');
-    }
-
-    if (tag.candidateId !== candidate.id) {
-      throw new ForbiddenException(
-        'You do not have permission to delete this skill',
-      );
     }
 
     await this.skillTagRepository.remove(tag);
@@ -221,17 +211,11 @@ export class CandidateSkillsService {
   async deleteJobCategory(userId: number, id: number) {
     const candidate = await this.findCandidateByUserId(userId);
     const relation = await this.candidateJobCategoryRepository.findOne({
-      where: { id },
+      where: { id, candidateId: candidate.id },
     });
 
     if (!relation) {
       throw new NotFoundException('Job category not found');
-    }
-
-    if (relation.candidateId !== candidate.id) {
-      throw new ForbiddenException(
-        'You do not have permission to delete this job category',
-      );
     }
 
     await this.candidateJobCategoryRepository.remove(relation);

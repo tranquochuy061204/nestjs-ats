@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { EmployerEntity } from './entities/employer.entity';
 import { CompanyEntity } from '../companies/entities/company.entity';
 import { UserEntity, UserRole } from '../users/entities/user.entity';
@@ -17,6 +18,8 @@ import { AddMemberDto, CompanyRole } from './dto/add-member.dto';
 import { SupabaseService } from '../storage/supabase.service';
 import { MailService } from '../mail/mail.service';
 import { sanitizeFilename } from '../common/utils/string.util';
+import { generateVerificationToken } from '../common/utils/crypto.util';
+import { AUTH_CONFIG } from '../common/constants/auth.constant';
 
 @Injectable()
 export class EmployersService {
@@ -219,11 +222,17 @@ export class EmployersService {
 
     try {
       // Tạo verification token trước khi tạo user
-      const verificationToken = this.generateVerificationToken();
+      const verificationToken = generateVerificationToken();
+
+      // Hash password trước khi lưu DB (bảo mật)
+      const hashedPassword = await bcrypt.hash(
+        dto.password,
+        AUTH_CONFIG.SALT_ROUNDS,
+      );
 
       const newUser = queryRunner.manager.create(UserEntity, {
         email: dto.email,
-        password: dto.password,
+        password: hashedPassword,
         role: UserRole.EMPLOYER,
         emailVerificationToken: verificationToken,
         isEmailVerified: false,
@@ -334,17 +343,5 @@ export class EmployersService {
     await this.employerRepo.save(member);
 
     return { message: 'Đã gỡ thành viên khỏi công ty thành công' };
-  }
-
-  // ---------------------
-  // PRIVATE HELPERS
-  // ---------------------
-
-  private generateVerificationToken(): string {
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    return Array.from(array)
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
   }
 }

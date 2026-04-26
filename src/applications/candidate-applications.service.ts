@@ -175,7 +175,8 @@ export class CandidateApplicationsService {
     qb.orderBy('app.appliedAt', 'DESC');
 
     const skip = (page - 1) * limit;
-    const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
+    const total = await qb.getCount();
+    const data = await qb.skip(skip).take(limit).getMany();
 
     return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
@@ -352,8 +353,7 @@ export class CandidateApplicationsService {
       }
     } catch (error: unknown) {
       this.logger.error(
-        'Failed to calculate AI Profile Score for application ' +
-          application.id,
+        `Failed to calculate AI Profile Score for application ${application.id}`,
         error instanceof Error ? error.message : String(error),
       );
     }
@@ -367,7 +367,7 @@ export class CandidateApplicationsService {
       const fileData = await this.fetchBase64Cv(application.cvUrlSnapshot);
       if (!fileData) {
         this.logger.warn(
-          'Không thể đọc file CV định dạng này cho App #' + application.id,
+          `Không thể đọc file CV định dạng này cho App #${application.id}`,
         );
         return;
       }
@@ -391,15 +391,12 @@ export class CandidateApplicationsService {
         });
 
         this.logger.log(
-          'AI CV Score calculated for App #' +
-            application.id +
-            ': ' +
-            parsed.cvMatchScore,
+          `AI CV Score calculated for App #${application.id}: ${parsed.cvMatchScore}`,
         );
       }
     } catch (error: unknown) {
       this.logger.error(
-        'Failed to calculate AI CV Score for application ' + application.id,
+        `Failed to calculate AI CV Score for application ${application.id}`,
         error instanceof Error ? error.message : String(error),
       );
     }
@@ -440,6 +437,9 @@ export class CandidateApplicationsService {
 
       const mimeType = res.headers.get('content-type') || 'application/pdf';
       if (!mimeType.includes('pdf') && !mimeType.includes('image')) {
+        this.logger.warn(
+          `CV score skipped — unsupported MIME type "${mimeType}" for URL: ${url}`,
+        );
         return null;
       }
 
@@ -447,7 +447,7 @@ export class CandidateApplicationsService {
       const buffer = Buffer.from(arrayBuffer);
       return { base64: buffer.toString('base64'), mimeType, buffer };
     } catch (e: unknown) {
-      this.logger.error('Fetch CV failed: ' + url, e);
+      this.logger.error(`Fetch CV failed: ${url}`, e);
       return null;
     }
   }

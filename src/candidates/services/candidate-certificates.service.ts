@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import 'multer';
@@ -74,14 +69,10 @@ export class CandidateCertificatesService {
   ) {
     const candidate = await this.findCandidateByUserId(userId);
     const cert = await this.certificateRepository.findOne({
-      where: { id: certId },
+      where: { id: certId, candidateId: candidate.id },
     });
 
     if (!cert) throw new NotFoundException('Certificate not found');
-    if (cert.candidateId !== candidate.id)
-      throw new ForbiddenException(
-        'You do not have permission to update this certificate',
-      );
 
     let newImgUrl: string | undefined = undefined;
     let newFilePath: string | undefined = undefined;
@@ -121,14 +112,10 @@ export class CandidateCertificatesService {
   async deleteCertificate(userId: number, certId: number) {
     const candidate = await this.findCandidateByUserId(userId);
     const cert = await this.certificateRepository.findOne({
-      where: { id: certId },
+      where: { id: certId, candidateId: candidate.id },
     });
 
     if (!cert) throw new NotFoundException('Certificate not found');
-    if (cert.candidateId !== candidate.id)
-      throw new ForbiddenException(
-        'You do not have permission to delete this certificate',
-      );
 
     if (cert.cerImgUrl) {
       try {

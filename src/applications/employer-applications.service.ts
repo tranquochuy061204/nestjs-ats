@@ -82,7 +82,8 @@ export class EmployerApplicationsService {
     qb.orderBy('app.appliedAt', 'DESC');
 
     const skip = (page - 1) * limit;
-    const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
+    const total = await qb.getCount();
+    const data = await qb.skip(skip).take(limit).getMany();
 
     return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
@@ -388,14 +389,14 @@ export class EmployerApplicationsService {
 
     const savedNote = await this.noteRepo.save(note);
 
+    // Fetch full note with author info — dùng cho cả real-time emit lẫn HTTP response
+    const fullNote = await this.noteRepo.findOne({
+      where: { id: savedNote.id },
+      relations: ['author', 'author.employer'],
+    });
+
     // --- REAL-TIME INTEGRATION ---
     try {
-      // Fetch full note with author info for detailed timeline update
-      const fullNote = await this.noteRepo.findOne({
-        where: { id: savedNote.id },
-        relations: ['author', 'author.employer'],
-      });
-
       // 1. Emit tới phòng chi tiết hồ sơ (Real-time Timeline)
       this.socketGateway.sendToApplicationDetail(
         applicationId,
@@ -416,7 +417,7 @@ export class EmployerApplicationsService {
       );
     }
 
-    return savedNote;
+    return fullNote ?? savedNote;
   }
 
   async updateNote(

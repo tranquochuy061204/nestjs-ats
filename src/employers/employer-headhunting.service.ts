@@ -43,7 +43,12 @@ export class EmployerHeadhuntingService {
     private readonly configService: ConfigService,
   ) {}
 
-  async getSuggestedCandidates(employerUserId: number, jobId: number) {
+  async getSuggestedCandidates(
+    employerUserId: number,
+    jobId: number,
+    page: number = 1,
+    limit: number = 20,
+  ) {
     const employer = await this.findEmployerWithCompany(employerUserId);
 
     const job = await this.jobRepo.findOne({
@@ -63,13 +68,25 @@ export class EmployerHeadhuntingService {
       );
     }
 
+    // Ép integer để đảm bảo type-safe (không phải user input nên rủi ro thấp,
+    // nhưng dùng parameterized bindings triệt để loại bỏ mọi khả năng injection)
     const jobSkillIds = job.skills
       .map((s) => s.skillId)
-      .filter((id): id is number => id != null);
+      .filter((id): id is number => id != null)
+      .map((id) => Math.trunc(id)); // enforce integer
+
     const totalJobSkills = jobSkillIds.length;
-    const minExp = job.yearsOfExperience ?? 0;
-    const jobSalaryMin = job.salaryMin ? Number(job.salaryMin) : null;
-    const jobSalaryMax = job.salaryMax ? Number(job.salaryMax) : null;
+    const minExp = Math.trunc(job.yearsOfExperience ?? 0);
+    const jobSalaryMin = job.salaryMin
+      ? Math.trunc(Number(job.salaryMin))
+      : null;
+    const jobSalaryMax = job.salaryMax
+      ? Math.trunc(Number(job.salaryMax))
+      : null;
+    const jobProvinceId = job.provinceId ? Math.trunc(job.provinceId) : null;
+    const jobCategoryId = job.categoryId ? Math.trunc(job.categoryId) : null;
+
+    const { SCORING, THRESHOLDS } = HEADHUNTING_CONFIG;
 
     // ----------------------------------------------------------------
     // Hệ thống Weighted Composite Scoring (Tổng 100 điểm)
@@ -80,50 +97,42 @@ export class EmployerHeadhuntingService {
     //   - Địa điểm:         0-5  điểm (cùng tỉnh = 5, khác = 0, không block)
     // ----------------------------------------------------------------
 
-    const { SCORING, THRESHOLDS } = HEADHUNTING_CONFIG;
-
-    // --- 1. SKILL SCORE (0-40) ---
+    // --- 1. SKILL SCORE (0-40) — dùng UNNEST để parameterized hoàn toàn ---
     let skillScoreExpr: string;
     if (jobSkillIds.length > 0) {
-      const skillIdList = jobSkillIds.join(',');
+      // UNNEST($N::int[]) cho phép pass array an toàn qua parameterized binding
       skillScoreExpr = `
         LEAST(${SCORING.MAX_SKILL}, COALESCE(
           (SELECT COUNT(DISTINCT cst.skill_metadata_id)::float
            FROM candidate_skill_tag cst
            WHERE cst.candidate_id = c.id
-             AND cst.skill_metadata_id IN (${skillIdList})
+             AND cst.skill_metadata_id = ANY(:skillIds::int[])
           ) / ${totalJobSkills} * ${SCORING.MAX_SKILL},
         0))`;
     } else {
-      // Job chưa set kỹ năng → tất cả đều nhận điểm trung tính
       skillScoreExpr = `${SCORING.NEUTRAL_SKILL}`;
     }
 
     // --- 2. EXPERIENCE SCORE (0-25) ---
-    // Ứng viên không đủ kinh nghiệm bị chặn ở WHERE, nên nếu qua được = 25 điểm
     const expScoreExpr = `${SCORING.MAX_EXPERIENCE}`;
 
-    // --- 3. SALARY SCORE (0-20) ---
-    // Logic: kỳ vọng lương của ứng viên có nằm trong range của Job không?
+    // --- 3. SALARY SCORE (0-20) — dùng named params ---
     let salaryScoreExpr: string;
     if (jobSalaryMin == null && jobSalaryMax == null) {
-      // Job không set lương → không phạt ai
       salaryScoreExpr = `${SCORING.SALARY.PARTIAL}`;
     } else if (jobSalaryMin != null && jobSalaryMax != null) {
       salaryScoreExpr = `
         CASE
           WHEN c.salary_min IS NULL OR c.salary_max IS NULL THEN ${SCORING.SALARY.PARTIAL}
-          WHEN CAST(c.salary_min AS float) > ${jobSalaryMax} OR CAST(c.salary_max AS float) < ${jobSalaryMin} THEN ${SCORING.SALARY.MISMATCH}
-          WHEN CAST(c.salary_min AS float) >= ${jobSalaryMin} AND CAST(c.salary_max AS float) <= ${jobSalaryMax} THEN ${SCORING.SALARY.MATCH}
+          WHEN CAST(c.salary_min AS float) > :jobSalaryMax OR CAST(c.salary_max AS float) < :jobSalaryMin THEN ${SCORING.SALARY.MISMATCH}
+          WHEN CAST(c.salary_min AS float) >= :jobSalaryMin AND CAST(c.salary_max AS float) <= :jobSalaryMax THEN ${SCORING.SALARY.MATCH}
           ELSE ${SCORING.SALARY.PARTIAL}
         END`;
     } else {
-      // Chỉ có một mốc lương
-      const salaryBound = jobSalaryMin ?? jobSalaryMax;
       salaryScoreExpr = `
         CASE
           WHEN c.salary_min IS NULL OR c.salary_max IS NULL THEN ${SCORING.SALARY.PARTIAL}
-          WHEN CAST(c.salary_min AS float) <= ${salaryBound} AND CAST(c.salary_max AS float) >= ${salaryBound} THEN ${SCORING.SALARY.MATCH}
+          WHEN CAST(c.salary_min AS float) <= :salaryBound AND CAST(c.salary_max AS float) >= :salaryBound THEN ${SCORING.SALARY.MATCH}
           ELSE ${SCORING.SALARY.MISMATCH}
         END`;
     }
@@ -139,10 +148,10 @@ export class EmployerHeadhuntingService {
         ) THEN ${SCORING.PROFILE.HAS_CERTIFICATE} ELSE 0 END
     )`;
 
-    // --- 5. LOCATION SCORE (0-5, soft — không block) ---
+    // --- 5. LOCATION SCORE (0-5, soft — không block) — dùng named param ---
     const locationScoreExpr =
-      job.provinceId != null
-        ? `CASE WHEN c.province_id = ${job.provinceId} THEN ${SCORING.LOCATION} ELSE 0 END`
+      jobProvinceId != null
+        ? `CASE WHEN c.province_id = :jobProvinceId THEN ${SCORING.LOCATION} ELSE 0 END`
         : `0`;
 
     const totalScoreExpr = `(
@@ -154,8 +163,11 @@ export class EmployerHeadhuntingService {
     )`;
 
     // ----------------------------------------------------------------
-    // Build query
+    // Build query với parameterized bindings
     // ----------------------------------------------------------------
+    // Tính offset cho pagination
+    const offset = (page - 1) * limit;
+
     try {
       const qb = this.candidateRepo
         .createQueryBuilder('c')
@@ -175,13 +187,13 @@ export class EmployerHeadhuntingService {
 
         // Ngành nghề là tiêu chí quan trọng nhất → giữ là semi-hard filter
         .andWhere(
-          job.categoryId
+          jobCategoryId
             ? `EXISTS (
                 SELECT 1 FROM candidate_job_category cjc
                 WHERE cjc.candidate_id = c.id AND cjc.job_category_id = :categoryId
               )`
             : '1=1',
-          { categoryId: job.categoryId },
+          { categoryId: jobCategoryId },
         )
 
         // Loại bỏ ứng viên đã được mời vào Job này
@@ -202,8 +214,21 @@ export class EmployerHeadhuntingService {
           { jobIdApp: jobId },
         )
 
+        // Bind tất cả named params
+        .setParameters({
+          ...(jobSkillIds.length > 0 ? { skillIds: jobSkillIds } : {}),
+          ...(jobSalaryMin != null ? { jobSalaryMin } : {}),
+          ...(jobSalaryMax != null ? { jobSalaryMax } : {}),
+          ...(jobSalaryMin == null && jobSalaryMax != null
+            ? { salaryBound: jobSalaryMax }
+            : jobSalaryMax == null && jobSalaryMin != null
+              ? { salaryBound: jobSalaryMin }
+              : {}),
+          ...(jobProvinceId != null ? { jobProvinceId } : {}),
+        })
+
         .orderBy(totalScoreExpr, 'DESC')
-        .limit(THRESHOLDS.MAX_SUGGESTIONS);
+        .limit(THRESHOLDS.MAX_SUGGESTIONS); // Lấy tối đa N record có score cao nhất trước
 
       const rawRows = await qb.getRawMany<{
         candidateId: string;
@@ -220,11 +245,18 @@ export class EmployerHeadhuntingService {
         (r) => parseFloat(r.matchScore) >= THRESHOLDS.MIN_SUGGESTION_SCORE,
       );
 
-      if (qualified.length === 0) return [];
+      const total = qualified.length;
 
-      const orderedIds = qualified.map((r) => Number(r.candidateId));
+      // Áp dụng pagination thủ công sau khi đã có full scoring list
+      const paged = qualified.slice(offset, offset + limit);
+
+      if (paged.length === 0) {
+        return { data: [], total, page, lastPage: Math.ceil(total / limit) };
+      }
+
+      const orderedIds = paged.map((r) => Number(r.candidateId));
       const scoreMap = new Map(
-        qualified.map((r) => [
+        paged.map((r) => [
           parseInt(r.candidateId, 10),
           {
             matchScore: Math.round(parseFloat(r.matchScore)),
@@ -239,7 +271,7 @@ export class EmployerHeadhuntingService {
         ]),
       );
 
-      // Bước 2: Fetch full entities để trả về đầy đủ thông tin
+      // Fetch full entities để trả về đầy đủ thông tin
       const entities = await this.candidateRepo.find({
         where: { id: In(orderedIds) },
         relations: [
@@ -252,13 +284,15 @@ export class EmployerHeadhuntingService {
 
       const entityMap = new Map(entities.map((e) => [e.id, e]));
 
-      return orderedIds
+      const data = orderedIds
         .map((id) => {
           const entity = entityMap.get(id);
           if (!entity) return null;
           return { ...entity, ...scoreMap.get(id) };
         })
         .filter(Boolean);
+
+      return { data, total, page, lastPage: Math.ceil(total / limit) };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -267,9 +301,7 @@ export class EmployerHeadhuntingService {
         `Lỗi khi tính toán gợi ý ứng viên cho Job #${jobId}: ${errorMessage}`,
         errorStack,
       );
-      // Với hệ thống gợi ý, nếu lỗi do SQL hoặc logic tính toán, ta có thể trả về mảng rỗng
-      // để không làm sập giao diện của Employer, hoặc throw tùy yêu cầu.
-      return [];
+      return { data: [], total: 0, page, lastPage: 0 };
     }
   }
 

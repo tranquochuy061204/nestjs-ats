@@ -355,7 +355,7 @@ export class EmployerDashboardService {
     );
   }
 
-  /** [Q4] Headhunting stats (scoped to personal employer_id) — 1 scan */
+  /** [Q5] Headhunting stats (scoped to personal employer_id) — 1 scan */
   private async queryHeadhuntingStats(
     employerId: number,
   ): Promise<RawHeadhuntingStats> {

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CandidateEntity } from '../entities/candidate.entity';
@@ -54,11 +50,9 @@ export class CandidateExperienceService {
   ) {
     const candidate = await this.findCandidateByUserId(userId);
     const workExp = await this.workExperienceRepository.findOne({
-      where: { id: workExpId },
+      where: { id: workExpId, candidateId: candidate.id },
     });
     if (!workExp) throw new NotFoundException('Work experience not found');
-    if (workExp.candidateId !== candidate.id)
-      throw new ForbiddenException('You do not have permission');
     Object.assign(workExp, dto);
     return this.workExperienceRepository.save(workExp);
   }
@@ -66,11 +60,9 @@ export class CandidateExperienceService {
   async deleteWorkExperience(userId: number, workExpId: number) {
     const candidate = await this.findCandidateByUserId(userId);
     const workExp = await this.workExperienceRepository.findOne({
-      where: { id: workExpId },
+      where: { id: workExpId, candidateId: candidate.id },
     });
     if (!workExp) throw new NotFoundException('Work experience not found');
-    if (workExp.candidateId !== candidate.id)
-      throw new ForbiddenException('You do not have permission');
     await this.workExperienceRepository.remove(workExp);
     return { message: 'Work experience deleted successfully' };
   }
@@ -100,11 +92,9 @@ export class CandidateExperienceService {
   ) {
     const candidate = await this.findCandidateByUserId(userId);
     const education = await this.educationRepository.findOne({
-      where: { id: educationId },
+      where: { id: educationId, candidateId: candidate.id },
     });
     if (!education) throw new NotFoundException('Education not found');
-    if (education.candidateId !== candidate.id)
-      throw new ForbiddenException('You do not have permission');
     Object.assign(education, dto);
     return this.educationRepository.save(education);
   }
@@ -112,11 +102,9 @@ export class CandidateExperienceService {
   async deleteEducation(userId: number, educationId: number) {
     const candidate = await this.findCandidateByUserId(userId);
     const education = await this.educationRepository.findOne({
-      where: { id: educationId },
+      where: { id: educationId, candidateId: candidate.id },
     });
     if (!education) throw new NotFoundException('Education not found');
-    if (education.candidateId !== candidate.id)
-      throw new ForbiddenException('You do not have permission');
     await this.educationRepository.remove(education);
     return { message: 'Education deleted successfully' };
   }
@@ -146,11 +134,9 @@ export class CandidateExperienceService {
   ) {
     const candidate = await this.findCandidateByUserId(userId);
     const project = await this.projectRepository.findOne({
-      where: { id: projectId },
+      where: { id: projectId, candidateId: candidate.id },
     });
     if (!project) throw new NotFoundException('Project not found');
-    if (project.candidateId !== candidate.id)
-      throw new ForbiddenException('You do not have permission');
     Object.assign(project, dto);
     return this.projectRepository.save(project);
   }
@@ -158,11 +144,9 @@ export class CandidateExperienceService {
   async deleteProject(userId: number, projectId: number) {
     const candidate = await this.findCandidateByUserId(userId);
     const project = await this.projectRepository.findOne({
-      where: { id: projectId },
+      where: { id: projectId, candidateId: candidate.id },
     });
     if (!project) throw new NotFoundException('Project not found');
-    if (project.candidateId !== candidate.id)
-      throw new ForbiddenException('You do not have permission');
     await this.projectRepository.remove(project);
     return { message: 'Project deleted successfully' };
   }

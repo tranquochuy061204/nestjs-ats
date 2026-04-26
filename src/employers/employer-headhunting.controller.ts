@@ -16,6 +16,7 @@ import { CandidateSearchService } from '../candidates/services/candidate-search.
 import { CandidateFilterDto } from '../candidates/dto/candidate-filter.dto';
 import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
 import { SaveCandidateDto } from './dto/save-candidate.dto';
+import { SuggestionFilterDto } from './dto/suggestion-filter.dto';
 import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('Employers - Headhunting')
@@ -33,13 +34,19 @@ export class EmployerHeadhuntingController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách 50 ứng viên phù hợp nhất',
+    description: 'Danh sách ứng viên phù hợp nhất (có pagination)',
   })
   getSuggestedCandidates(
     @CurrentUser() user: { id: number },
     @Param('jobId', ParseIntPipe) jobId: number,
+    @Query() filterDto: SuggestionFilterDto,
   ) {
-    return this.headhuntingService.getSuggestedCandidates(user.id, jobId);
+    return this.headhuntingService.getSuggestedCandidates(
+      user.id,
+      jobId,
+      filterDto.page,
+      filterDto.limit,
+    );
   }
 
   @Get('candidates')
