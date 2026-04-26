@@ -285,6 +285,9 @@ export class PublicJobsService {
       /**
        * Composite relevance score — hoàn toàn parameterized để tránh SQL injection.
        * Điểm: title match = 10, province match = 5, category match = 3.
+       *
+       * NOTE: Dùng addSelect với alias "relevance_score" rồi orderBy theo alias
+       * để tránh lỗi TypeORM "alias was not found" trong getManyAndCount().
        */
       const parts: string[] = [];
       const params: Record<string, unknown> = {};
@@ -311,7 +314,10 @@ export class PublicJobsService {
       if (Object.keys(params).length > 0) {
         qb.setParameters(params);
       }
-      qb.orderBy(scoreExpr, SortOrder.DESC).addOrderBy(
+
+      // Thêm score expression vào SELECT với alias, sau đó ORDER BY alias
+      qb.addSelect(`${scoreExpr}`, 'relevance_score');
+      qb.orderBy('"relevance_score"', SortOrder.DESC).addOrderBy(
         'job.createdAt',
         SortOrder.DESC,
       );
