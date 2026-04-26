@@ -13,7 +13,11 @@ export async function getPaginatedResult<T extends ObjectLiteral>(
   limit: number,
 ): Promise<PaginatedResult<T>> {
   const skip = (page - 1) * limit;
-  const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
+
+  // NOTE: Dùng getCount() + getMany() riêng thay vì getManyAndCount() để tránh
+  // lỗi TypeORM khi ORDER BY dùng raw expression hoặc alias trong COUNT subquery.
+  const total = await qb.getCount();
+  const data = await qb.skip(skip).take(limit).getMany();
 
   return {
     data,
