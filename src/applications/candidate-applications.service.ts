@@ -24,6 +24,7 @@ import {
 import { CANDIDATE_MATCH_SCORE_PROMPT } from './prompts/candidate-match-score.prompt';
 import { CV_MATCH_SCORE_PROMPT } from './prompts/cv-match-score.prompt';
 import { AiProviderService } from '../common/ai/ai-provider.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class CandidateApplicationsService {
@@ -41,6 +42,7 @@ export class CandidateApplicationsService {
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
     private readonly aiProvider: AiProviderService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async apply(userId: number, jobId: number, dto: ApplyJobDto) {
@@ -65,6 +67,14 @@ export class CandidateApplicationsService {
 
     if (job.deadline && new Date(job.deadline) < new Date()) {
       throw new BadRequestException('Tin tuyển dụng đã hết hạn nộp hồ sơ');
+    }
+
+    // Check require_cv gate (VIP feature)
+    const jobWithExtras = job as JobEntity & { requireCv?: boolean };
+    if (jobWithExtras.requireCv && !candidate.cvUrl) {
+      throw new BadRequestException(
+        'Tin tuyển dụng này yêu cầu bắt buộc có CV. Vui lòng tải lên CV trước khi ứng tuyển.',
+      );
     }
 
     const existing = await this.applicationRepo.findOne({
@@ -95,13 +105,8 @@ export class CandidateApplicationsService {
           await manager.save(ApplicationStatusHistoryEntity, history);
         });
 
-        // Fire and forget AI grading
-        this.calculateAiMatchScore(existing.id).catch((err: unknown) => {
-          this.logger.error(
-            'Error calculating AI match score for re-apply',
-            err instanceof Error ? err.stack : String(err),
-          );
-        });
+        // Fire-and-forget AI grading (VIP chỉ)
+        void this.triggerAiScoringIfVip(existing.id, job.companyId);
 
         return {
           message:
@@ -139,13 +144,8 @@ export class CandidateApplicationsService {
       await manager.save(ApplicationStatusHistoryEntity, history);
     });
 
-    // Fire and forget AI grading
-    this.calculateAiMatchScore(applicationId!).catch((err: unknown) => {
-      this.logger.error(
-        'Error calculating AI match score',
-        err instanceof Error ? err.stack : String(err),
-      );
-    });
+    // Fire-and-forget AI grading (chỉ tự động nếu employer đó là VIP)
+    void this.triggerAiScoringIfVip(applicationId!, job.companyId);
 
     return {
       message: 'Ứng tuyển thành công',
@@ -246,6 +246,36 @@ export class CandidateApplicationsService {
     });
 
     return { message: 'Đã rút đơn ứng tuyển thành công' };
+  }
+
+  /**
+   * Fire-and-forget AI scoring.
+   * VIP: tự động chạy ngay khi apply.
+   * Free: bỏ qua — employer phải trigger thủ công qua POST /employer/applications/:id/ai-analyze.
+   */
+  private triggerAiScoringIfVip(
+    applicationId: number,
+    companyId: number | null | undefined,
+  ): void {
+    if (!companyId) return;
+
+    void this.subscriptionsService
+      .getActiveSubscription(companyId)
+      .then(({ package: pkg }) => {
+        if (!pkg.freeAiScoring) {
+          this.logger.debug(
+            `AI scoring skipped for application ${applicationId} — company ${companyId} is on Free plan`,
+          );
+          return;
+        }
+        return this.calculateAiMatchScore(applicationId);
+      })
+      .catch((err: unknown) => {
+        this.logger.error(
+          `triggerAiScoringIfVip failed for application ${applicationId}`,
+          err instanceof Error ? err.stack : String(err),
+        );
+      });
   }
 
   private async findCandidateByUserId(userId: number) {

@@ -17,6 +17,10 @@ import { ScheduleModule } from '@nestjs/schedule';
 import config from '../typeorm.config';
 import { MailModule } from './mail/mail.module';
 import { AiProviderModule } from './common/ai/ai-provider.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { CreditsModule } from './credits/credits.module';
+import { ScreeningModule } from './screening/screening.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -35,6 +39,10 @@ import { AiProviderModule } from './common/ai/ai-provider.module';
     NotificationsModule,
     AiProviderModule,
     MailModule,
+    SubscriptionsModule,
+    CreditsModule,
+    ScreeningModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

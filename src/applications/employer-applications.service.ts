@@ -25,6 +25,9 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { UserEntity } from '../users/entities/user.entity';
 import { MailService } from '../mail/mail.service';
 import { ConfigService } from '@nestjs/config';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { CreditsService } from '../credits/credits.service';
+import { CreditTransactionType } from '../credits/entities/credit-transaction.entity';
 
 @Injectable()
 export class EmployerApplicationsService {
@@ -48,6 +51,8 @@ export class EmployerApplicationsService {
     private readonly notificationsService: NotificationsService,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly creditsService: CreditsService,
   ) {}
 
   async getJobApplications(
@@ -250,6 +255,38 @@ export class EmployerApplicationsService {
       application.rejectionReason = dto.reason ?? null;
     }
 
+    // ── Pipeline Fee Enforcement ──────────────────────────
+    let creditCharged = 0;
+    const companyId = application.job.companyId;
+
+    const { creditCost, isFree, useFreeProceed } =
+      await this.subscriptionsService.calculateProceedFee(
+        companyId,
+        dto.status,
+      );
+
+    if (!isFree) {
+      // Enforce daily processing limit
+      await this.subscriptionsService.incrementDailyProcessedCount(companyId);
+
+      if (useFreeProceed) {
+        // VIP dùng free proceed — không trừ Credit
+        await this.subscriptionsService.consumeFreeProceed(companyId);
+        creditCharged = 0;
+      } else if (creditCost > 0) {
+        // Trừ Credit (ném exception nếu không đủ)
+        await this.creditsService.chargeCredit(companyId, creditCost, {
+          type: CreditTransactionType.PIPELINE_FEE,
+          description: `Phí proceed ứng viên sang "${dto.status}" — Application #${applicationId}`,
+          referenceType: 'job_application',
+          referenceId: applicationId,
+          createdBy: employerUserId,
+        });
+        creditCharged = creditCost;
+      }
+    }
+    // ─────────────────────────────────────────────────────
+
     await this.dataSource.transaction(async (manager) => {
       await manager.save(JobApplicationEntity, application);
       await manager.save(
@@ -260,6 +297,7 @@ export class EmployerApplicationsService {
           newStatus: dto.status,
           reason: dto.reason ?? null,
           changedById: employerUserId,
+          creditCharged,
         }),
       );
       if (dto.note) {

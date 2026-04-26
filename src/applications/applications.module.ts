@@ -16,6 +16,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonGuardsModule } from '../common/guards/common-guards.module';
 import { SocketModule } from '../common/socket/socket.module';
 import { MailModule } from '../mail/mail.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { CreditsModule } from '../credits/credits.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { MailModule } from '../mail/mail.module';
     CommonGuardsModule,
     SocketModule,
     MailModule,
+    SubscriptionsModule,
+    CreditsModule,
   ],
   controllers: [
     CandidateApplicationsController,

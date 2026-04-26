@@ -34,20 +34,11 @@ function fillTrendDays(
   rawRows: RawTrendRow[],
   days: number,
 ): { date: string; count: number }[] {
+  // Postgres TO_CHAR đảm bảo r.date luôn là string 'YYYY-MM-DD'
   const map = new Map(
-    rawRows.map((r) => {
-      // Fix lỗi Postgres DATE chuyển thành Object trong NodeJS -> Ép 100% về String
-      const parsedDate = new Date(r.date);
-      // Fallback nếu r.date là string "2026-04-25" thì parse có thể bị lệch múi giờ (nếu không có Z)
-      // nhưng vì postgres trả về Object (có timezone 00:00:00) nên toISOString là an toàn.
-      const dateStr =
-        typeof r.date === 'string' && r.date.match(/^\d{4}-\d{2}-\d{2}$/)
-          ? r.date
-          : parsedDate.toISOString().slice(0, 10);
-
-      return [dateStr, parseInt(r.count, 10)];
-    }),
+    rawRows.map((r) => [String(r.date).slice(0, 10), parseInt(r.count, 10)]),
   );
+
   const result: { date: string; count: number }[] = [];
   const now = new Date();
 
@@ -343,13 +334,13 @@ export class EmployerDashboardService {
   ): Promise<RawTrendRow[]> {
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
-        DATE(ja.created_at AT TIME ZONE 'UTC') AS date,
-        COUNT(*)                               AS count
+        TO_CHAR(ja.applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+        COUNT(*)::text                                          AS count
       FROM job_application ja
       INNER JOIN job j ON j.id = ja.job_id
       WHERE j.company_id = $1
-        AND ja.created_at >= NOW() - ($2 * INTERVAL '1 day')
-      GROUP BY DATE(ja.created_at AT TIME ZONE 'UTC')
+        AND ja.applied_at >= NOW() - ($2 * INTERVAL '1 day')
+      GROUP BY TO_CHAR(ja.applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
       ORDER BY date ASC`,
       [companyId, days],
     );
@@ -463,12 +454,12 @@ export class EmployerDashboardService {
   ): Promise<RawTrendRow[]> {
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
-        DATE(created_at AT TIME ZONE 'UTC') AS date,
-        COUNT(*)                            AS count
+        TO_CHAR(applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+        COUNT(*)::text                                       AS count
       FROM job_application
       WHERE job_id = $1
-        AND created_at >= NOW() - ($2 * INTERVAL '1 day')
-      GROUP BY DATE(created_at AT TIME ZONE 'UTC')
+        AND applied_at >= NOW() - ($2 * INTERVAL '1 day')
+      GROUP BY TO_CHAR(applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
       ORDER BY date ASC`,
       [jobId, days],
     );
