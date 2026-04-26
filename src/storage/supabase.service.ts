@@ -6,12 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-export interface UploadFile {
-  buffer: Buffer;
-  mimetype: string;
-  originalname: string;
-  size: number;
-}
+import { UploadFile } from './interfaces/upload-file.interface';
 
 @Injectable()
 export class SupabaseService {

@@ -9,9 +9,12 @@ import { CandidateSkillsService } from './services/candidate-skills.service';
 import { CandidateCertificatesService } from './services/candidate-certificates.service';
 import { CandidateCvParserService } from './services/candidate-cv-parser.service';
 import { CandidateHeadhuntingService } from './services/candidate-headhunting.service';
+import { CandidateSavedJobsService } from './services/candidate-saved-jobs.service';
 import { CandidateHeadhuntingController } from './candidate-headhunting.controller';
+import { CandidateSavedJobsController } from './candidate-saved-jobs.controller';
 import { CandidateSearchService } from './services/candidate-search.service';
 import { CandidateEntity } from './entities/candidate.entity';
+import { SavedJobEntity } from './entities/saved-job.entity';
 import { WorkExperienceEntity } from './entities/work-experience.entity';
 import { EducationEntity } from './entities/education.entity';
 import { ProjectEntity } from './entities/project.entity';
@@ -23,6 +26,7 @@ import { StorageModule } from '../storage/storage.module';
 import { CandidateJobCategoryEntity } from './entities/candidate-job-category.entity';
 import { JobCategoryMetadataEntity } from '../metadata/job-categories/job-category.entity';
 import { JobTypeMetadataEntity } from '../metadata/job-types/job-type.entity';
+import { JobEntity } from '../jobs/entities/job.entity';
 import { JobInvitationEntity } from '../jobs/entities/job-invitation.entity';
 import { JobApplicationEntity } from '../applications/entities/job-application.entity';
 import { ApplicationStatusHistoryEntity } from '../applications/entities/application-status-history.entity';
@@ -43,6 +47,8 @@ import { ApplicationsModule } from '../applications/applications.module';
       CandidateJobCategoryEntity,
       JobCategoryMetadataEntity,
       JobTypeMetadataEntity,
+      JobEntity,
+      SavedJobEntity,
       JobInvitationEntity,
       JobApplicationEntity,
       ApplicationStatusHistoryEntity,
@@ -60,6 +66,7 @@ import { ApplicationsModule } from '../applications/applications.module';
     CandidateExperienceController,
     CandidateSkillsController,
     CandidateHeadhuntingController,
+    CandidateSavedJobsController,
   ],
   providers: [
     CandidateProfileService,
@@ -69,6 +76,7 @@ import { ApplicationsModule } from '../applications/applications.module';
     CandidateCvParserService,
     CandidateHeadhuntingService,
     CandidateSearchService,
+    CandidateSavedJobsService,
   ],
   exports: [CandidateProfileService, CandidateSearchService],
 })

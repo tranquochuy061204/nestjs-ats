@@ -11,56 +11,15 @@ import { JobEntity } from '../../jobs/entities/job.entity';
 import { DashboardFilterDto } from '../dto/dashboard-filter.dto';
 import { DASHBOARD_CONFIG } from '../../common/constants/dashboard.constant';
 
-// ─── Raw query result types ──────────────────────────────────────────────────
-
-interface RawJobStats {
-  total: string;
-  draft: string;
-  pending: string;
-  published: string;
-  closed: string;
-  rejected: string;
-  expiring_soon: string;
-}
-
-interface RawAppStats {
-  total: string;
-  applied: string;
-  shortlisted: string;
-  skill_test: string;
-  interview: string;
-  offer: string;
-  hired: string;
-  rejected: string;
-  withdrawn: string;
-}
-
-interface RawTrendRow {
-  date: string;
-  count: string;
-}
-
-interface RawHeadhuntingStats {
-  invitations_sent: string;
-  accepted: string;
-  declined: string;
-  pending: string;
-  saved_candidates: string;
-}
-
-interface RawTopJob {
-  job_id: string;
-  title: string;
-  status: string;
-  application_count: string;
-}
-
-interface RawInvitationStats {
-  sent: string;
-  accepted: string;
-  declined: string;
-  pending: string;
-}
+import {
+  RawJobStats,
+  RawAppStats,
+  RawTrendRow,
+  RawFunnelStats,
+  RawHeadhuntingStats,
+  RawTopJob,
+  RawInvitationStats,
+} from '../interfaces/employer-dashboard.interface';
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
@@ -75,7 +34,20 @@ function fillTrendDays(
   rawRows: RawTrendRow[],
   days: number,
 ): { date: string; count: number }[] {
-  const map = new Map(rawRows.map((r) => [r.date, parseInt(r.count, 10)]));
+  const map = new Map(
+    rawRows.map((r) => {
+      // Fix lỗi Postgres DATE chuyển thành Object trong NodeJS -> Ép 100% về String
+      const parsedDate = new Date(r.date);
+      // Fallback nếu r.date là string "2026-04-25" thì parse có thể bị lệch múi giờ (nếu không có Z)
+      // nhưng vì postgres trả về Object (có timezone 00:00:00) nên toISOString là an toàn.
+      const dateStr =
+        typeof r.date === 'string' && r.date.match(/^\d{4}-\d{2}-\d{2}$/)
+          ? r.date
+          : parsedDate.toISOString().slice(0, 10);
+
+      return [dateStr, parseInt(r.count, 10)];
+    }),
+  );
   const result: { date: string; count: number }[] = [];
   const now = new Date();
 
@@ -113,10 +85,11 @@ export class EmployerDashboardService {
     const { companyId, employerId } =
       await this.findEmployerWithCompany(employerUserId);
 
-    const [jobStats, appStats, trendRows, headhunting, topJobs] =
+    const [jobStats, appStats, funnelStats, trendRows, headhunting, topJobs] =
       await Promise.all([
         this.queryJobStats(companyId, dto.expiringSoonDays),
         this.queryAppStats(companyId),
+        this.queryFunnelStats(companyId),
         this.queryTrend(companyId, DASHBOARD_CONFIG.TREND_DAYS),
         this.queryHeadhuntingStats(employerId),
         this.queryTopJobs(companyId),
@@ -153,14 +126,21 @@ export class EmployerDashboardService {
         byStatus,
         conversionRate: {
           appliedToShortlisted: conversionRate(
-            byStatus.shortlisted,
-            byStatus.applied,
+            parseInt(funnelStats.ever_shortlisted, 10),
+            parseInt(funnelStats.total_applied, 10),
           ),
           shortlistedToInterview: conversionRate(
-            byStatus.interview,
-            byStatus.shortlisted,
+            parseInt(funnelStats.ever_interviewed, 10),
+            parseInt(funnelStats.ever_shortlisted, 10),
           ),
-          interviewToHired: conversionRate(byStatus.hired, byStatus.interview),
+          interviewToHired: conversionRate(
+            parseInt(funnelStats.ever_hired, 10),
+            parseInt(funnelStats.ever_interviewed, 10),
+          ),
+          rejectionRate: conversionRate(
+            parseInt(funnelStats.total_rejected, 10),
+            parseInt(funnelStats.total_applied, 10),
+          ),
         },
         trend: {
           last7Days: fillTrendDays(trendRows, DASHBOARD_CONFIG.TREND_DAYS),
@@ -200,8 +180,9 @@ export class EmployerDashboardService {
       );
     }
 
-    const [appStats, trendRows, invStats] = await Promise.all([
+    const [appStats, funnelStats, trendRows, invStats] = await Promise.all([
       this.queryAppStatsByJob(jobId),
+      this.queryFunnelStatsByJob(jobId),
       this.queryTrendByJob(jobId, DASHBOARD_CONFIG.TREND_DAYS),
       this.queryInvitationsByJob(jobId),
     ]);
@@ -230,14 +211,21 @@ export class EmployerDashboardService {
         byStatus,
         conversionRate: {
           appliedToShortlisted: conversionRate(
-            byStatus.shortlisted,
-            byStatus.applied,
+            parseInt(funnelStats.ever_shortlisted, 10),
+            parseInt(funnelStats.total_applied, 10),
           ),
           shortlistedToInterview: conversionRate(
-            byStatus.interview,
-            byStatus.shortlisted,
+            parseInt(funnelStats.ever_interviewed, 10),
+            parseInt(funnelStats.ever_shortlisted, 10),
           ),
-          interviewToHired: conversionRate(byStatus.hired, byStatus.interview),
+          interviewToHired: conversionRate(
+            parseInt(funnelStats.ever_hired, 10),
+            parseInt(funnelStats.ever_interviewed, 10),
+          ),
+          rejectionRate: conversionRate(
+            parseInt(funnelStats.total_rejected, 10),
+            parseInt(funnelStats.total_applied, 10),
+          ),
         },
         trend: {
           last7Days: fillTrendDays(trendRows, DASHBOARD_CONFIG.TREND_DAYS),
@@ -322,20 +310,46 @@ export class EmployerDashboardService {
     );
   }
 
-  /** [Q3] 7-day application trend — GROUP BY DATE */
+  /** [Q3] Funnel Stats Cumulative via history */
+  private async queryFunnelStats(companyId: number): Promise<RawFunnelStats> {
+    const rows = await this.dataSource.query<RawFunnelStats[]>(
+      `SELECT
+        COUNT(DISTINCT ja.id) AS total_applied,
+        COUNT(DISTINCT CASE WHEN ja.status IN ('shortlisted', 'skill_test', 'interview', 'offer', 'hired') OR ah.new_status IN ('shortlisted', 'skill_test', 'interview', 'offer', 'hired') THEN ja.id END) AS ever_shortlisted,
+        COUNT(DISTINCT CASE WHEN ja.status IN ('interview', 'offer', 'hired') OR ah.new_status IN ('interview', 'offer', 'hired') THEN ja.id END) AS ever_interviewed,
+        COUNT(DISTINCT CASE WHEN ja.status = 'hired' OR ah.new_status = 'hired' THEN ja.id END) AS ever_hired,
+        COUNT(DISTINCT CASE WHEN ja.status = 'rejected' OR ah.new_status = 'rejected' THEN ja.id END) AS total_rejected
+      FROM job_application ja
+      INNER JOIN job j ON j.id = ja.job_id
+      LEFT JOIN application_status_history ah ON ah.application_id = ja.id
+      WHERE j.company_id = $1`,
+      [companyId],
+    );
+    return (
+      rows[0] ?? {
+        total_applied: '0',
+        ever_shortlisted: '0',
+        ever_interviewed: '0',
+        ever_hired: '0',
+        total_rejected: '0',
+      }
+    );
+  }
+
+  /** [Q4] 7-day application trend — GROUP BY DATE */
   private async queryTrend(
     companyId: number,
     days: number,
   ): Promise<RawTrendRow[]> {
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
-        DATE(ja.applied_at AT TIME ZONE 'UTC') AS date,
+        DATE(ja.created_at AT TIME ZONE 'UTC') AS date,
         COUNT(*)                               AS count
       FROM job_application ja
       INNER JOIN job j ON j.id = ja.job_id
       WHERE j.company_id = $1
-        AND ja.applied_at >= NOW() - ($2 * INTERVAL '1 day')
-      GROUP BY DATE(ja.applied_at AT TIME ZONE 'UTC')
+        AND ja.created_at >= NOW() - ($2 * INTERVAL '1 day')
+      GROUP BY DATE(ja.created_at AT TIME ZONE 'UTC')
       ORDER BY date ASC`,
       [companyId, days],
     );
@@ -417,19 +431,44 @@ export class EmployerDashboardService {
     );
   }
 
-  /** [Per-Job Q2] Trend for a specific job */
+  /** [Per-Job Q2] Funnel Stats Cumulative via history */
+  private async queryFunnelStatsByJob(jobId: number): Promise<RawFunnelStats> {
+    const rows = await this.dataSource.query<RawFunnelStats[]>(
+      `SELECT
+        COUNT(DISTINCT ja.id) AS total_applied,
+        COUNT(DISTINCT CASE WHEN ja.status IN ('shortlisted', 'skill_test', 'interview', 'offer', 'hired') OR ah.new_status IN ('shortlisted', 'skill_test', 'interview', 'offer', 'hired') THEN ja.id END) AS ever_shortlisted,
+        COUNT(DISTINCT CASE WHEN ja.status IN ('interview', 'offer', 'hired') OR ah.new_status IN ('interview', 'offer', 'hired') THEN ja.id END) AS ever_interviewed,
+        COUNT(DISTINCT CASE WHEN ja.status = 'hired' OR ah.new_status = 'hired' THEN ja.id END) AS ever_hired,
+        COUNT(DISTINCT CASE WHEN ja.status = 'rejected' OR ah.new_status = 'rejected' THEN ja.id END) AS total_rejected
+      FROM job_application ja
+      LEFT JOIN application_status_history ah ON ah.application_id = ja.id
+      WHERE ja.job_id = $1`,
+      [jobId],
+    );
+    return (
+      rows[0] ?? {
+        total_applied: '0',
+        ever_shortlisted: '0',
+        ever_interviewed: '0',
+        ever_hired: '0',
+        total_rejected: '0',
+      }
+    );
+  }
+
+  /** [Per-Job Q3] Trend for a specific job */
   private async queryTrendByJob(
     jobId: number,
     days: number,
   ): Promise<RawTrendRow[]> {
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
-        DATE(applied_at AT TIME ZONE 'UTC') AS date,
+        DATE(created_at AT TIME ZONE 'UTC') AS date,
         COUNT(*)                            AS count
       FROM job_application
       WHERE job_id = $1
-        AND applied_at >= NOW() - ($2 * INTERVAL '1 day')
-      GROUP BY DATE(applied_at AT TIME ZONE 'UTC')
+        AND created_at >= NOW() - ($2 * INTERVAL '1 day')
+      GROUP BY DATE(created_at AT TIME ZONE 'UTC')
       ORDER BY date ASC`,
       [jobId, days],
     );

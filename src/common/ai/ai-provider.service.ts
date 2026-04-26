@@ -16,13 +16,7 @@ const PDF_TEXT_MIN_LENGTH = 50; // ký tự tối thiểu để coi là extract 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface FileData {
-  /** Base64-encoded file content */
-  base64: string;
-  mimeType: string;
-  /** Raw buffer — dùng cho pdf-parse khi Gemini fallback */
-  buffer?: Buffer;
-}
+import { FileData } from './interfaces/file-data.interface';
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 

@@ -31,6 +31,22 @@ export class PublicJobsService {
     return getPaginatedResult(qb, page, limit);
   }
 
+  async getCompanyJobsBySlug(slug: string, filterDto: JobFilterDto) {
+    const { page, limit } = filterDto;
+
+    const qb = this.buildBaseQuery();
+    qb.andWhere('company.slug = :slug', { slug });
+
+    this.applyTextSearch(qb, filterDto);
+    this.applyBasicFilters(qb, filterDto);
+    this.applySalaryFilter(qb, filterDto);
+    this.applySkillFilter(qb, filterDto);
+    this.applyDeadlineFilter(qb, filterDto);
+    this.applySort(qb, filterDto);
+
+    return getPaginatedResult(qb, page, limit);
+  }
+
   async getJobDetail(jobId: number) {
     const job = await this.jobRepository.findOne({
       where: { id: jobId, status: JobStatus.PUBLISHED },

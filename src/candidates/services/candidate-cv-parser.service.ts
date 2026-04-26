@@ -25,27 +25,10 @@ import { AiProviderService } from '../../common/ai/ai-provider.service';
 import { SkillMetadataEntity } from '../../metadata/skills/skill-metadata.entity';
 import { MAX_SKILLS_PER_CANDIDATE } from './candidate-skills.service';
 
-// ─── Internal Types ───────────────────────────────────────────────────────────
-
-/** Raw buffer + metadata của file CV đã fetch từ Supabase */
-interface CvFileData {
-  base64: string;
-  mimeType: string;
-  buffer: Buffer;
-}
-
-/** Kết quả tổng hợp sau khi apply CV vào profile */
-export interface ParseAndApplyResult {
-  message: string;
-  summary: {
-    profileFieldsUpdated: string[];
-    workExperiencesAdded: number;
-    educationsAdded: number;
-    projectsAdded: number;
-    certificatesAdded: number;
-    skillsAdded: number;
-  };
-}
+import {
+  CvFileData,
+  ParseAndApplyResult,
+} from '../interfaces/cv-parser.interface';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

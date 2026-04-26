@@ -13,15 +13,18 @@ import { PublicJobsService } from './services/public-jobs.service';
 import { EmployerJobsService } from './services/employer-jobs.service';
 import { AdminJobsService } from './services/admin-jobs.service';
 import { JobTasksService } from './services/job-tasks.service';
+import { CandidateJobsService } from './services/candidate-jobs.service';
 
 // New Controllers
 import { PublicJobsController } from './controllers/public-jobs.controller';
 import { EmployerJobsController } from './controllers/employer-jobs.controller';
 import { AdminJobsController } from './controllers/admin-jobs.controller';
+import { CandidateJobsController } from './controllers/candidate-jobs.controller';
 
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UserEntity } from '../users/entities/user.entity';
 import { CommonGuardsModule } from '../common/guards/common-guards.module';
+import { CandidateEntity } from '../candidates/entities/candidate.entity';
 
 @Module({
   imports: [
@@ -31,6 +34,7 @@ import { CommonGuardsModule } from '../common/guards/common-guards.module';
       JobStatusHistoryEntity,
       JobInvitationEntity,
       UserEntity,
+      CandidateEntity,
     ]),
     MetadataModule,
     EmployersModule,
@@ -41,6 +45,7 @@ import { CommonGuardsModule } from '../common/guards/common-guards.module';
     PublicJobsController,
     EmployerJobsController,
     AdminJobsController,
+    CandidateJobsController,
   ],
   providers: [
     JobSkillsService,
@@ -48,6 +53,7 @@ import { CommonGuardsModule } from '../common/guards/common-guards.module';
     EmployerJobsService,
     AdminJobsService,
     JobTasksService,
+    CandidateJobsService,
   ],
   exports: [
     PublicJobsService,

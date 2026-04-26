@@ -7,6 +7,7 @@ import { CompanyEntity } from './entities/company.entity';
 import { CompanyImageEntity } from './entities/company-image.entity';
 import { CompanyStatusHistoryEntity } from './entities/company-status-history.entity';
 import { StorageModule } from '../storage/storage.module';
+import { JobsModule } from '../jobs/jobs.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { StorageModule } from '../storage/storage.module';
       CompanyStatusHistoryEntity,
     ]),
     StorageModule,
+    JobsModule,
   ],
   controllers: [CompaniesController, AdminCompaniesController],
   providers: [CompaniesService],

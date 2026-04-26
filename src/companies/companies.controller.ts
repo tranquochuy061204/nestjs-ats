@@ -28,11 +28,17 @@ import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { UserRole } from '../users/entities/user.entity';
 import { CompaniesService } from './companies.service';
 import { UpdateCompanyDto } from './dto/update-company.dto';
+import { PublicJobsService } from '../jobs/services/public-jobs.service';
+import { JobFilterDto } from '../jobs/dto/job-filter.dto';
+import { Query } from '@nestjs/common';
 
 @ApiTags('Companies - Quản lý hồ sơ doanh nghiệp')
 @Controller('companies')
 export class CompaniesController {
-  constructor(private readonly companiesService: CompaniesService) {}
+  constructor(
+    private readonly companiesService: CompaniesService,
+    private readonly publicJobsService: PublicJobsService,
+  ) {}
 
   @Put('profile')
   @ApiAuth()
@@ -173,5 +179,15 @@ export class CompaniesController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy công ty' })
   getCompanyPublicBySlug(@Param('slug') slug: string) {
     return this.companiesService.getCompanyPublicBySlug(slug);
+  }
+
+  @Get('slug/:slug/jobs')
+  @ApiOperation({ summary: 'Lấy danh sách job public của công ty qua Slug' })
+  @ApiResponse({ status: 200, description: 'Danh sách công việc' })
+  getCompanyJobsBySlug(
+    @Param('slug') slug: string,
+    @Query() filterDto: JobFilterDto,
+  ) {
+    return this.publicJobsService.getCompanyJobsBySlug(slug, filterDto);
   }
 }
