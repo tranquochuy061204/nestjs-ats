@@ -2,6 +2,10 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AuthTokenService } from './services/auth-token.service';
+import { AuthRegistrationService } from './services/auth-registration.service';
+import { AuthVerificationService } from './services/auth-verification.service';
+import { AuthPasswordService } from './services/auth-password.service';
 import { UserEntity } from '../users/entities/user.entity';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { CandidatesModule } from '../candidates/candidates.module';
@@ -28,7 +32,21 @@ import { MailModule } from '../mail/mail.module';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy, JwtRefreshStrategy],
-  exports: [AuthService, JwtModule],
+  providers: [
+    AuthService,
+    AuthTokenService,
+    AuthRegistrationService,
+    AuthVerificationService,
+    AuthPasswordService,
+    LocalStrategy,
+    JwtStrategy,
+    JwtRefreshStrategy,
+  ],
+  exports: [
+    AuthService,
+    AuthTokenService,
+    AuthVerificationService,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

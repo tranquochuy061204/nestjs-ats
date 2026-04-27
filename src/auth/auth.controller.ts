@@ -21,6 +21,10 @@ import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { AuthService } from './auth.service';
+import { AuthTokenService } from './services/auth-token.service';
+import { AuthRegistrationService } from './services/auth-registration.service';
+import { AuthVerificationService } from './services/auth-verification.service';
+import { AuthPasswordService } from './services/auth-password.service';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterEmployerDto } from './dto/register-employer.dto';
 import { LoginDto } from './dto/login.dto';
@@ -34,6 +38,10 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly authTokenService: AuthTokenService,
+    private readonly authRegistrationService: AuthRegistrationService,
+    private readonly authVerificationService: AuthVerificationService,
+    private readonly authPasswordService: AuthPasswordService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -47,7 +55,7 @@ export class AuthController {
     @Res({ passthrough: true }) _res: Response,
     @Body() registerDto: RegisterDto,
   ) {
-    return this.authService.register(registerDto);
+    return this.authRegistrationService.register(registerDto);
   }
 
   @Post('employer/register')
@@ -56,7 +64,7 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'Đăng ký thành công' })
   @ApiResponse({ status: 409, description: 'Email đã được sử dụng' })
   async registerEmployer(@Body() dto: RegisterEmployerDto) {
-    return this.authService.registerEmployer(dto);
+    return this.authRegistrationService.registerEmployer(dto);
   }
 
   @Post('login')
@@ -70,21 +78,18 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Email hoặc mật khẩu không đúng' })
   async login(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    // User được lấy từ Passport LocalStrategy
     const user = req.user as UserEntity;
     const result = await this.authService.login(user);
 
-    // Lưu Refresh Token vào Token Table & HttpOnly Cookie
-    await this.authService.storeRefreshToken(
+    await this.authTokenService.storeRefreshToken(
       user.id,
       result.refresh_token,
       result.jti,
       req.headers['user-agent'],
       req.ip,
     );
-    this.authService.setRefreshTokenCookie(res, result.refresh_token);
+    this.authTokenService.setRefreshTokenCookie(res, result.refresh_token);
 
-    // Loại bỏ refresh_token khỏi Body trả về (đã nằm trong cookie)
     return {
       access_token: result.access_token,
       user: result.user,
@@ -107,14 +112,14 @@ export class AuthController {
   ) {
     const result = await this.authService.loginAdmin(loginDto);
 
-    await this.authService.storeRefreshToken(
+    await this.authTokenService.storeRefreshToken(
       result.user.id,
       result.refresh_token,
       result.jti,
       req.headers['user-agent'],
       req.ip,
     );
-    this.authService.setRefreshTokenCookie(res, result.refresh_token);
+    this.authTokenService.setRefreshTokenCookie(res, result.refresh_token);
 
     return {
       access_token: result.access_token,
@@ -136,7 +141,7 @@ export class AuthController {
       throw new UnauthorizedException('No refresh token provided');
     }
 
-    const tokens = await this.authService.refreshTokens(
+    const tokens = await this.authTokenService.refreshTokens(
       id,
       user.jti,
       refreshToken,
@@ -144,7 +149,7 @@ export class AuthController {
       req.ip,
     );
 
-    this.authService.setRefreshTokenCookie(res, tokens.refresh_token);
+    this.authTokenService.setRefreshTokenCookie(res, tokens.refresh_token);
     return { access_token: tokens.access_token };
   }
 
@@ -157,8 +162,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { id, jti } = user;
-    await this.authService.logout(id, jti);
-    this.authService.clearRefreshTokenCookie(res);
+    await this.authTokenService.logout(id, jti);
+    this.authTokenService.clearRefreshTokenCookie(res);
     return { message: 'Logged out successfully' };
   }
 
@@ -167,7 +172,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Kiểm tra trạng thái đăng nhập' })
   @ApiResponse({ status: 200, description: 'Trả về thông tin user hiện tại' })
   async getStatus(@CurrentUser() user: Record<string, unknown>) {
-    const isVerified = await this.authService.checkEmailVerified(
+    const isVerified = await this.authVerificationService.checkEmailVerified(
       Number(user.id),
     );
     return {
@@ -176,16 +181,12 @@ export class AuthController {
     };
   }
 
-  // -----------------------------------------------------------------------
-  // ACCOUNT MANAGEMENT (PHASE 2)
-  // -----------------------------------------------------------------------
-
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Yêu cầu gửi mã đặt lại mật khẩu' })
   @ApiResponse({ status: 200, description: 'Đã gửi mã xác minh (nếu có)' })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
+    return this.authPasswordService.forgotPassword(dto);
   }
 
   @Post('reset-password')
@@ -194,7 +195,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Cập nhật mật khẩu thành công' })
   @ApiResponse({ status: 400, description: 'Mã xác nhận sai hoặc hết hạn' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
+    return this.authPasswordService.resetPassword(dto);
   }
 
   @Patch('change-password')
@@ -207,7 +208,7 @@ export class AuthController {
     @CurrentUser() user: { id: number },
     @Body() dto: ChangePasswordDto,
   ) {
-    return this.authService.changePassword(user.id, dto);
+    return this.authPasswordService.changePassword(user.id, dto);
   }
 
   @Post('logout-all')
@@ -216,12 +217,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Đăng xuất khỏi tất cả thiết bị' })
   @ApiResponse({ status: 200, description: 'Đã force logout mọi phiên' })
   async logoutAll(@CurrentUser() user: { id: number }) {
-    return this.authService.logoutAllDevices(user.id);
+    return this.authTokenService.logoutAllDevices(user.id);
   }
-
-  // -----------------------------------------------------------------------
-  // EMAIL VERIFICATION
-  // -----------------------------------------------------------------------
 
   @Get('verify-email')
   @ApiOperation({ summary: 'Xác thực email qua token (click link từ email)' })
@@ -234,7 +231,7 @@ export class AuthController {
       if (!token || !/^[a-f0-9]{64}$/.test(token)) {
         throw new BadRequestException('Mã xác thực không đúng định dạng');
       }
-      await this.authService.verifyEmail(token);
+      await this.authVerificationService.verifyEmail(token);
       return res.redirect(`${frontendUrl}/verify-email?status=success`);
     } catch {
       return res.redirect(`${frontendUrl}/verify-email?status=error`);
@@ -248,6 +245,6 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Email xác thực đã được gửi lại' })
   @ApiResponse({ status: 400, description: 'Email đã được xác thực rồi' })
   resendVerification(@CurrentUser() user: { id: number }) {
-    return this.authService.resendVerificationEmail(user.id);
+    return this.authVerificationService.resendVerificationEmail(user.id);
   }
 }

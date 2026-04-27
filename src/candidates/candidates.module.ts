@@ -8,6 +8,8 @@ import { CandidateExperienceService } from './services/candidate-experience.serv
 import { CandidateSkillsService } from './services/candidate-skills.service';
 import { CandidateCertificatesService } from './services/candidate-certificates.service';
 import { CandidateCvParserService } from './services/candidate-cv-parser.service';
+import { CandidateCvAiExtractorService } from './services/candidate-cv-ai-extractor.service';
+import { CandidateCvImporterService } from './services/candidate-cv-importer.service';
 import { CandidateHeadhuntingService } from './services/candidate-headhunting.service';
 import { CandidateSavedJobsService } from './services/candidate-saved-jobs.service';
 import { CandidateHeadhuntingController } from './candidate-headhunting.controller';
@@ -73,6 +75,8 @@ import { ApplicationsModule } from '../applications/applications.module';
     CandidateExperienceService,
     CandidateSkillsService,
     CandidateCertificatesService,
+    CandidateCvAiExtractorService,
+    CandidateCvImporterService,
     CandidateCvParserService,
     CandidateHeadhuntingService,
     CandidateSearchService,
