@@ -241,6 +241,11 @@ export class PaymentsService {
   private getClientIp(req: Request): string {
     const forwarded = req.headers['x-forwarded-for'];
     if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
-    return req.socket?.remoteAddress ?? '127.0.0.1';
+    const addr = req.socket?.remoteAddress ?? '127.0.0.1';
+    // Normalize IPv6 loopback ::1 → 127.0.0.1 (VNPay không chấp nhận IPv6)
+    if (addr === '::1' || addr === '::ffff:127.0.0.1') return '127.0.0.1';
+    // Map-dạng IPv6 ::ffff:x.x.x.x → lấy phần IPv4
+    if (addr.startsWith('::ffff:')) return addr.substring(7);
+    return addr;
   }
 }
