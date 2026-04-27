@@ -114,16 +114,19 @@ export class VnpayService {
       }, {});
   }
 
-  /** Format: YYYYMMDDHHmmss */
+  /** Format: YYYYMMDDHHmmss theo chuẩn GMT+7 (Asia/Ho_Chi_Minh) */
   private formatDate(date: Date): string {
+    // Force múi giờ GMT+7 tránh lỗi khi Deploy lên server UTC (như Render / AWS)
+    const gmt7Date = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    
     const pad = (n: number) => String(n).padStart(2, '0');
     return (
-      String(date.getFullYear()) +
-      pad(date.getMonth() + 1) +
-      pad(date.getDate()) +
-      pad(date.getHours()) +
-      pad(date.getMinutes()) +
-      pad(date.getSeconds())
+      String(gmt7Date.getFullYear()) +
+      pad(gmt7Date.getMonth() + 1) +
+      pad(gmt7Date.getDate()) +
+      pad(gmt7Date.getHours()) +
+      pad(gmt7Date.getMinutes()) +
+      pad(gmt7Date.getSeconds())
     );
   }
 }
