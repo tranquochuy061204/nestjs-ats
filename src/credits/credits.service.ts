@@ -7,7 +7,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { CreditWalletEntity } from './entities/credit-wallet.entity';
-import { CreditTransactionEntity, CreditTransactionType } from './entities/credit-transaction.entity';
+import {
+  CreditTransactionEntity,
+  CreditTransactionType,
+} from './entities/credit-transaction.entity';
 import { CreditProductEntity } from './entities/credit-product.entity';
 import { CreditPurchaseLogEntity } from './entities/credit-purchase-log.entity';
 import { JobEntity } from '../jobs/entities/job.entity';
@@ -24,9 +27,9 @@ export interface ChargeCreditOptions {
  * Bảng nạp Credit — số Credit và bonus
  */
 const CREDIT_TOPUP_PACKS = [
-  { id: 'starter',    creditBase: 100,  bonus: 0,    priceVnd: 100_000 },
-  { id: 'plus',       creditBase: 500,  bonus: 50,   priceVnd: 450_000 },
-  { id: 'pro',        creditBase: 1000, bonus: 200,  priceVnd: 800_000 },
+  { id: 'starter', creditBase: 100, bonus: 0, priceVnd: 100_000 },
+  { id: 'plus', creditBase: 500, bonus: 50, priceVnd: 450_000 },
+  { id: 'pro', creditBase: 1000, bonus: 200, priceVnd: 800_000 },
   { id: 'enterprise', creditBase: 5000, bonus: 1500, priceVnd: 3_500_000 },
 ] as const;
 
@@ -80,7 +83,8 @@ export class CreditsService {
     amount: number,
     options: ChargeCreditOptions,
   ): Promise<CreditTransactionEntity> {
-    if (amount <= 0) throw new BadRequestException('Credit amount must be positive');
+    if (amount <= 0)
+      throw new BadRequestException('Credit amount must be positive');
 
     return this.dataSource.transaction(async (manager) => {
       // Pessimistic write lock
@@ -203,38 +207,105 @@ export class CreditsService {
       }
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      // Trừ Credit
-      const wallet = await manager
-        .getRepository(CreditWalletEntity)
-        .createQueryBuilder('w')
-        .setLock('pessimistic_write')
-        .where('w.company_id = :companyId', { companyId })
-        .getOne();
+    // ── [BumpQuota FIX] Kiểm tra quota đẩy tin miễn phí cho VIP ──
+    // Dùng raw query tránh circular dependency với SubscriptionsModule
+    let usedFreeBumpQuota = false;
+    if (slug === 'bump_post') {
+      const rows = await this.dataSource.query<
+        {
+          used_bump_post_quota: number;
+          bump_post_quota: number;
+          subscription_id: number;
+        }[]
+      >(
+        `SELECT cs.id AS subscription_id,
+                cs.used_bump_post_quota,
+                sp.bump_post_quota
+         FROM company_subscription cs
+         JOIN subscription_package sp ON sp.id = cs.package_id
+         WHERE cs.company_id = $1 AND cs.status = 'active'
+         ORDER BY cs.created_at DESC
+         LIMIT 1`,
+        [companyId],
+      );
 
-      if (!wallet) throw new NotFoundException('Credit wallet not found');
-      if (wallet.balance < product.creditCost) {
-        throw new BadRequestException(
-          `Không đủ Credit (cần ${product.creditCost}, hiện có ${wallet.balance})`,
-        );
+      if (rows.length) {
+        const { used_bump_post_quota, bump_post_quota, subscription_id } =
+          rows[0];
+        if (bump_post_quota > 0 && used_bump_post_quota < bump_post_quota) {
+          // Còn lượt miễn phí — tăng counter, không trừ Credit
+          await this.dataSource.query(
+            `UPDATE company_subscription
+             SET used_bump_post_quota = used_bump_post_quota + 1
+             WHERE id = $1`,
+            [subscription_id],
+          );
+          usedFreeBumpQuota = true;
+          this.logger.log(
+            `bump_post: used free quota for company=${companyId} ` +
+              `(${used_bump_post_quota + 1}/${bump_post_quota})`,
+          );
+        }
       }
+    }
+    // ─────────────────────────────────────────────────────────────
 
-      wallet.balance -= product.creditCost;
-      wallet.totalSpent += product.creditCost;
-      await manager.save(CreditWalletEntity, wallet);
+    return this.dataSource.transaction(async (manager) => {
+      let creditSpent = product.creditCost;
 
-      // Ghi transaction
-      const tx = manager.create(CreditTransactionEntity, {
-        walletId: wallet.id,
-        type: CreditTransactionType.PURCHASE,
-        amount: -product.creditCost,
-        balanceAfter: wallet.balance,
-        description: `Mua: ${product.displayName}`,
-        referenceType: 'credit_product',
-        referenceId: product.id,
-        createdBy: userId ?? null,
-      });
-      await manager.save(CreditTransactionEntity, tx);
+      if (!usedFreeBumpQuota) {
+        // Trừ Credit bình thường
+        const wallet = await manager
+          .getRepository(CreditWalletEntity)
+          .createQueryBuilder('w')
+          .setLock('pessimistic_write')
+          .where('w.company_id = :companyId', { companyId })
+          .getOne();
+
+        if (!wallet) throw new NotFoundException('Credit wallet not found');
+        if (wallet.balance < product.creditCost) {
+          throw new BadRequestException(
+            `Không đủ Credit (cần ${product.creditCost}, hiện có ${wallet.balance}). ` +
+              `Lưu ý: Gói VIP được tặng ${product.creditCost > 0 ? 'quota bump miễn phí hàng tháng' : ''}.`,
+          );
+        }
+
+        wallet.balance -= product.creditCost;
+        wallet.totalSpent += product.creditCost;
+        await manager.save(CreditWalletEntity, wallet);
+
+        const tx = manager.create(CreditTransactionEntity, {
+          walletId: wallet.id,
+          type: CreditTransactionType.PURCHASE,
+          amount: -product.creditCost,
+          balanceAfter: wallet.balance,
+          description: `Mua: ${product.displayName}`,
+          referenceType: 'credit_product',
+          referenceId: product.id,
+          createdBy: userId ?? null,
+        });
+        await manager.save(CreditTransactionEntity, tx);
+      } else {
+        // Dùng free bump quota — ghi transaction 0 Credit để audit trail
+        creditSpent = 0;
+        const wallet = await manager
+          .getRepository(CreditWalletEntity)
+          .findOne({ where: { companyId } });
+
+        if (wallet) {
+          const tx = manager.create(CreditTransactionEntity, {
+            walletId: wallet.id,
+            type: CreditTransactionType.PURCHASE,
+            amount: 0,
+            balanceAfter: wallet.balance,
+            description: `Mua: ${product.displayName} (Miễn phí — VIP Quota)`,
+            referenceType: 'credit_product',
+            referenceId: product.id,
+            createdBy: userId ?? null,
+          });
+          await manager.save(CreditTransactionEntity, tx);
+        }
+      }
 
       // Ghi purchase log
       const expiresAt = product.durationDays
@@ -244,7 +315,7 @@ export class CreditsService {
       const log = manager.create(CreditPurchaseLogEntity, {
         companyId,
         productId: product.id,
-        creditSpent: product.creditCost,
+        creditSpent,
         targetJobId: targetJobId ?? null,
         activatedAt: new Date(),
         expiresAt,
@@ -281,7 +352,9 @@ export class CreditsService {
           isBumped: true,
           bumpedUntil: expiresAt,
         });
-        this.logger.log(`bump_post applied: job=${targetJobId} until=${expiresAt?.toISOString()}`);
+        this.logger.log(
+          `bump_post applied: job=${targetJobId} until=${expiresAt?.toISOString()}`,
+        );
         break;
       }
 
@@ -315,7 +388,9 @@ export class CreditsService {
       case 'extra_job_slot': {
         // extra_job_slot không cần mutate entity.
         // Slot thêm được tính bằng đếm active purchase_log tại checkJobSlotLock().
-        this.logger.log(`extra_job_slot purchased for company (tracked via purchase_log)`);
+        this.logger.log(
+          `extra_job_slot purchased for company (tracked via purchase_log)`,
+        );
         break;
       }
 

@@ -29,6 +29,7 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { CreditsService } from '../credits/credits.service';
 import { CreditTransactionType } from '../credits/entities/credit-transaction.entity';
 import { JobProfileViewEntity } from '../subscriptions/entities/job-profile-view.entity';
+import { CandidateApplicationsService } from './candidate-applications.service';
 
 @Injectable()
 export class EmployerApplicationsService {
@@ -56,6 +57,7 @@ export class EmployerApplicationsService {
     private readonly configService: ConfigService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly creditsService: CreditsService,
+    private readonly candidateApplicationsService: CandidateApplicationsService,
   ) {}
 
   async getJobApplications(
@@ -553,5 +555,49 @@ export class EmployerApplicationsService {
       );
     }
     return employer as EmployerEntity & { companyId: number };
+  }
+
+  /**
+   * Cho phép nhà tuyển dụng (Gói Free) chủ động mua lượt chấm điểm AI bằng Credit.
+   */
+  async manuallyTriggerAiScoring(employerUserId: number, applicationId: number) {
+    const employer = await this.findEmployerByUserId(employerUserId);
+
+    const application = await this.applicationRepo.findOne({
+      where: { id: applicationId },
+      relations: ['job'],
+    });
+
+    if (!application || application.job.companyId !== employer.companyId) {
+      throw new NotFoundException(
+        'Đơn ứng tuyển không tồn tại hoặc không thuộc công ty của bạn',
+      );
+    }
+
+    if (
+      application.status === (ApplicationStatus.WITHDRAWN as string) ||
+      application.status === (ApplicationStatus.REJECTED as string)
+    ) {
+      throw new BadRequestException('Không thể phân tích AI cho đơn ứng tuyển đã bị rút hoặc từ chối');
+    }
+
+    // 1. Phải nạp credit và trừ tiền
+    // 'ai_scoring' là product có type 'job'. Do đó cần tryền targetJobId (chính là jobId chứa app này)
+    await this.creditsService.purchaseProduct(
+      employer.companyId,
+      'ai_scoring',
+      application.job.id, // targetJobId, dùng cho mục đích logging
+      employerUserId, // userId
+    );
+
+    // 2. Trigger AI scoring
+    // Vì calculation tốn thời gian, fire-and-forget (không await).
+    void this.candidateApplicationsService.calculateAiMatchScore(application.id);
+
+    return {
+      message:
+        'Đã mua lượt phân tích AI thành công. Hệ thống đang xử lý ngầm, vui lòng tải lại trang sau ít phút.',
+      applicationId,
+    };
   }
 }

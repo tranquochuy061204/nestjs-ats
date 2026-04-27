@@ -1,19 +1,34 @@
 export const CANDIDATE_MATCH_SCORE_PROMPT = (
   jobData: Record<string, any>,
   candidateData: Record<string, any>,
-) => `You are an expert recruiter and headhunter. Your task is to read the provided Job Description and Candidate Profile, then calculate a suitability match score on a scale of 0 to 100 based on the following formula:
-- Total Years of Experience vs Required (Weight 20%)
-- Skills & Requirements match (Weight 30%)
-- Related Work Experience (Weight 30%)
-- Related Projects (Weight 10%)
-- Related Certificates (Weight 10%)
+) => `Bạn là một Chuyên gia Tuyển dụng (Headhunter/Talent Acquisition) cấp cao. Nhiệm vụ của bạn là phân tích Hồ sơ ứng viên (Profile) bên dưới và so sánh với Bản mô tả công việc (Job Description) để chấm điểm phù hợp (score) từ 0 đến 100.
 
-Carefully calculate the score for each section and sum them up. Return ONLY a valid JSON object matching the exact format below (DO NOT include markdown blocks like \`\`\`json):
-{ "matchScore": <integer total score from 0-100>, "reasoning": "<Brief explanation of the score>" }
+Công thức tính điểm (Weighting):
+- Số năm kinh nghiệm so với yêu cầu (20%)
+- Mức độ khớp Kỹ năng & Yêu cầu công việc (30%)
+- Chất lượng Kinh nghiệm làm việc liên quan (30%)
+- Dự án liên quan (10%)
+- Bằng cấp/Chứng chỉ liên quan (10%)
 
-JOB DATA:
+Hãy trả về DUY NHẤT một chuỗi JSON hợp lệ (không chứa thẻ markdown \`\`\`json bao bọc) với cấu trúc sau:
+{ 
+  "matchScore": <tổng điểm số nguyên từ 0 đến 100>, 
+  "reasoning": "<Đoạn văn bản định dạng Markdown cao cấp (viết bằng Tiếng Việt)>" 
+}
+
+Yêu cầu BẮT BUỘC cho trường "reasoning":
+- Viết bằng Tiếng Việt chuẩn, văn phong chuyên nghiệp của chuyên gia nhân sự.
+- Dùng Markdown Heading (\`###\`), Bullet List (\`-\`), in đậm (\`**\`) và Emoji để báo cáo thật sinh động, cao cấp.
+- Cấu trúc bản báo cáo phải gồm:
+  1. ### 🎯 Nhận định nhanh: Tổng quan về profile này so với yêu cầu.
+  2. ### ⚖️ Đánh giá chi tiết (Pros & Cons):
+     - 📍 **Điểm sáng**: Các kỹ năng/kinh nghiệm ứng viên đáp ứng xuất sắc nhất.
+     - ⚠️ **Lỗ hổng (Gaps)**: Các điểm yếu, sự thiếu sót về số năm làm việc, hoặc kỹ năng chưa khớp.
+  3. ### 💡 Chiến thuật phỏng vấn: Gợi ý 1-2 câu hỏi sắc bén giúp Nhà tuyển dụng kiểm chứng năng lực thật sự của ứng viên đối với những điểm còn yếu.
+
+--- DỮ LIỆU CÔNG VIỆC (JOB DESCRIPTION) ---
 ${JSON.stringify(jobData, null, 2)}
 
-CANDIDATE DATA:
+--- DỮ LIỆU HỒ SƠ ỨNG VIÊN (CANDIDATE DATA) ---
 ${JSON.stringify(candidateData, null, 2)}
 `;

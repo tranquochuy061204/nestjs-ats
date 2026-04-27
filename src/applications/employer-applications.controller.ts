@@ -149,4 +149,26 @@ export class EmployerApplicationsController {
     const user = req.user as { id: number };
     return this.applicationsService.updateNote(user.id, noteId, dto);
   }
+
+  @Post(':id/ai-analyze')
+  @ApiAuth(UserRole.EMPLOYER)
+  @ApiOperation({
+    summary: 'Phân tích ứng viên bằng AI (Tính phí Credit đối với Gói Free)',
+    description:
+      'Gói Free phải dùng Credit mua sản phẩm ai_scoring. Gói VIP tự động được phân tích miễn phí ngay khi nộp đơn.',
+  })
+  @ApiParam({ name: 'id', description: 'ID đơn ứng tuyển' })
+  @ApiResponse({
+    status: 201,
+    description: 'Đã mua lượt phân tích thành công và đang xử lý ngầm',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Không đủ Credit, hoặc Đơn ứng tuyển đã bị rút/từ chối',
+  })
+  @ApiResponse({ status: 404, description: 'Đơn ứng tuyển không tồn tại' })
+  aiAnalyze(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    const user = req.user as { id: number };
+    return this.applicationsService.manuallyTriggerAiScoring(user.id, id);
+  }
 }
