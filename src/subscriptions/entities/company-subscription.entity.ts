@@ -36,11 +36,11 @@ export class CompanySubscriptionEntity {
   })
   status: string;
 
-  @Column({ name: 'start_date', type: 'timestamp' })
+  @Column({ name: 'start_date', type: 'timestamptz' })
   startDate: Date;
 
   /** NULL cho Free (vĩnh viễn) */
-  @Column({ name: 'end_date', type: 'timestamp', nullable: true })
+  @Column({ name: 'end_date', type: 'timestamptz', nullable: true })
   endDate: Date | null;
 
   // ── Usage Tracking ────────────────────────────────────────
@@ -57,7 +57,7 @@ export class CompanySubscriptionEntity {
   dailyProcessedDate: string | null;
 
   /** Timestamp đăng tin gần nhất — để enforce lock 7 ngày cho Free */
-  @Column({ name: 'last_job_published_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'last_job_published_at', type: 'timestamptz', nullable: true })
   lastJobPublishedAt: Date | null;
 
   // ── Headhunting Usage ─────────────────────────────────────
@@ -65,7 +65,7 @@ export class CompanySubscriptionEntity {
   @Column({ name: 'headhunting_views_used', type: 'int', default: 0 })
   headhuntingViewsUsed: number;
 
-  @Column({ name: 'headhunting_views_reset_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'headhunting_views_reset_at', type: 'timestamptz', nullable: true })
   headhuntingViewsResetAt: Date | null;
 
   // ── Pipeline Proceed Usage ────────────────────────────────
@@ -75,13 +75,13 @@ export class CompanySubscriptionEntity {
   usedFreeProceeds: number;
 
   /** Thời điểm reset proceed counter (đầu mỗi tháng) */
-  @Column({ name: 'proceeds_reset_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'proceeds_reset_at', type: 'timestamptz', nullable: true })
   proceedsResetAt: Date | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 
   // ── Relations ─────────────────────────────────────────────

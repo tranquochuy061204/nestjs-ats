@@ -56,7 +56,7 @@ export class CreditTransactionEntity {
   @Column({ name: 'created_by', type: 'int', nullable: true })
   createdBy: number | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
   @ManyToOne(() => CreditWalletEntity)

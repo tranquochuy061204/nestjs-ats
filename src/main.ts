@@ -1,12 +1,14 @@
+import 'dotenv/config';
 import cookieParser from 'cookie-parser';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Cấu hình CORS để cho phép Cookies
   const corsOrigin = process.env.CORS_ORIGIN;
@@ -16,8 +18,7 @@ async function bootstrap() {
   });
 
   // Tin tưởng Proxy để lấy đúng Client IP (quan trọng cho các cổng thanh toán)
-  const expressApp = app.getHttpAdapter().getInstance();
-  (expressApp as any).set('trust proxy', true);
+  app.set('trust proxy', true);
 
   // Sử dụng cookie-parser để đọc cookie từ request
   app.use(cookieParser());

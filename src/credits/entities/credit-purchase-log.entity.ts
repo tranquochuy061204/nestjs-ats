@@ -30,14 +30,14 @@ export class CreditPurchaseLogEntity {
   @Column({ name: 'target_job_id', type: 'int', nullable: true })
   targetJobId: number | null;
 
-  @Column({ name: 'activated_at', type: 'timestamp', default: () => 'now()' })
+  @Column({ name: 'activated_at', type: 'timestamptz', default: () => 'now()' })
   activatedAt: Date;
 
   /** null = không hết hạn */
-  @Column({ name: 'expires_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })
   expiresAt: Date | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
   @ManyToOne(() => CompanyEntity)
