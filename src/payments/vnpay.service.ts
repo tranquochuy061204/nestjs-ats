@@ -25,12 +25,18 @@ export class VnpayService {
   private readonly paymentUrl: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.tmnCode = this.configService.get<string>('VNPAY_TMN_CODE', '');
-    this.hashSecret = this.configService.get<string>('VNPAY_HASH_SECRET', '');
-    this.paymentUrl = this.configService.get<string>(
-      'VNPAY_PAYMENT_URL',
-      'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
-    );
+    this.tmnCode = (
+      this.configService.get<string>('VNPAY_TMN_CODE', '') || ''
+    ).trim();
+    this.hashSecret = (
+      this.configService.get<string>('VNPAY_HASH_SECRET', '') || ''
+    ).trim();
+    this.paymentUrl = (
+      this.configService.get<string>(
+        'VNPAY_PAYMENT_URL',
+        'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
+      ) || ''
+    ).trim();
   }
 
   /**
@@ -51,7 +57,7 @@ export class VnpayService {
       vnp_CurrCode: 'VND',
       vnp_TxnRef: params.orderId,
       vnp_OrderInfo: params.orderInfo,
-      vnp_OrderType: params.orderType ?? 'other',
+      vnp_OrderType: params.orderType ?? '190000', // 190000: Mã loại hàng hóa - Thực phẩm - Tiêu dùng (phổ biến nhất)
       vnp_Amount: String(Math.round(params.amount) * 100),
       vnp_ReturnUrl: params.returnUrl,
       vnp_IpAddr: params.ipAddr,
@@ -61,21 +67,15 @@ export class VnpayService {
 
     const sortedParams = this.sortObject(vnpParams);
 
-    // VNPay yêu cầu nối chuỗi đã encode thủ công thay vì dùng URLSearchParams
+    // Chuỗi data để băm chữ ký (không chứa vnp_SecureHash)
     const signData = Object.entries(sortedParams)
       .map(([key, val]) => `${key}=${val}`)
       .join('&');
 
     const secureHash = this.hmacSHA512(this.hashSecret, signData);
-    vnpParams['vnp_SecureHash'] = secureHash;
 
-    // Chuỗi query params cuối cùng trả về browser (URLSearchParams vẫn xài được vì browser tương thích)
-    // Nhưng để chuẩn 100% giống checksum, ta tự join để redirect
-    const queryString = Object.entries(this.sortObject(vnpParams))
-      .map(([key, val]) => `${key}=${val}`)
-      .join('&');
-
-    return `${this.paymentUrl}?${queryString}`;
+    // Chuỗi query params cho URL redirect (SecureHash phải ở cuối)
+    return `${this.paymentUrl}?${signData}&vnp_SecureHash=${secureHash}`;
   }
 
   /**
@@ -130,8 +130,7 @@ export class VnpayService {
   }
 
   /**
-   * Thuật toán sort object độc quyền theo tài liệu VNPay Node.js
-   * Encode params sang dạng RFC3986 (space thành +, URL encode cả dấu ngoặc)
+   * Thuật toán sort object khớp 100% với file demo của VNPay
    */
   private sortObject(obj: Record<string, string>): Record<string, string> {
     const sorted: Record<string, string> = {};
@@ -139,15 +138,8 @@ export class VnpayService {
 
     for (const key of keys) {
       if (obj[key] !== undefined && obj[key] !== null) {
-        // VNPay / Java string encoder khác Node.js encodeURIComponent ở chỗ
-        const value = encodeURIComponent(String(obj[key]))
-          .replace(/%20/g, '+')
-          .replace(/!/g, '%21')
-          .replace(/'/g, '%27')
-          .replace(/\(/g, '%28')
-          .replace(/\)/g, '%29')
-          .replace(/\*/g, '%2A');
-
+        // Chỉ encode và đổi %20 thành + như trong file demo line 315
+        const value = encodeURIComponent(String(obj[key])).replace(/%20/g, '+');
         sorted[key] = value;
       }
     }

@@ -8,9 +8,11 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Res,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as express from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { Request } from 'express';
 import { PaymentsService } from './payments.service';
 import type { TopupPackId } from '../credits/credits.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
@@ -37,6 +39,7 @@ class CreateCreditTopupDto {
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
+    private readonly configService: ConfigService,
     @InjectRepository(EmployerEntity)
     private readonly employerRepo: Repository<EmployerEntity>,
   ) {}
@@ -48,7 +51,7 @@ export class PaymentsController {
   @Roles(UserRole.EMPLOYER)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Tạo đơn hàng mua gói VIP qua VNPay' })
-  async createVipOrder(@Req() req: Request & { user: { id: number } }) {
+  async createVipOrder(@Req() req: express.Request & { user: { id: number } }) {
     const companyId = await this.getCompanyId(req.user.id);
     return this.paymentsService.createVipOrder(companyId, req);
   }
@@ -61,7 +64,7 @@ export class PaymentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Tạo đơn hàng nạp Credit qua VNPay' })
   async createCreditTopupOrder(
-    @Req() req: Request & { user: { id: number } },
+    @Req() req: express.Request & { user: { id: number } },
     @Body() dto: CreateCreditTopupDto,
   ) {
     const companyId = await this.getCompanyId(req.user.id);
@@ -76,8 +79,23 @@ export class PaymentsController {
 
   @Get('vnpay/return')
   @ApiOperation({ summary: 'VNPay return URL — hiển thị kết quả thanh toán' })
-  vnpayReturn(@Query() query: Record<string, string>) {
-    return this.paymentsService.verifyReturnUrl(query);
+  async vnpayReturn(
+    @Query() query: Record<string, string>,
+    @Res() res: express.Response,
+  ) {
+    const result = await this.paymentsService.processReturnUrl(query);
+    const frontendUrl = this.configService.get<string>(
+      'FRONTEND_URL',
+      'http://localhost:5173',
+    );
+
+    // Redirect về trang kết quả thanh toán của FE (React/Next.js)
+    const redirectUrl = new URL(`${frontendUrl}/payment/result`);
+    redirectUrl.searchParams.set('success', result.success.toString());
+    redirectUrl.searchParams.set('orderId', result.orderId || '');
+    redirectUrl.searchParams.set('message', result.message);
+
+    return res.redirect(redirectUrl.toString());
   }
 
   // ── VNPay IPN (server-to-server callback) ────────────

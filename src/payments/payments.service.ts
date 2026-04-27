@@ -55,11 +55,14 @@ export class PaymentsService {
     const txnRef = `VIP-${order.id}-${Date.now()}`;
     await this.orderRepo.update(order.id, { gatewayOrderId: txnRef });
 
-    const returnUrl = `${this.configService.get('APP_URL')}/api/payments/vnpay/return`;
+    const backendUrl =
+      this.configService.get<string>('BACKEND_URL') ||
+      this.configService.get<string>('APP_URL');
+    const returnUrl = `${backendUrl}/api/payments/vnpay/return`;
     const paymentUrl = this.vnpayService.createPaymentUrl({
       orderId: txnRef,
       amount,
-      orderInfo: `Mua goi VIP 30 ngay - Cong ty ID ${companyId}`,
+      orderInfo: `Thanh toan VIP 30 ngay - CT ${companyId}`,
       returnUrl,
       ipAddr: this.getClientIp(req),
     });
@@ -96,11 +99,14 @@ export class PaymentsService {
     const txnRef = `CR-${pack.id}-${order.id}-${Date.now()}`;
     await this.orderRepo.update(order.id, { gatewayOrderId: txnRef });
 
-    const returnUrl = `${this.configService.get('APP_URL')}/api/payments/vnpay/return`;
+    const backendUrl =
+      this.configService.get<string>('BACKEND_URL') ||
+      this.configService.get<string>('APP_URL');
+    const returnUrl = `${backendUrl}/api/payments/vnpay/return`;
     const paymentUrl = this.vnpayService.createPaymentUrl({
       orderId: txnRef,
       amount: pack.priceVnd,
-      orderInfo: `Nap ${totalCredit} Credit (${packId}) - Cong ty ID ${companyId}`,
+      orderInfo: `Nap ${totalCredit} Credit - CT ${companyId}`,
       returnUrl,
       ipAddr: this.getClientIp(req),
     });
@@ -181,26 +187,84 @@ export class PaymentsService {
 
   /**
    * Xử lý Return URL (user redirect về sau thanh toán).
-   * Chỉ dùng để verify & hiển thị kết quả cho user.
+   * Vừa xác thực chữ ký, vừa cập nhật DB nếu IPN chưa kịp gọi (dành cho localhost/dev).
    */
-  verifyReturnUrl(query: Record<string, string>): {
+  async processReturnUrl(query: Record<string, string>): Promise<{
     success: boolean;
     message: string;
     orderId?: string;
-  } {
+  }> {
+    // 1. Verify chữ ký
     if (!this.vnpayService.verifyReturnUrl(query)) {
+      this.logger.error('VNPay Return: Invalid signature');
       return { success: false, message: 'Chữ ký không hợp lệ' };
     }
 
-    const success = this.vnpayService.isSuccessResponse(
-      query['vnp_ResponseCode'],
-    );
+    const txnRef = query['vnp_TxnRef'];
+    const responseCode = query['vnp_ResponseCode'];
+    const vnpAmount = parseInt(query['vnp_Amount'] ?? '0', 10) / 100;
+
+    // 2. Tìm đơn hàng
+    const order = await this.orderRepo.findOne({
+      where: { gatewayOrderId: txnRef },
+    });
+
+    if (!order) {
+      return { success: false, message: 'Không tìm thấy đơn hàng' };
+    }
+
+    // 3. Nếu đơn hàng đã xử lý rồi (bằng IPN) thì chỉ trả về success
+    if (order.paymentStatus === 'completed') {
+      return {
+        success: true,
+        message: 'Thanh toán thành công',
+        orderId: txnRef,
+      };
+    }
+
+    // 4. Kiểm tra mã phản hồi thành công
+    const isSuccess = this.vnpayService.isSuccessResponse(responseCode);
+    if (!isSuccess) {
+      await this.orderRepo.update(order.id, {
+        paymentStatus: 'failed',
+        gatewayResponseData: JSON.stringify(query),
+      });
+      return {
+        success: false,
+        message: 'Giao dịch không thành công hoặc bị hủy',
+        orderId: txnRef,
+      };
+    }
+
+    // 5. Kiểm tra số tiền
+    if (Math.round(order.amount) !== vnpAmount) {
+      this.logger.warn(
+        `VNPay Return: Amount mismatch. Expected ${order.amount}, got ${vnpAmount}`,
+      );
+      return { success: false, message: 'Số tiền không khớp', orderId: txnRef };
+    }
+
+    // 6. Cập nhật thành công & Fulfilment
+    await this.orderRepo.update(order.id, {
+      paymentStatus: 'completed',
+      gatewayTransactionId: query['vnp_TransactionNo'],
+      gatewayResponseData: JSON.stringify(query),
+      paidAt: new Date(),
+    });
+
+    try {
+      await this.fulfillOrder(order);
+    } catch (err) {
+      this.logger.error(
+        `Fulfill order ${order.id} failed after Return URL`,
+        err,
+      );
+    }
+
     return {
-      success,
-      message: success
-        ? 'Thanh toán thành công'
-        : 'Thanh toán thất bại hoặc bị hủy',
-      orderId: query['vnp_TxnRef'],
+      success: true,
+      message: 'Thanh toán thành công',
+      orderId: txnRef,
     };
   }
 
@@ -239,13 +303,10 @@ export class PaymentsService {
   }
 
   private getClientIp(req: Request): string {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
-    const addr = req.socket?.remoteAddress ?? '127.0.0.1';
-    // Normalize IPv6 loopback ::1 → 127.0.0.1 (VNPay không chấp nhận IPv6)
-    if (addr === '::1' || addr === '::ffff:127.0.0.1') return '127.0.0.1';
-    // Map-dạng IPv6 ::ffff:x.x.x.x → lấy phần IPv4
-    if (addr.startsWith('::ffff:')) return addr.substring(7);
-    return addr;
+    // Khi đã bật 'trust proxy', req.ip sẽ tự động lấy từ X-Forwarded-For hoặc remoteAddress
+    const ip = req.ip || '127.0.0.1';
+    if (ip === '::1' || ip === '::ffff:127.0.0.1') return '127.0.0.1';
+    if (ip.startsWith('::ffff:')) return ip.substring(7);
+    return ip;
   }
 }

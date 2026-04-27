@@ -10,7 +10,10 @@ const config: DataSourceOptions = {
   synchronize: false,
   migrationsRun: true,
   migrationsTableName: 'migrations',
-  logging: ['query', 'error'], // Thuật toán bật log query
+  logging: ['query', 'error'],
+  extra: {
+    timezone: 'Asia/Ho_Chi_Minh',
+  },
 };
 
 export const dataSource = new DataSource(config);

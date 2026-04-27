@@ -15,6 +15,10 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Tin tưởng Proxy để lấy đúng Client IP (quan trọng cho các cổng thanh toán)
+  const expressApp = app.getHttpAdapter().getInstance();
+  (expressApp as any).set('trust proxy', true);
+
   // Sử dụng cookie-parser để đọc cookie từ request
   app.use(cookieParser());
 
