@@ -374,12 +374,8 @@ export class SubscriptionCreditSystem1777100000000
         ('ai_scoring',          'AI Đánh giá CV (1 ứng viên)',      1,  NULL, 'job'),
         ('ai_scoring_batch_10', 'AI Đánh giá CV (10 ứng viên)',     8,  NULL, 'job'),
         ('bump_post',           'Đẩy Tin (24h)',                   30,    1,  'job'),
-        ('headhunt_job',        'Mở Headhunting (1 tin, 7 ngày)',  50,    7,  'job'),
-        ('ai_filter_job',       'AI Strict Filter (1 tin)',        20,  NULL, 'job'),
-        ('extra_profile_views', 'Thêm Slot xem hồ sơ (+30)',       10,  NULL, 'job'),
         ('extra_job_slot',      'Thêm Slot Tin (+1)',              40,    7,  'company'),
-        ('extend_job',          'Gia hạn Tin (+7 ngày)',           20,  NULL, 'job'),
-        ('export_report',       'Xuất Báo Cáo (1 lần)',            10,  NULL, 'company')
+        ('extend_job',          'Gia hạn Tin (+7 ngày)',           20,  NULL, 'job')
     `);
 
     // ══════════════════════════════════════════════════════
