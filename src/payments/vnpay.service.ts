@@ -80,7 +80,10 @@ export class VnpayService {
 
   /**
    * Xác thực chữ ký IPN / Return URL từ VNPay.
-   * Trả về true nếu hợp lệ.
+   *
+   * QUAN TRỌNG: Express đã URL-decode các query params trước khi truyền vào đây.
+   * Do đó, cần encode lại theo đúng cách VNPay hash để so sánh.
+   * VNPay hash chuỗi với encode: space='+', '(' → '%28', ')' → '%29'
    */
   verifyReturnUrl(query: VnpayIpnParams): boolean {
     const secureHash = query['vnp_SecureHash'];
@@ -90,6 +93,7 @@ export class VnpayService {
     delete params['vnp_SecureHash'];
     delete params['vnp_SecureHashType'];
 
+    // Dùng sortObject (có encode) vì params vừa được Express decode → cần encode lại trước khi hash
     const sortedParams = this.sortObject(params);
     const signData = Object.entries(sortedParams)
       .map(([key, val]) => `${key}=${val}`)
@@ -97,11 +101,11 @@ export class VnpayService {
 
     const expectedHash = this.hmacSHA512(this.hashSecret, signData);
 
-    console.log('--- DEBUG VNPAY ---');
-    console.log('Incoming Hash:', secureHash);
-    console.log('Expected Hash:', expectedHash);
-    console.log('Sign Data:', signData);
-    console.log('Secret Configured:', this.hashSecret);
+    this.logger.debug('--- DEBUG VNPAY VERIFY ---');
+    this.logger.debug(`Incoming Hash: ${secureHash}`);
+    this.logger.debug(`Expected Hash: ${expectedHash}`);
+    this.logger.debug(`signData: ${signData}`);
+    this.logger.debug(`Match: ${secureHash === expectedHash}`);
 
     return secureHash === expectedHash;
   }
