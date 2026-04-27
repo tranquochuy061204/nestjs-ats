@@ -21,7 +21,14 @@ import { EmployerEntity } from '../employers/entities/employer.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
 
+import { ApiProperty } from '@nestjs/swagger';
+
 class CreateCreditTopupDto {
+  @ApiProperty({
+    description: 'ID của Gói nạp',
+    example: 'starter',
+    enum: ['starter', 'plus', 'pro', 'enterprise'], // Tuỳ theo TopupPackId
+  })
   packId: TopupPackId;
 }
 

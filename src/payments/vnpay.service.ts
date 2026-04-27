@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
 export interface VnpayCreateOrderParams {
-  orderId: string;      // vnp_TxnRef
-  amount: number;       // VNĐ (sẽ x100 khi gửi VNPay)
-  orderInfo: string;    // Mô tả đơn
+  orderId: string; // vnp_TxnRef
+  amount: number; // VNĐ (sẽ x100 khi gửi VNPay)
+  orderInfo: string; // Mô tả đơn
   returnUrl: string;
   ipAddr: string;
   locale?: 'vn' | 'en';
@@ -39,7 +39,9 @@ export class VnpayService {
   createPaymentUrl(params: VnpayCreateOrderParams): string {
     const now = new Date();
     const createDate = this.formatDate(now);
-    const expireDate = this.formatDate(new Date(now.getTime() + 15 * 60 * 1000)); // 15 phút
+    const expireDate = this.formatDate(
+      new Date(now.getTime() + 15 * 60 * 1000),
+    ); // 15 phút
 
     const vnpParams: Record<string, string> = {
       vnp_Version: '2.1.0',
@@ -58,12 +60,21 @@ export class VnpayService {
     };
 
     const sortedParams = this.sortObject(vnpParams);
-    const signData = new URLSearchParams(sortedParams).toString();
+
+    // VNPay yêu cầu nối chuỗi đã encode thủ công thay vì dùng URLSearchParams
+    const signData = Object.entries(sortedParams)
+      .map(([key, val]) => `${key}=${val}`)
+      .join('&');
+
     const secureHash = this.hmacSHA512(this.hashSecret, signData);
+    vnpParams['vnp_SecureHash'] = secureHash;
 
-    sortedParams['vnp_SecureHash'] = secureHash;
+    // Chuỗi query params cuối cùng trả về browser (URLSearchParams vẫn xài được vì browser tương thích)
+    // Nhưng để chuẩn 100% giống checksum, ta tự join để redirect
+    const queryString = Object.entries(this.sortObject(vnpParams))
+      .map(([key, val]) => `${key}=${val}`)
+      .join('&');
 
-    const queryString = new URLSearchParams(sortedParams).toString();
     return `${this.paymentUrl}?${queryString}`;
   }
 
@@ -80,8 +91,17 @@ export class VnpayService {
     delete params['vnp_SecureHashType'];
 
     const sortedParams = this.sortObject(params);
-    const signData = new URLSearchParams(sortedParams).toString();
+    const signData = Object.entries(sortedParams)
+      .map(([key, val]) => `${key}=${val}`)
+      .join('&');
+
     const expectedHash = this.hmacSHA512(this.hashSecret, signData);
+
+    console.log('--- DEBUG VNPAY ---');
+    console.log('Incoming Hash:', secureHash);
+    console.log('Expected Hash:', expectedHash);
+    console.log('Sign Data:', signData);
+    console.log('Secret Configured:', this.hashSecret);
 
     return secureHash === expectedHash;
   }
@@ -102,23 +122,41 @@ export class VnpayService {
     return crypto
       .createHmac('sha512', secret)
       .update(Buffer.from(data, 'utf-8'))
-      .digest('hex');
+      .digest('hex'); // Tiêu chuẩn phải là viết thường (lowercase)
   }
 
+  /**
+   * Thuật toán sort object độc quyền theo tài liệu VNPay Node.js
+   * Encode params sang dạng RFC3986 (space thành +, URL encode cả dấu ngoặc)
+   */
   private sortObject(obj: Record<string, string>): Record<string, string> {
-    return Object.keys(obj)
-      .sort()
-      .reduce<Record<string, string>>((sorted, key) => {
-        sorted[key] = obj[key];
-        return sorted;
-      }, {});
+    const sorted: Record<string, string> = {};
+    const keys = Object.keys(obj).sort();
+
+    for (const key of keys) {
+      if (obj[key] !== undefined && obj[key] !== null) {
+        // VNPay / Java string encoder khác Node.js encodeURIComponent ở chỗ
+        const value = encodeURIComponent(String(obj[key]))
+          .replace(/%20/g, '+')
+          .replace(/!/g, '%21')
+          .replace(/'/g, '%27')
+          .replace(/\(/g, '%28')
+          .replace(/\)/g, '%29')
+          .replace(/\*/g, '%2A');
+
+        sorted[key] = value;
+      }
+    }
+    return sorted;
   }
 
   /** Format: YYYYMMDDHHmmss theo chuẩn GMT+7 (Asia/Ho_Chi_Minh) */
   private formatDate(date: Date): string {
     // Force múi giờ GMT+7 tránh lỗi khi Deploy lên server UTC (như Render / AWS)
-    const gmt7Date = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-    
+    const gmt7Date = new Date(
+      date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }),
+    );
+
     const pad = (n: number) => String(n).padStart(2, '0');
     return (
       String(gmt7Date.getFullYear()) +
