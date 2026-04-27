@@ -1,10 +1,14 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CandidateProfileController } from './candidate-profile.controller';
-import { CandidateExperienceController } from './candidate-experience.controller';
+import { CandidateWorkExperienceController } from './controllers/candidate-work-experience.controller';
+import { CandidateEducationController } from './controllers/candidate-education.controller';
+import { CandidateProjectController } from './controllers/candidate-project.controller';
+import { CandidateWorkExperienceService } from './services/candidate-work-experience.service';
+import { CandidateEducationService } from './services/candidate-education.service';
+import { CandidateProjectService } from './services/candidate-project.service';
 import { CandidateSkillsController } from './candidate-skills.controller';
 import { CandidateProfileService } from './services/candidate-profile.service';
-import { CandidateExperienceService } from './services/candidate-experience.service';
 import { CandidateSkillsService } from './services/candidate-skills.service';
 import { CandidateCertificatesService } from './services/candidate-certificates.service';
 import { CandidateCvParserService } from './services/candidate-cv-parser.service';
@@ -65,14 +69,18 @@ import { ApplicationsModule } from '../applications/applications.module';
   ],
   controllers: [
     CandidateProfileController,
-    CandidateExperienceController,
+    CandidateWorkExperienceController,
+    CandidateEducationController,
+    CandidateProjectController,
     CandidateSkillsController,
     CandidateHeadhuntingController,
     CandidateSavedJobsController,
   ],
   providers: [
     CandidateProfileService,
-    CandidateExperienceService,
+    CandidateWorkExperienceService,
+    CandidateEducationService,
+    CandidateProjectService,
     CandidateSkillsService,
     CandidateCertificatesService,
     CandidateCvAiExtractorService,
