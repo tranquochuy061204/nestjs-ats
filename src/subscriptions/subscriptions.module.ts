@@ -7,6 +7,8 @@ import { CompanySubscriptionEntity } from './entities/company-subscription.entit
 import { JobProfileViewEntity } from './entities/job-profile-view.entity';
 import { ContactUnlockLogEntity } from './entities/contact-unlock-log.entity';
 import { EmployerEntity } from '../employers/entities/employer.entity';
+import { CreditPurchaseLogEntity } from '../credits/entities/credit-purchase-log.entity';
+import { CreditProductEntity } from '../credits/entities/credit-product.entity';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { EmployerEntity } from '../employers/entities/employer.entity';
       JobProfileViewEntity,
       ContactUnlockLogEntity,
       EmployerEntity,
+      CreditPurchaseLogEntity,
+      CreditProductEntity,
     ]),
   ],
   controllers: [SubscriptionsController],

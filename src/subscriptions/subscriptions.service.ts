@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { CompanySubscriptionEntity, SubscriptionStatus } from './entities/company-subscription.entity';
 import { SubscriptionPackageEntity } from './entities/subscription-package.entity';
+import { CreditPurchaseLogEntity } from '../credits/entities/credit-purchase-log.entity';
 
 export interface ActiveSubscription {
   subscription: CompanySubscriptionEntity;
@@ -23,6 +24,8 @@ export class SubscriptionsService {
     private readonly subscriptionRepo: Repository<CompanySubscriptionEntity>,
     @InjectRepository(SubscriptionPackageEntity)
     private readonly packageRepo: Repository<SubscriptionPackageEntity>,
+    @InjectRepository(CreditPurchaseLogEntity)
+    private readonly purchaseLogRepo: Repository<CreditPurchaseLogEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -145,13 +148,26 @@ export class SubscriptionsService {
       }
     }
 
+    // Đếm số extra_job_slot đang active (mua bằng Credit)
+    const extraSlots = await this.purchaseLogRepo
+      .createQueryBuilder('pl')
+      .innerJoin('pl.product', 'p')
+      .where('pl.company_id = :companyId', { companyId })
+      .andWhere("p.slug = 'extra_job_slot'")
+      .andWhere('(pl.expires_at IS NULL OR pl.expires_at > NOW())')
+      .getCount();
+
+    const effectiveMaxJobs = pkg.maxActiveJobs === -1
+      ? -1
+      : pkg.maxActiveJobs + extraSlots;
+
     // [BUG#7 FIX] -1 = unlimited (VIP) — bỏ qua check quota
-    if (pkg.maxActiveJobs !== -1 && currentActiveJobs >= pkg.maxActiveJobs) {
+    if (effectiveMaxJobs !== -1 && currentActiveJobs >= effectiveMaxJobs) {
       return {
         canPost: false,
         unlocksAt: null,
         currentActiveJobs,
-        maxActiveJobs: pkg.maxActiveJobs,
+        maxActiveJobs: effectiveMaxJobs,
       };
     }
 
@@ -159,7 +175,7 @@ export class SubscriptionsService {
       canPost: true,
       unlocksAt: null,
       currentActiveJobs,
-      maxActiveJobs: pkg.maxActiveJobs,
+      maxActiveJobs: effectiveMaxJobs,
     };
   }
 

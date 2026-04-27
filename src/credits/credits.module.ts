@@ -7,6 +7,7 @@ import { CreditTransactionEntity } from './entities/credit-transaction.entity';
 import { CreditProductEntity } from './entities/credit-product.entity';
 import { CreditPurchaseLogEntity } from './entities/credit-purchase-log.entity';
 import { EmployerEntity } from '../employers/entities/employer.entity';
+import { JobEntity } from '../jobs/entities/job.entity';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { EmployerEntity } from '../employers/entities/employer.entity';
       CreditProductEntity,
       CreditPurchaseLogEntity,
       EmployerEntity,
+      JobEntity,
     ]),
   ],
   controllers: [CreditsController],

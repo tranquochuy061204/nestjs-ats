@@ -10,6 +10,7 @@ import { CreditWalletEntity } from './entities/credit-wallet.entity';
 import { CreditTransactionEntity, CreditTransactionType } from './entities/credit-transaction.entity';
 import { CreditProductEntity } from './entities/credit-product.entity';
 import { CreditPurchaseLogEntity } from './entities/credit-purchase-log.entity';
+import { JobEntity } from '../jobs/entities/job.entity';
 
 export interface ChargeCreditOptions {
   type: CreditTransactionType | string;
@@ -249,8 +250,93 @@ export class CreditsService {
         expiresAt,
       });
 
-      return manager.save(CreditPurchaseLogEntity, log);
+      const savedLog = await manager.save(CreditPurchaseLogEntity, log);
+
+      // ── [Fix D+E] Apply side-effects within transaction ──────
+      await this.applyProductSideEffect(
+        manager,
+        product.slug,
+        targetJobId ?? null,
+        expiresAt,
+      );
+
+      return savedLog;
     });
+  }
+
+  /**
+   * [Fix D+E] Apply actual side-effects after credit purchase.
+   * Runs inside the purchase transaction for atomicity.
+   */
+  private async applyProductSideEffect(
+    manager: import('typeorm').EntityManager,
+    slug: string,
+    targetJobId: number | null,
+    expiresAt: Date | null,
+  ): Promise<void> {
+    switch (slug) {
+      case 'bump_post': {
+        if (!targetJobId) break;
+        await manager.update(JobEntity, targetJobId, {
+          isBumped: true,
+          bumpedUntil: expiresAt,
+        });
+        this.logger.log(`bump_post applied: job=${targetJobId} until=${expiresAt?.toISOString()}`);
+        break;
+      }
+
+      case 'extend_job': {
+        if (!targetJobId) break;
+        const job = await manager.findOne(JobEntity, {
+          where: { id: targetJobId },
+          select: ['id', 'deadline'],
+        });
+        if (job) {
+          // Nếu job chưa có deadline hoặc đã hết hạn → lấy từ now()
+          const baseDate =
+            job.deadline && new Date(job.deadline) > new Date()
+              ? new Date(job.deadline)
+              : new Date();
+          // durationDays đã được lưu ở expiresAt — tính ngược lại
+          const durationMs = expiresAt
+            ? expiresAt.getTime() - Date.now()
+            : 15 * 24 * 60 * 60 * 1000; // default 15 ngày
+          const newDeadline = new Date(baseDate.getTime() + durationMs);
+          await manager.update(JobEntity, targetJobId, {
+            deadline: newDeadline,
+          });
+          this.logger.log(
+            `extend_job applied: job=${targetJobId} newDeadline=${newDeadline.toISOString()}`,
+          );
+        }
+        break;
+      }
+
+      case 'extra_job_slot': {
+        // extra_job_slot không cần mutate entity.
+        // Slot thêm được tính bằng đếm active purchase_log tại checkJobSlotLock().
+        this.logger.log(`extra_job_slot purchased for company (tracked via purchase_log)`);
+        break;
+      }
+
+      default:
+        // Các sản phẩm khác (ai_scoring, export_report...) chưa cần side-effect
+        break;
+    }
+  }
+
+  /**
+   * Đếm số extra_job_slot đang active (chưa hết hạn) của company.
+   * Được gọi bởi SubscriptionsService.checkJobSlotLock() để cộng vào maxActiveJobs.
+   */
+  async getExtraJobSlots(companyId: number): Promise<number> {
+    return this.purchaseLogRepo
+      .createQueryBuilder('pl')
+      .innerJoin('pl.product', 'p')
+      .where('pl.company_id = :companyId', { companyId })
+      .andWhere("p.slug = 'extra_job_slot'")
+      .andWhere('(pl.expires_at IS NULL OR pl.expires_at > NOW())')
+      .getCount();
   }
 
   // ──────────────────────────────────────────────────────

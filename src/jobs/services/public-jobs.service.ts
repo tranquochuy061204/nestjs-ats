@@ -272,6 +272,7 @@ export class PublicJobsService {
 
   /**
    * Sort logic:
+   * - [Fix F] Bumped jobs luôn lên đầu (isBumped=true AND bumpedUntil > NOW())
    * - RELEVANCE: parameterized CASE expression (safe khỏi SQL injection)
    * - Các field khác: sort trực tiếp
    */
@@ -280,6 +281,12 @@ export class PublicJobsService {
     dto: JobFilterDto,
   ): void {
     const { sortBy, sortOrder, keyword, provinceId, categoryId } = dto;
+
+    // [Fix F] Bumped tin luôn ưu tiên lên đầu, bất kể sort mode
+    qb.addOrderBy(
+      'CASE WHEN job.is_bumped = true AND job.bumped_until > NOW() THEN 0 ELSE 1 END',
+      'ASC',
+    );
 
     if (sortBy === JobSortBy.RELEVANCE) {
       /**
@@ -316,7 +323,7 @@ export class PublicJobsService {
         qb.setParameters(params);
       }
 
-      qb.orderBy(scoreExpr, SortOrder.DESC).addOrderBy(
+      qb.addOrderBy(scoreExpr, SortOrder.DESC).addOrderBy(
         'job.createdAt',
         SortOrder.DESC,
       );
@@ -330,7 +337,7 @@ export class PublicJobsService {
     };
 
     const column = columnMap[sortBy] ?? 'job.createdAt';
-    qb.orderBy(column, sortOrder ?? SortOrder.DESC).addOrderBy(
+    qb.addOrderBy(column, sortOrder ?? SortOrder.DESC).addOrderBy(
       'job.createdAt',
       SortOrder.DESC,
     );

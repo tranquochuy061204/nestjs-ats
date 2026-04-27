@@ -318,7 +318,7 @@ export class EmployerHeadhuntingService {
   }
 
   /**
-   * [BUG B FIX] Xem chi tiết hồ sơ ứng viên — có kiểm tra VIP / credit unlock.
+   * Xem chi tiết hồ sơ ứng viên — có kiểm tra VIP / credit unlock.
    *
    * Logic:
    *  1. Nếu đã unlock rồi (ở contact_unlock_log) → trả về miễn phí
@@ -359,7 +359,8 @@ export class EmployerHeadhuntingService {
     }
 
     // 2. Kiểm tra subscription
-    const { package: pkg } = await this.subscriptionsService.getActiveSubscription(companyId);
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(companyId);
 
     let creditSpent = EmployerHeadhuntingService.CONTACT_UNLOCK_CREDIT_COST;
     let usedFreeQuota = false;
@@ -376,7 +377,10 @@ export class EmployerHeadhuntingService {
         .andWhere('ul.unlocked_at >= :firstOfMonth', { firstOfMonth })
         .getCount();
 
-      if (usedThisMonth < pkg.monthlyHeadhuntProfileViews || pkg.monthlyHeadhuntProfileViews === -1) {
+      if (
+        usedThisMonth < pkg.monthlyHeadhuntProfileViews ||
+        pkg.monthlyHeadhuntProfileViews === -1
+      ) {
         creditSpent = 0;
         usedFreeQuota = true;
       }
@@ -403,7 +407,7 @@ export class EmployerHeadhuntingService {
 
     this.logger.log(
       `Contact unlock: company=${companyId} candidate=${candidateId} ` +
-      `freeQuota=${usedFreeQuota} creditSpent=${creditSpent}`,
+        `freeQuota=${usedFreeQuota} creditSpent=${creditSpent}`,
     );
 
     return { ...candidate, contactUnlocked: true, creditSpent };
@@ -415,6 +419,13 @@ export class EmployerHeadhuntingService {
     dto: SaveCandidateDto,
   ) {
     const employer = await this.findEmployerWithCompany(employerUserId);
+
+    //VIP gate: chỉ VIP mới được lưu ứng viên
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(employer.companyId);
+    if (!pkg.canHeadhuntSaveAndInvite) {
+      throw new ForbiddenException('Tính năng lưu ứng viên yêu cầu gói VIP');
+    }
 
     const candidate = await this.candidateRepo.findOne({
       where: { id: candidateId, isPublic: true },
@@ -472,6 +483,15 @@ export class EmployerHeadhuntingService {
 
   async sendJobInvitation(employerUserId: number, dto: CreateJobInvitationDto) {
     const employer = await this.findEmployerWithCompany(employerUserId);
+
+    // VIP gate: chỉ VIP mới được gửi thư mời
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(employer.companyId);
+    if (!pkg.canHeadhuntSaveAndInvite) {
+      throw new ForbiddenException(
+        'Tính năng gửi thư mời ứng tuyển yêu cầu gói VIP',
+      );
+    }
 
     // FIX: Kiểm tra Job tồn tại + thuộc công ty + đang PUBLISHED
     const job = await this.jobRepo.findOne({
