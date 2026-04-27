@@ -12,7 +12,7 @@ import {
 import { ScreeningAnswerEntity } from './entities/screening-answer.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
-export interface UpsertScreeningQuestionsDto {
+export class UpsertScreeningQuestionsDto {
   questions: Array<{
     id?: number;
     questionText: string;
@@ -24,7 +24,7 @@ export interface UpsertScreeningQuestionsDto {
   }>;
 }
 
-export interface SubmitScreeningAnswersDto {
+export class SubmitScreeningAnswersDto {
   answers: Array<{
     questionId: number;
     answerText: string;
