@@ -2,7 +2,8 @@ import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { UserRole } from '../users/entities/user.entity';
-import { EmployerDashboardService } from './services/employer-dashboard.service';
+import { EmployerCompanyDashboardService } from './services/employer-company-dashboard.service';
+import { EmployerJobDashboardService } from './services/employer-job-dashboard.service';
 import { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import type { Request } from 'express';
 import { Req } from '@nestjs/common';
@@ -10,7 +11,10 @@ import { Req } from '@nestjs/common';
 @ApiTags('Employers - Dashboard')
 @Controller('employers/dashboard')
 export class EmployerDashboardController {
-  constructor(private readonly dashboardService: EmployerDashboardService) {}
+  constructor(
+    private readonly companyDashboardService: EmployerCompanyDashboardService,
+    private readonly jobDashboardService: EmployerJobDashboardService,
+  ) {}
 
   @Get('stats')
   @ApiAuth(UserRole.EMPLOYER)
@@ -26,7 +30,7 @@ export class EmployerDashboardController {
   })
   getCompanyStats(@Req() req: Request, @Query() dto: DashboardFilterDto) {
     const user = req.user as { id: number };
-    return this.dashboardService.getCompanyStats(user.id, dto);
+    return this.companyDashboardService.getCompanyStats(user.id, dto);
   }
 
   @Get('jobs/:jobId/stats')
@@ -47,6 +51,6 @@ export class EmployerDashboardController {
     @Param('jobId', ParseIntPipe) jobId: number,
   ) {
     const user = req.user as { id: number };
-    return this.dashboardService.getJobDashboard(user.id, jobId);
+    return this.jobDashboardService.getJobDashboard(user.id, jobId);
   }
 }

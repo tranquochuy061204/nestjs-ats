@@ -15,7 +15,8 @@ import { MailModule } from '../mail/mail.module';
 import { EmployerHeadhuntingService } from './employer-headhunting.service';
 import { EmployerHeadhuntingController } from './employer-headhunting.controller';
 import { UserEntity } from '../users/entities/user.entity';
-import { EmployerDashboardService } from './services/employer-dashboard.service';
+import { EmployerCompanyDashboardService } from './services/employer-company-dashboard.service';
+import { EmployerJobDashboardService } from './services/employer-job-dashboard.service';
 import { EmployerDashboardController } from './employer-dashboard.controller';
 import { CandidatesModule } from '../candidates/candidates.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
@@ -50,7 +51,8 @@ import { ContactUnlockLogEntity } from '../subscriptions/entities/contact-unlock
   providers: [
     EmployersService,
     EmployerHeadhuntingService,
-    EmployerDashboardService,
+    EmployerCompanyDashboardService,
+    EmployerJobDashboardService,
   ],
   exports: [EmployersService],
 })
