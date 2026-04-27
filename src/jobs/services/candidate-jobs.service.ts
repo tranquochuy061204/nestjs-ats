@@ -109,10 +109,12 @@ export class CandidateJobsService {
 
     // Only recommend jobs with score > 0 if there are criteria
     if (parts.length > 0) {
+      qb.addSelect(scoreExpr, 'match_score');
       qb.andWhere(`${scoreExpr} > 0`);
+      qb.orderBy('match_score', 'DESC');
     }
 
-    qb.orderBy(scoreExpr, 'DESC').addOrderBy('job.createdAt', 'DESC');
+    qb.addOrderBy('job.createdAt', 'DESC');
 
     const skip = (page - 1) * limit;
     const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();

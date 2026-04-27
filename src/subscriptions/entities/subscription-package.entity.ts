@@ -63,16 +63,18 @@ export class SubscriptionPackageEntity {
 
   // ── Feature Toggles ───────────────────────────────────────
 
-  @Column({ name: 'can_headhunt_save_and_invite', type: 'boolean', default: false })
+  @Column({
+    name: 'can_headhunt_save_and_invite',
+    type: 'boolean',
+    default: false,
+  })
   canHeadhuntSaveAndInvite: boolean;
 
-  @Column({ name: 'can_use_ai_strict_filter', type: 'boolean', default: false })
-  canUseAiStrictFilter: boolean;
-
-  @Column({ name: 'can_export_report', type: 'boolean', default: false })
-  canExportReport: boolean;
-
-  @Column({ name: 'can_view_advanced_analytics', type: 'boolean', default: false })
+  @Column({
+    name: 'can_view_advanced_analytics',
+    type: 'boolean',
+    default: false,
+  })
   canViewAdvancedAnalytics: boolean;
 
   @Column({ name: 'can_hide_salary', type: 'boolean', default: false })

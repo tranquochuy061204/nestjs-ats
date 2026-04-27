@@ -262,6 +262,7 @@ export class EmployerApplicationsService {
     const { creditCost, isFree, useFreeProceed } =
       await this.subscriptionsService.calculateProceedFee(
         companyId,
+        oldStatus,
         dto.status,
       );
 

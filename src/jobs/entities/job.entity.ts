@@ -113,6 +113,20 @@ export class JobEntity {
   @Column({ type: 'timestamp', nullable: true })
   deadline: Date;
 
+  // -- VIP & Monetization Features --
+
+  @Column({ name: 'hide_salary', type: 'boolean', default: false })
+  hideSalary: boolean;
+
+  @Column({ name: 'require_cv', type: 'boolean', default: false })
+  requireCv: boolean;
+
+  @Column({ name: 'is_bumped', type: 'boolean', default: false })
+  isBumped: boolean;
+
+  @Column({ name: 'bumped_until', type: 'timestamp', nullable: true })
+  bumpedUntil: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

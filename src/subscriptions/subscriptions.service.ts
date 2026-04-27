@@ -8,7 +8,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { CompanySubscriptionEntity, SubscriptionStatus } from './entities/company-subscription.entity';
 import { SubscriptionPackageEntity } from './entities/subscription-package.entity';
-import { PipelineFeeConfigEntity } from './entities/pipeline-fee-config.entity';
 
 export interface ActiveSubscription {
   subscription: CompanySubscriptionEntity;
@@ -24,8 +23,6 @@ export class SubscriptionsService {
     private readonly subscriptionRepo: Repository<CompanySubscriptionEntity>,
     @InjectRepository(SubscriptionPackageEntity)
     private readonly packageRepo: Repository<SubscriptionPackageEntity>,
-    @InjectRepository(PipelineFeeConfigEntity)
-    private readonly pipelineFeeRepo: Repository<PipelineFeeConfigEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -72,23 +69,19 @@ export class SubscriptionsService {
   }
 
   /**
-   * Tính phí Pipeline Fee cho một lần proceed.
-   * Trả về số Credit cần trừ (0 = miễn phí).
+   * Tính phí Pipeline Fee (thu 1 lần duy nhất khi qua khỏi vòng Applied).
    */
   async calculateProceedFee(
     companyId: number,
-    toStatus: string,
+    oldStatus: string,
+    newStatus: string,
   ): Promise<{ creditCost: number; isFree: boolean; useFreeProceed: boolean }> {
-    const feeConfig = await this.pipelineFeeRepo.findOne({
-      where: { toStatus },
-    });
+    // Chỉ thu tiền khi ứng viên rời khỏi cột APPLIED sang các cột tiến trình (trừ REJECTED / WITHDRAWN)
+    const isFirstTimeProceed = oldStatus === 'applied';
+    const isRejectedOrWithdrawn = newStatus === 'rejected' || newStatus === 'withdrawn';
 
-    if (!feeConfig) {
-      this.logger.warn(`No pipeline fee config for status: ${toStatus}`);
-      return { creditCost: 0, isFree: true, useFreeProceed: false };
-    }
-
-    if (feeConfig.isFree) {
+    // Nếu không phải lần đầu pass, hoặc pass vào cột từ chối => Miễn phí (không thu charge, không cần check VIP quota)
+    if (!isFirstTimeProceed || isRejectedOrWithdrawn) {
       return { creditCost: 0, isFree: true, useFreeProceed: false };
     }
 
@@ -102,13 +95,8 @@ export class SubscriptionsService {
       return { creditCost: 0, isFree: false, useFreeProceed: true };
     }
 
-    // VIP hết free proceeds → giảm 50% (vip_credit_cost)
-    if (pkg.name === 'vip') {
-      return { creditCost: feeConfig.vipCreditCost, isFree: false, useFreeProceed: false };
-    }
-
-    // Free → full giá
-    return { creditCost: feeConfig.creditCost, isFree: false, useFreeProceed: false };
+    // Nếu đã hết Quota Free Proceed hoặc gói Free => Thu cứng 10 Credit
+    return { creditCost: 10, isFree: false, useFreeProceed: false };
   }
 
   /**

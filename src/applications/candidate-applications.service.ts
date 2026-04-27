@@ -70,8 +70,7 @@ export class CandidateApplicationsService {
     }
 
     // Check require_cv gate (VIP feature)
-    const jobWithExtras = job as JobEntity & { requireCv?: boolean };
-    if (jobWithExtras.requireCv && !candidate.cvUrl) {
+    if (job.requireCv && !candidate.cvUrl) {
       throw new BadRequestException(
         'Tin tuyển dụng này yêu cầu bắt buộc có CV. Vui lòng tải lên CV trước khi ứng tuyển.',
       );
