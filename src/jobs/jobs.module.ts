@@ -25,6 +25,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { UserEntity } from '../users/entities/user.entity';
 import { CommonGuardsModule } from '../common/guards/common-guards.module';
 import { CandidateEntity } from '../candidates/entities/candidate.entity';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CandidateEntity } from '../candidates/entities/candidate.entity';
     EmployersModule,
     NotificationsModule,
     CommonGuardsModule,
+    SubscriptionsModule,
   ],
   controllers: [
     PublicJobsController,

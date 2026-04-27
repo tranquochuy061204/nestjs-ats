@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { DataSource, Repository, In } from 'typeorm';
 import { CandidateEntity } from '../candidates/entities/candidate.entity';
 import { SavedCandidateEntity } from './entities/saved-candidate.entity';
 import { EmployerEntity } from './entities/employer.entity';
@@ -22,10 +22,17 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { HEADHUNTING_CONFIG } from '../common/constants/headhunting.constant';
 import { MailService } from '../mail/mail.service';
 import { ConfigService } from '@nestjs/config';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { CreditsService } from '../credits/credits.service';
+import { ContactUnlockLogEntity } from '../subscriptions/entities/contact-unlock-log.entity';
+import { CreditTransactionType } from '../credits/entities/credit-transaction.entity';
 
 @Injectable()
 export class EmployerHeadhuntingService {
   private readonly logger = new Logger(EmployerHeadhuntingService.name);
+
+  /** Credit charge khi xem profile nếu không phải VIP free quota */
+  private static readonly CONTACT_UNLOCK_CREDIT_COST = 5;
 
   constructor(
     @InjectRepository(CandidateEntity)
@@ -38,9 +45,14 @@ export class EmployerHeadhuntingService {
     private readonly jobRepo: Repository<JobEntity>,
     @InjectRepository(JobInvitationEntity)
     private readonly invitationRepo: Repository<JobInvitationEntity>,
+    @InjectRepository(ContactUnlockLogEntity)
+    private readonly contactUnlockRepo: Repository<ContactUnlockLogEntity>,
     private readonly notificationsService: NotificationsService,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly creditsService: CreditsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async getSuggestedCandidates(
@@ -305,8 +317,17 @@ export class EmployerHeadhuntingService {
     }
   }
 
+  /**
+   * [BUG B FIX] Xem chi tiết hồ sơ ứng viên — có kiểm tra VIP / credit unlock.
+   *
+   * Logic:
+   *  1. Nếu đã unlock rồi (ở contact_unlock_log) → trả về miễn phí
+   *  2. VIP có free_contact_unlock=true và còn monthly quota → unlock miễn phí, ghi log
+   *  3. Còn lại (Free hoặc VIP hết quota) → charge 5 Credit, ghi log
+   */
   async getCandidateDetail(employerUserId: number, candidateId: number) {
-    await this.findEmployer(employerUserId);
+    const employer = await this.findEmployerWithCompany(employerUserId);
+    const companyId = employer.companyId;
 
     const candidate = await this.candidateRepo.findOne({
       where: { id: candidateId, isPublic: true },
@@ -329,7 +350,63 @@ export class EmployerHeadhuntingService {
       );
     }
 
-    return candidate;
+    // 1. Kiểm tra đã unlock chưa (để tránh charge lại)
+    const existingUnlock = await this.contactUnlockRepo.findOne({
+      where: { companyId, candidateId },
+    });
+    if (existingUnlock) {
+      return { ...candidate, contactUnlocked: true, creditSpent: 0 };
+    }
+
+    // 2. Kiểm tra subscription
+    const { package: pkg } = await this.subscriptionsService.getActiveSubscription(companyId);
+
+    let creditSpent = EmployerHeadhuntingService.CONTACT_UNLOCK_CREDIT_COST;
+    let usedFreeQuota = false;
+
+    if (pkg.freeContactUnlock) {
+      // Trong VIP: kiểm tra monthly quota
+      const firstOfMonth = new Date();
+      firstOfMonth.setDate(1);
+      firstOfMonth.setHours(0, 0, 0, 0);
+
+      const usedThisMonth = await this.contactUnlockRepo
+        .createQueryBuilder('ul')
+        .where('ul.company_id = :companyId', { companyId })
+        .andWhere('ul.unlocked_at >= :firstOfMonth', { firstOfMonth })
+        .getCount();
+
+      if (usedThisMonth < pkg.monthlyHeadhuntProfileViews || pkg.monthlyHeadhuntProfileViews === -1) {
+        creditSpent = 0;
+        usedFreeQuota = true;
+      }
+    }
+
+    // 3. Charge credit nếu cần + ghi log trong 1 transaction
+    if (creditSpent > 0) {
+      await this.creditsService.chargeCredit(companyId, creditSpent, {
+        type: CreditTransactionType.PURCHASE,
+        description: `Mở khoá liên hệ ứng viên #${candidateId}`,
+        referenceType: 'candidate',
+        referenceId: candidateId,
+        createdBy: employerUserId,
+      });
+    }
+
+    // Ghi log unlock (dùng upsert để an toàn khi race condition)
+    await this.dataSource.query(
+      `INSERT INTO contact_unlock_log (company_id, candidate_id, credit_spent)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [companyId, candidateId, creditSpent],
+    );
+
+    this.logger.log(
+      `Contact unlock: company=${companyId} candidate=${candidateId} ` +
+      `freeQuota=${usedFreeQuota} creditSpent=${creditSpent}`,
+    );
+
+    return { ...candidate, contactUnlocked: true, creditSpent };
   }
 
   async saveCandidate(

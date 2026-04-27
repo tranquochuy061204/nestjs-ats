@@ -18,6 +18,7 @@ import { SocketModule } from '../common/socket/socket.module';
 import { MailModule } from '../mail/mail.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { CreditsModule } from '../credits/credits.module';
+import { JobProfileViewEntity } from '../subscriptions/entities/job-profile-view.entity';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CreditsModule } from '../credits/credits.module';
       JobEntity,
       EmployerEntity,
       UserEntity,
+      JobProfileViewEntity,
     ]),
     NotificationsModule,
     CommonGuardsModule,

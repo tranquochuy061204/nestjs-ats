@@ -17,6 +17,7 @@ import { EmployersService } from '../../employers/employers.service';
 import { EmployerEntity } from '../../employers/entities/employer.entity';
 import { CompanyStatus } from '../../companies/entities/company.entity';
 import { getPaginatedResult } from '../../common/utils/pagination.util';
+import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 
 @Injectable()
 export class EmployerJobsService {
@@ -29,6 +30,7 @@ export class EmployerJobsService {
     private readonly historyRepo: Repository<JobStatusHistoryEntity>,
     private readonly jobSkillsService: JobSkillsService,
     private readonly employersService: EmployersService,
+    private readonly subscriptionsService: SubscriptionsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -47,6 +49,27 @@ export class EmployerJobsService {
         'Bạn không có quyền đăng tin (Yêu cầu tài khoản HR Admin)',
       );
     }
+
+    // ── VIP Quota & Feature Check ──────────────────────────────────────
+    const { package: pkg } = await this.subscriptionsService.getActiveSubscription(emp.companyId);
+
+    // [Feature #2] can_hide_salary
+    if (createJobDto.hideSalary && !pkg.canHideSalary) {
+      throw new ForbiddenException(
+        'Tính năng ẩn lương yêu cầu gói VIP. Vui lòng nâng cấp để sử dụng.',
+      );
+    }
+
+    // [Feature #3] can_require_cv
+    if (createJobDto.requireCv && !pkg.canRequireCv) {
+      throw new ForbiddenException(
+        'Tính năng bắt buộc CV yêu cầu gói VIP. Vui lòng nâng cấp để sử dụng.',
+      );
+    }
+
+    // [Feature #1] max_active_jobs — chỉ enforce khi PUBLISH, không chặn tạo DRAFT
+    // (checkJobSlotLock được gọi khi updateJob chuyển sang PUBLISHED)
+    // ──────────────────────────────────────────────────────────────────
 
     try {
       return await this.dataSource.transaction(async (manager) => {
@@ -100,6 +123,27 @@ export class EmployerJobsService {
       );
     }
 
+    // ── VIP Quota & Feature Check ──────────────────────────────────────
+    const { package: pkg } = await this.subscriptionsService.getActiveSubscription(
+      employer.companyId,
+    );
+
+    // [Feature #2] cannot set hideSalary if not VIP (check both: new value OR existing still true)
+    const willHideSalary = updateJobDto.hideSalary ?? job.hideSalary;
+    if (willHideSalary && !pkg.canHideSalary) {
+      throw new ForbiddenException(
+        'Tính năng ẩn lương yêu cầu gói VIP. Vui lòng nâng cấp để sử dụng.',
+      );
+    }
+
+    // [Feature #3] cannot set requireCv if not VIP
+    const willRequireCv = updateJobDto.requireCv ?? job.requireCv;
+    if (willRequireCv && !pkg.canRequireCv) {
+      throw new ForbiddenException(
+        'Tính năng bắt buộc CV yêu cầu gói VIP. Vui lòng nâng cấp để sử dụng.',
+      );
+    }
+
     const { status } = updateJobDto;
 
     // VALIDATE ALLOWED STATUS
@@ -119,8 +163,22 @@ export class EmployerJobsService {
     const isCompanyVerified = job.company?.status === CompanyStatus.APPROVED;
     let finalStatus = (status as string) ?? job.status;
 
-    if (status === JobStatus.PUBLISHED && !isCompanyVerified) {
-      finalStatus = JobStatus.PENDING;
+    // [Feature #1] max_active_jobs — chỉ enforce khi chuyển sang PUBLISHED
+    if (status === JobStatus.PUBLISHED) {
+      if (!isCompanyVerified) {
+        finalStatus = JobStatus.PENDING;
+      } else {
+        // Chỉ check slot khi thực sự publish (không qua PENDING)
+        const { canPost, currentActiveJobs, maxActiveJobs, unlocksAt } =
+          await this.subscriptionsService.checkJobSlotLock(employer.companyId);
+
+        if (!canPost) {
+          const reason = unlocksAt
+            ? `Gói Free chỉ cho phép đăng 1 tin mỗi ${pkg.jobDurationDays} ngày. Mở khoá lúc ${unlocksAt.toLocaleString('vi-VN')}.`
+            : `Bạn đã đạt tối đa ${maxActiveJobs} tin đang tuyển (hiện có: ${currentActiveJobs}).`;
+          throw new ForbiddenException(reason);
+        }
+      }
     }
 
     try {
@@ -145,6 +203,11 @@ export class EmployerJobsService {
               changedById: employerUserId,
             }),
           );
+
+          // [Feature #1] record publish timestamp cho Free lock
+          if (finalStatus === (JobStatus.PUBLISHED as string)) {
+            await this.subscriptionsService.recordJobPublished(employer.companyId!);
+          }
         }
 
         if (skills) {
@@ -159,6 +222,7 @@ export class EmployerJobsService {
             : 'Cập nhật tin tuyển dụng thành công',
       };
     } catch (e) {
+      if (e instanceof ForbiddenException || e instanceof BadRequestException) throw e;
       this.logger.error(e);
       throw new BadRequestException('Lỗi cập nhật. Vui lòng thử lại.');
     }

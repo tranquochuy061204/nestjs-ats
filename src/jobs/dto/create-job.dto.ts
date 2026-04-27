@@ -55,6 +55,12 @@ export const BaseJobSchema = z.object({
     )
     .optional()
     .default([]),
+
+  /** [VIP] Ẩn mác lương — chỉ có tác dụng khi công ty đang dùng gói VIP */
+  hideSalary: z.boolean().optional().default(false),
+
+  /** [VIP] Bắt buộc nộp CV khi apply — chỉ có tác dụng khi công ty đang dùng gói VIP */
+  requireCv: z.boolean().optional().default(false),
 });
 
 export const CreateJobSchema = BaseJobSchema.refine(
@@ -126,4 +132,16 @@ export class CreateJobDto extends createZodDto(CreateJobSchema) {
     example: [{ skillId: 1 }, { tagText: 'NestJS' }],
   })
   skills: { skillId?: number; tagText?: string }[];
+
+  @ApiPropertyOptional({
+    description: '[VIP] Ẩn mác lương trên tin công khai. Cần gói VIP.',
+    default: false,
+  })
+  hideSalary: boolean;
+
+  @ApiPropertyOptional({
+    description: '[VIP] Yêu cầu ứng viên phải có CV mới apply được. Cần gói VIP.',
+    default: false,
+  })
+  requireCv: boolean;
 }

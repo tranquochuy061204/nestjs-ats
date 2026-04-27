@@ -1,13 +1,15 @@
 import {
   Controller,
   Get,
+  Post,
+  Body,
   Query,
   Req,
   UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreditsService } from './credits.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
@@ -29,6 +31,43 @@ export class CreditsController {
     @InjectRepository(EmployerEntity)
     private readonly employerRepo: Repository<EmployerEntity>,
   ) {}
+
+  @Get('products')
+  @ApiOperation({ summary: 'Danh sách tính năng mua lẻ bằng Credit' })
+  getProducts() {
+    return this.creditsService.getAvailableProducts();
+  }
+
+  @Post('purchase')
+  @ApiOperation({
+    summary: 'Mua tính năng à-la-carte bằng Credit',
+    description:
+      'Mua các gói tính năng lẻ: `bump_post` (30 Credit), `extend_job` (20 Credit), `extra_job_slot` (40 Credit). ' +
+      'Trường `targetJobId` bắt buộc với các sản phẩm scope=job.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['slug'],
+      properties: {
+        slug: { type: 'string', example: 'bump_post', description: 'Slug của sản phẩm (VD: bump_post, extend_job, extra_job_slot)' },
+        targetJobId: { type: 'number', example: 42, description: 'ID của tin tuyển dụng (bắt buộc với scope=job)' },
+      },
+    },
+  })
+  async purchaseProduct(
+    @Req() req: Request & { user: { id: number } },
+    @Body('slug') slug: string,
+    @Body('targetJobId') targetJobId?: number,
+  ) {
+    const companyId = await this.getCompanyId(req.user.id);
+    return this.creditsService.purchaseProduct(
+      companyId,
+      slug,
+      targetJobId,
+      req.user.id,
+    );
+  }
 
   @Get('balance')
   @ApiOperation({ summary: 'Xem số dư Credit của công ty' })

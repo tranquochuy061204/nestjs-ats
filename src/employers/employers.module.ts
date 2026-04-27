@@ -18,6 +18,9 @@ import { UserEntity } from '../users/entities/user.entity';
 import { EmployerDashboardService } from './services/employer-dashboard.service';
 import { EmployerDashboardController } from './employer-dashboard.controller';
 import { CandidatesModule } from '../candidates/candidates.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { CreditsModule } from '../credits/credits.module';
+import { ContactUnlockLogEntity } from '../subscriptions/entities/contact-unlock-log.entity';
 
 @Module({
   imports: [
@@ -30,11 +33,14 @@ import { CandidatesModule } from '../candidates/candidates.module';
       JobInvitationEntity,
       CertificateEntity,
       UserEntity,
+      ContactUnlockLogEntity,
     ]),
     StorageModule,
     NotificationsModule,
     MailModule,
     CandidatesModule,
+    SubscriptionsModule,
+    CreditsModule,
   ],
   controllers: [
     EmployersController,

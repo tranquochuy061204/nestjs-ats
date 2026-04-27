@@ -69,10 +69,17 @@ export class CandidateApplicationsService {
       throw new BadRequestException('Tin tuyển dụng đã hết hạn nộp hồ sơ');
     }
 
-    // Check require_cv gate (VIP feature)
+    // [BUG A FIX] requireCv check phải đặt TRƯỜC check cvUrl chung
+    // để thông báo lẽ đúng lý do yêu cầu của job này, không phải lý do chung
     if (job.requireCv && !candidate.cvUrl) {
       throw new BadRequestException(
         'Tin tuyển dụng này yêu cầu bắt buộc có CV. Vui lòng tải lên CV trước khi ứng tuyển.',
+      );
+    }
+
+    if (!candidate.cvUrl) {
+      throw new BadRequestException(
+        'Vui lòng tải lên CV trước khi ứng tuyển. Truy cập API POST /api/candidates/cv để upload.',
       );
     }
 

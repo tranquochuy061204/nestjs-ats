@@ -28,6 +28,7 @@ import { ConfigService } from '@nestjs/config';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { CreditsService } from '../credits/credits.service';
 import { CreditTransactionType } from '../credits/entities/credit-transaction.entity';
+import { JobProfileViewEntity } from '../subscriptions/entities/job-profile-view.entity';
 
 @Injectable()
 export class EmployerApplicationsService {
@@ -46,6 +47,8 @@ export class EmployerApplicationsService {
     private readonly noteRepo: Repository<ApplicationNoteEntity>,
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
+    @InjectRepository(JobProfileViewEntity)
+    private readonly profileViewRepo: Repository<JobProfileViewEntity>,
     private readonly dataSource: DataSource,
     private readonly socketGateway: SocketGateway,
     private readonly notificationsService: NotificationsService,
@@ -154,6 +157,13 @@ export class EmployerApplicationsService {
     return Promise.all(columnPromises);
   }
 
+  /**
+   * [Feature #4] Lấy chi tiết đơn ứng tuyển — có kiểm tra quota xem CV.
+   *
+   * - Free: 30 lượt xem/job (max_profile_views_per_job)
+   * - VIP: -1 = unlimited
+   * Mỗi application._id chỉ tính 1 lượt xem (idempotent per candidate).
+   */
   async getApplicationDetail(employerUserId: number, applicationId: number) {
     const employer = await this.findEmployerByUserId(employerUserId);
 
@@ -186,7 +196,47 @@ export class EmployerApplicationsService {
       );
     }
 
-    return application;
+    // [Feature #4] Track + enforce profile view quota
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(employer.companyId);
+
+    let profileViewsRemaining: number | null = null;
+
+    if (pkg.maxProfileViewsPerJob === -1) {
+      // VIP: unlimited — ghi log nhưng không block
+      profileViewsRemaining = -1;
+    } else {
+      // Đếm số ứng viên (unique) đã xem trong job này
+      const viewedCount = await this.profileViewRepo
+        .createQueryBuilder('pv')
+        .where('pv.job_id = :jobId', { jobId: application.jobId })
+        .getCount();
+
+      // Kiểm tra candidate này đã được xem chưa (idempotent: không tính lại nếu xem tựa)
+      const alreadyViewed = await this.profileViewRepo.findOne({
+        where: { jobId: application.jobId, candidateId: application.candidateId },
+      });
+
+      if (!alreadyViewed) {
+        if (viewedCount >= pkg.maxProfileViewsPerJob) {
+          throw new ForbiddenException(
+            `Bạn đã đạt giới hạn xem ${pkg.maxProfileViewsPerJob} hồ sơ cho tin này. Nâng cấp VIP để xem không giới hạn.`,
+          );
+        }
+        // Ghi nhận lượt xem mới
+        await this.profileViewRepo.save(
+          this.profileViewRepo.create({
+            jobId: application.jobId,
+            candidateId: application.candidateId,
+          }),
+        );
+        profileViewsRemaining = pkg.maxProfileViewsPerJob - viewedCount - 1;
+      } else {
+        profileViewsRemaining = pkg.maxProfileViewsPerJob - viewedCount;
+      }
+    }
+
+    return { ...application, profileViewsRemaining };
   }
 
   async updateApplicationStatus(

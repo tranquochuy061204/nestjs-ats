@@ -145,8 +145,8 @@ export class SubscriptionsService {
       }
     }
 
-    // Check số lượng tin active so với quota
-    if (currentActiveJobs >= pkg.maxActiveJobs) {
+    // [BUG#7 FIX] -1 = unlimited (VIP) — bỏ qua check quota
+    if (pkg.maxActiveJobs !== -1 && currentActiveJobs >= pkg.maxActiveJobs) {
       return {
         canPost: false,
         unlocksAt: null,
@@ -190,25 +190,44 @@ export class SubscriptionsService {
 
   /**
    * Tăng daily processed counter và check limit.
+   * Dùng atomic SQL UPDATE ... RETURNING để tránh race condition.
    * Ném BadRequestException nếu vượt giới hạn.
    */
   async incrementDailyProcessedCount(companyId: number): Promise<void> {
-    await this.checkAndResetDailyCount(companyId);
-
     const { subscription, package: pkg } = await this.getActiveSubscription(companyId);
 
     // -1 = unlimited (VIP)
     if (pkg.dailyApplicationProcessLimit === -1) return;
 
-    if (subscription.dailyProcessedCount >= pkg.dailyApplicationProcessLimit) {
+    const today = new Date().toISOString().slice(0, 10);
+
+    // [BUG#6 FIX] Atomic: reset nếu sang ngày mới + tăng counter trong 1 câu SQL duy nhất
+    // RETURNING cho phép đọc giá trị hậu-update mà không cần query lại
+    const result = await this.dataSource.query<{ daily_processed_count: number }[]>(
+      `UPDATE company_subscription
+       SET
+         daily_processed_count = CASE
+           WHEN daily_processed_date IS DISTINCT FROM $1::date THEN 1
+           ELSE daily_processed_count + 1
+         END,
+         daily_processed_date = $1::date
+       WHERE id = $2
+       RETURNING daily_processed_count`,
+      [today, subscription.id],
+    );
+
+    const newCount = result[0]?.daily_processed_count ?? 1;
+
+    if (newCount > pkg.dailyApplicationProcessLimit) {
+      // Đã vượt giới hạn sau khi tăng — rollback bằng cách trừ lại (để giữ atomic)
+      await this.dataSource.query(
+        `UPDATE company_subscription SET daily_processed_count = daily_processed_count - 1 WHERE id = $1`,
+        [subscription.id],
+      );
       throw new BadRequestException(
         `Bạn đã đạt giới hạn xử lý ${pkg.dailyApplicationProcessLimit} đơn/ngày. Nâng cấp VIP để không giới hạn.`,
       );
     }
-
-    await this.subscriptionRepo.update(subscription.id, {
-      dailyProcessedCount: () => '"daily_processed_count" + 1',
-    });
   }
 
   // ──────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 import { SupabaseService } from '../storage/supabase.service';
 import { sanitizeFilename, toSlug } from '../common/utils/string.util';
 import { STORAGE_PATHS } from '../common/constants/storage-paths.constant';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class CompaniesService {
@@ -25,6 +26,7 @@ export class CompaniesService {
     @InjectRepository(CompanyStatusHistoryEntity)
     private readonly historyRepo: Repository<CompanyStatusHistoryEntity>,
     private readonly supabaseService: SupabaseService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async getCompanyPublicBySlug(slug: string) {
@@ -36,6 +38,9 @@ export class CompaniesService {
     if (!company) {
       throw new NotFoundException('Không tìm thấy thông tin công ty');
     }
+
+    // [Feature #7] has_vip_badge: đọc từ subscription hiện tại của công ty
+    const { package: pkg } = await this.subscriptionsService.getActiveSubscription(company.id);
 
     // Chỉ trả về các trường công khai cho ứng viên
     return {
@@ -57,6 +62,7 @@ export class CompaniesService {
       updatedAt: company.updatedAt,
       slug: company.slug,
       images: company.images,
+      isVip: pkg.hasVipBadge,  // [Feature #7]
     };
   }
 

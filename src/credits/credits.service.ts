@@ -182,6 +182,26 @@ export class CreditsService {
       throw new NotFoundException(`Sản phẩm '${slug}' không tồn tại`);
     }
 
+    // [BUG#4 FIX] Sản phẩm scope=job bắt buộc targetJobId
+    if (product.scope === 'job') {
+      if (!targetJobId) {
+        throw new BadRequestException(
+          `Sản phẩm '${slug}' yêu cầu cung cấp targetJobId`,
+        );
+      }
+
+      // [BUG#5 FIX] Kiểm tra job thuộc đúng company đang mua
+      const jobOwnerCheck = await this.dataSource.query<{ id: number }[]>(
+        `SELECT id FROM job WHERE id = $1 AND company_id = $2 LIMIT 1`,
+        [targetJobId, companyId],
+      );
+      if (!jobOwnerCheck.length) {
+        throw new BadRequestException(
+          `Tin tuyển dụng không tồn tại hoặc không thuộc công ty của bạn`,
+        );
+      }
+    }
+
     return this.dataSource.transaction(async (manager) => {
       // Trừ Credit
       const wallet = await manager
@@ -275,6 +295,14 @@ export class CreditsService {
 
   getTopupPacks() {
     return CREDIT_TOPUP_PACKS;
+  }
+
+  /** Trả về danh sách credit product đang active (cho FE hiển thị cửa hàng) */
+  async getAvailableProducts() {
+    return this.productRepo.find({
+      where: { isActive: true },
+      order: { creditCost: 'ASC' },
+    });
   }
 
   async getTransactionHistory(companyId: number, page = 1, limit = 20) {

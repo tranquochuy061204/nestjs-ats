@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   ScreeningQuestionEntity,
   ScreeningQuestionType,
@@ -39,6 +39,7 @@ export class ScreeningService {
     @InjectRepository(ScreeningAnswerEntity)
     private readonly answerRepo: Repository<ScreeningAnswerEntity>,
     private readonly subscriptionsService: SubscriptionsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   // ──────────────────────────────────────────────────────
@@ -65,23 +66,24 @@ export class ScreeningService {
       );
     }
 
-    // Xoá câu hỏi cũ của job này
-    await this.questionRepo.delete({ jobId });
+    // Dùng transaction: xóa cũ + insert mới atomic
+    return this.dataSource.transaction(async (manager) => {
+      await manager.delete(ScreeningQuestionEntity, { jobId });
 
-    // Tạo mới
-    const questions = dto.questions.map((q, idx) =>
-      this.questionRepo.create({
-        jobId,
-        questionText: q.questionText,
-        questionType: q.questionType ?? ScreeningQuestionType.TEXT,
-        options: q.options ? JSON.stringify(q.options) : null,
-        preferredAnswer: q.preferredAnswer ?? null,
-        isRequired: q.isRequired ?? true,
-        sortOrder: q.sortOrder ?? idx,
-      }),
-    );
+      const questions = dto.questions.map((q, idx) =>
+        manager.create(ScreeningQuestionEntity, {
+          jobId,
+          questionText: q.questionText,
+          questionType: q.questionType ?? ScreeningQuestionType.TEXT,
+          options: q.options ? JSON.stringify(q.options) : null,
+          preferredAnswer: q.preferredAnswer ?? null,
+          isRequired: q.isRequired ?? true,
+          sortOrder: q.sortOrder ?? idx,
+        }),
+      );
 
-    return this.questionRepo.save(questions);
+      return manager.save(ScreeningQuestionEntity, questions);
+    });
   }
 
   async getQuestionsForJob(jobId: number): Promise<ScreeningQuestionEntity[]> {
@@ -97,7 +99,12 @@ export class ScreeningService {
 
   /**
    * Validate required questions, save answers, compute screening_passed.
-   * Trả về: { answers, screeningPassed }
+   * Trả về: { screeningPassed }
+   *
+   * Fixes:
+   *  - [BUG#1] Ghi screening_passed ngược lại vào job_application
+   *  - [BUG#2] Validate chuỗi rỗng + trim
+   *  - [BUG#3] Idempotent: dùng INSERT ... ON CONFLICT DO UPDATE (upsert)
    */
   async submitAnswers(
     applicationId: number,
@@ -107,33 +114,52 @@ export class ScreeningService {
     const questions = await this.getQuestionsForJob(jobId);
     if (questions.length === 0) return { screeningPassed: null };
 
+    // [BUG#2 FIX] Trim và coi chuỗi rỗng sau trim là "chưa trả lời"
     const answerMap = new Map(
-      dto.answers.map((a) => [a.questionId, a.answerText]),
+      dto.answers.map((a) => [a.questionId, a.answerText.trim()]),
     );
 
-    // Validate required
+    // Validate required — reject chuỗi rỗng
     for (const q of questions) {
-      if (q.isRequired && !answerMap.get(q.id)) {
+      const ans = answerMap.get(q.id);
+      if (q.isRequired && (!ans || ans === '')) {
         throw new BadRequestException(
           `Câu hỏi bắt buộc chưa được trả lời: "${q.questionText}"`,
         );
       }
     }
 
-    // Lưu answers
-    const answers = questions
-      .filter((q) => answerMap.has(q.id))
-      .map((q) =>
-        this.answerRepo.create({
+    // [BUG#1 + BUG#3 FIX] Dùng transaction + upsert để idempotent + ghi screening_passed
+    const screeningPassed = this.computeScreeningPassed(questions, answerMap);
+
+    await this.dataSource.transaction(async (manager) => {
+      // Upsert answers — idempotent khi submit nhiều lần
+      const answerRows = questions
+        .filter((q) => answerMap.has(q.id) && answerMap.get(q.id) !== '')
+        .map((q) => ({
           applicationId,
           questionId: q.id,
           answerText: answerMap.get(q.id)!,
-        }),
-      );
-    await this.answerRepo.save(answers);
+        }));
 
-    // Tính screening_passed
-    const screeningPassed = this.computeScreeningPassed(questions, answerMap);
+      if (answerRows.length > 0) {
+        // PostgreSQL upsert: conflict on (application_id, question_id) → update answer
+        await manager
+          .createQueryBuilder()
+          .insert()
+          .into(ScreeningAnswerEntity)
+          .values(answerRows)
+          .orUpdate(['answer_text'], ['application_id', 'question_id'])
+          .execute();
+      }
+
+      // [BUG#1 FIX] Ghi screening_passed về job_application
+      await manager.query(
+        `UPDATE job_application SET screening_passed = $1 WHERE id = $2`,
+        [screeningPassed, applicationId],
+      );
+    });
+
     return { screeningPassed };
   }
 
