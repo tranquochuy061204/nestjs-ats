@@ -140,7 +140,8 @@ export class CreateJobDto extends createZodDto(CreateJobSchema) {
   hideSalary: boolean;
 
   @ApiPropertyOptional({
-    description: '[VIP] Yêu cầu ứng viên phải có CV mới apply được. Cần gói VIP.',
+    description:
+      '[VIP] Yêu cầu ứng viên phải có CV mới apply được. Cần gói VIP.',
     default: false,
   })
   requireCv: boolean;

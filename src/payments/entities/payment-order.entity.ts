@@ -62,11 +62,21 @@ export class PaymentOrderEntity {
   paymentStatus: string;
 
   /** Mã đơn hàng gửi lên VNPay (vnp_TxnRef) */
-  @Column({ name: 'gateway_order_id', type: 'varchar', length: 255, nullable: true })
+  @Column({
+    name: 'gateway_order_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
   gatewayOrderId: string | null;
 
   /** Mã giao dịch từ VNPay (vnp_TransactionNo) */
-  @Column({ name: 'gateway_transaction_id', type: 'varchar', length: 255, nullable: true })
+  @Column({
+    name: 'gateway_transaction_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
   gatewayTransactionId: string | null;
 
   /** Raw JSON response từ VNPay IPN */

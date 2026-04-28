@@ -45,7 +45,12 @@ export class ScreeningQuestionEntity {
    * Đáp án mong muốn. NULL = không auto-tag.
    * "yes"/"no" cho yes_no. Giá trị cụ thể cho single_choice.
    */
-  @Column({ name: 'preferred_answer', type: 'varchar', length: 500, nullable: true })
+  @Column({
+    name: 'preferred_answer',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
   preferredAnswer: string | null;
 
   @Column({ name: 'is_required', type: 'boolean', default: true })

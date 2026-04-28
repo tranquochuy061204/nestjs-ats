@@ -51,7 +51,8 @@ export class EmployerJobsService {
     }
 
     // ── VIP Quota & Feature Check ──────────────────────────────────────
-    const { package: pkg } = await this.subscriptionsService.getActiveSubscription(emp.companyId);
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(emp.companyId);
 
     // [Feature #2] can_hide_salary
     if (createJobDto.hideSalary && !pkg.canHideSalary) {
@@ -124,9 +125,8 @@ export class EmployerJobsService {
     }
 
     // ── VIP Quota & Feature Check ──────────────────────────────────────
-    const { package: pkg } = await this.subscriptionsService.getActiveSubscription(
-      employer.companyId,
-    );
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(employer.companyId);
 
     // [Feature #2] cannot set hideSalary if not VIP (check both: new value OR existing still true)
     const willHideSalary = updateJobDto.hideSalary ?? job.hideSalary;
@@ -163,22 +163,25 @@ export class EmployerJobsService {
     const isCompanyVerified = job.company?.status === CompanyStatus.APPROVED;
     let finalStatus = (status as string) ?? job.status;
 
-    // [Feature #1] max_active_jobs — chỉ enforce khi chuyển sang PUBLISHED
+    // [Feature #1] max_active_jobs — enforce khi recruiter submit (PUBLISHED intent),
+    // kể cả khi company chưa verified và bài sẽ chuyển sang PENDING.
+    // Lý do: pending cũng chiếm slot (tránh lỗ hổng đăng nhiều bài chờ duyệt).
     if (status === JobStatus.PUBLISHED) {
+      const { canPost, currentActiveJobs, maxActiveJobs, unlocksAt } =
+        await this.subscriptionsService.checkJobSlotLock(employer.companyId);
+
+      if (!canPost) {
+        const reason = unlocksAt
+          ? `Gói Free chỉ cho phép đăng 1 tin mỗi ${pkg.jobDurationDays} ngày. Mở khoá lúc ${unlocksAt.toLocaleString('vi-VN')}.`
+          : `Bạn đã đạt tối đa ${maxActiveJobs} tin đang tuyển hoặc chờ duyệt (hiện có: ${currentActiveJobs}).`;
+        throw new ForbiddenException(reason);
+      }
+
+      // Sau khi pass quota check: quyết định PUBLISHED hay PENDING
       if (!isCompanyVerified) {
         finalStatus = JobStatus.PENDING;
-      } else {
-        // Chỉ check slot khi thực sự publish (không qua PENDING)
-        const { canPost, currentActiveJobs, maxActiveJobs, unlocksAt } =
-          await this.subscriptionsService.checkJobSlotLock(employer.companyId);
-
-        if (!canPost) {
-          const reason = unlocksAt
-            ? `Gói Free chỉ cho phép đăng 1 tin mỗi ${pkg.jobDurationDays} ngày. Mở khoá lúc ${unlocksAt.toLocaleString('vi-VN')}.`
-            : `Bạn đã đạt tối đa ${maxActiveJobs} tin đang tuyển (hiện có: ${currentActiveJobs}).`;
-          throw new ForbiddenException(reason);
-        }
       }
+      // (else: giữ finalStatus = PUBLISHED — đã set ở trên)
     }
 
     try {
@@ -206,7 +209,9 @@ export class EmployerJobsService {
 
           // [Feature #1] record publish timestamp cho Free lock
           if (finalStatus === (JobStatus.PUBLISHED as string)) {
-            await this.subscriptionsService.recordJobPublished(employer.companyId!);
+            await this.subscriptionsService.recordJobPublished(
+              employer.companyId!,
+            );
           }
         }
 
@@ -222,7 +227,8 @@ export class EmployerJobsService {
             : 'Cập nhật tin tuyển dụng thành công',
       };
     } catch (e) {
-      if (e instanceof ForbiddenException || e instanceof BadRequestException) throw e;
+      if (e instanceof ForbiddenException || e instanceof BadRequestException)
+        throw e;
       this.logger.error(e);
       throw new BadRequestException('Lỗi cập nhật. Vui lòng thử lại.');
     }

@@ -48,12 +48,6 @@ export class CandidateApplicationsService {
   async apply(userId: number, jobId: number, dto: ApplyJobDto) {
     const candidate = await this.findCandidateByUserId(userId);
 
-    if (!candidate.cvUrl) {
-      throw new BadRequestException(
-        'Vui lòng tải lên CV trước khi ứng tuyển. Truy cập API POST /api/candidates/cv để upload.',
-      );
-    }
-
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job) {
       throw new NotFoundException('Tin tuyển dụng không tồn tại');
@@ -72,15 +66,11 @@ export class CandidateApplicationsService {
     // [BUG A FIX] requireCv check phải đặt TRƯỜC check cvUrl chung
     // để thông báo lẽ đúng lý do yêu cầu của job này, không phải lý do chung
     if (job.requireCv && !candidate.cvUrl) {
-      throw new BadRequestException(
-        'Tin tuyển dụng này yêu cầu bắt buộc có CV. Vui lòng tải lên CV trước khi ứng tuyển.',
-      );
-    }
-
-    if (!candidate.cvUrl) {
-      throw new BadRequestException(
-        'Vui lòng tải lên CV trước khi ứng tuyển. Truy cập API POST /api/candidates/cv để upload.',
-      );
+      throw new BadRequestException({
+        message:
+          'Tin tuyển dụng này yêu cầu bắt buộc có CV. Vui lòng tải lên CV trước khi ứng tuyển.',
+        errorCode: 'CV_REQUIRED',
+      });
     }
 
     const existing = await this.applicationRepo.findOne({

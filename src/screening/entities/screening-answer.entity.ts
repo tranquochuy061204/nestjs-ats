@@ -32,7 +32,9 @@ export class ScreeningAnswerEntity {
   @JoinColumn({ name: 'application_id' })
   application: JobApplicationEntity;
 
-  @ManyToOne(() => ScreeningQuestionEntity, (q) => q.answers, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ScreeningQuestionEntity, (q) => q.answers, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'question_id' })
   question: ScreeningQuestionEntity;
 }

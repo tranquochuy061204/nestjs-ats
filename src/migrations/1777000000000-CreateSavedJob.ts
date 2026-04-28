@@ -43,12 +43,8 @@ export class CreateSavedJob1777000000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "saved_job" DROP CONSTRAINT "FK_saved_job_candidate"`,
     );
-    await queryRunner.query(
-      `DROP INDEX "public"."IDX_saved_job_job_id"`,
-    );
-    await queryRunner.query(
-      `DROP INDEX "public"."IDX_saved_job_candidate_id"`,
-    );
+    await queryRunner.query(`DROP INDEX "public"."IDX_saved_job_job_id"`);
+    await queryRunner.query(`DROP INDEX "public"."IDX_saved_job_candidate_id"`);
     await queryRunner.query(`DROP TABLE "saved_job"`);
   }
 }

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CandidateEntity } from '../entities/candidate.entity';
@@ -73,7 +77,8 @@ export class CandidateSavedJobsService {
     const skip = (page - 1) * limit;
 
     // Use QueryBuilder to fetch jobs with relation to company directly for performance
-    const qb = this.savedJobRepo.createQueryBuilder('sj')
+    const qb = this.savedJobRepo
+      .createQueryBuilder('sj')
       .innerJoinAndSelect('sj.job', 'job')
       .leftJoin('job.company', 'company')
       .addSelect([
@@ -81,7 +86,7 @@ export class CandidateSavedJobsService {
         'company.name',
         'company.logoUrl',
         'company.bannerUrl',
-        'company.slug'
+        'company.slug',
       ])
       .leftJoin('job.province', 'province')
       .addSelect(['province.code', 'province.name'])

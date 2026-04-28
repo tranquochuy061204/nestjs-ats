@@ -40,7 +40,8 @@ export class CompaniesService {
     }
 
     // [Feature #7] has_vip_badge: đọc từ subscription hiện tại của công ty
-    const { package: pkg } = await this.subscriptionsService.getActiveSubscription(company.id);
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(company.id);
 
     // Chỉ trả về các trường công khai cho ứng viên
     return {
@@ -62,7 +63,7 @@ export class CompaniesService {
       updatedAt: company.updatedAt,
       slug: company.slug,
       images: company.images,
-      isVip: pkg.hasVipBadge,  // [Feature #7]
+      isVip: pkg.hasVipBadge, // [Feature #7]
     };
   }
 

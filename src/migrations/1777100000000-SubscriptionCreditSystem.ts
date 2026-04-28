@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - Seed: credit_product
  * - Backfill: gán Free cho tất cả company hiện tại + tạo credit_wallet
  */
-export class SubscriptionCreditSystem1777100000000
-  implements MigrationInterface
-{
+export class SubscriptionCreditSystem1777100000000 implements MigrationInterface {
   name = 'SubscriptionCreditSystem1777100000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -319,15 +317,29 @@ export class SubscriptionCreditSystem1777100000000
     // ══════════════════════════════════════════════════════
     // 13. ALTER EXISTING TABLES
     // ══════════════════════════════════════════════════════
-    await queryRunner.query(`ALTER TABLE "job" ADD COLUMN "hide_salary" BOOLEAN NOT NULL DEFAULT false`);
-    await queryRunner.query(`ALTER TABLE "job" ADD COLUMN "require_cv" BOOLEAN NOT NULL DEFAULT false`);
-    await queryRunner.query(`ALTER TABLE "job" ADD COLUMN "is_bumped" BOOLEAN NOT NULL DEFAULT false`);
-    await queryRunner.query(`ALTER TABLE "job" ADD COLUMN "bumped_until" TIMESTAMP`);
+    await queryRunner.query(
+      `ALTER TABLE "job" ADD COLUMN "hide_salary" BOOLEAN NOT NULL DEFAULT false`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "job" ADD COLUMN "require_cv" BOOLEAN NOT NULL DEFAULT false`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "job" ADD COLUMN "is_bumped" BOOLEAN NOT NULL DEFAULT false`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "job" ADD COLUMN "bumped_until" TIMESTAMP`,
+    );
 
-    await queryRunner.query(`ALTER TABLE "job_application" ADD COLUMN "screening_passed" BOOLEAN`);
-    await queryRunner.query(`ALTER TABLE "job_application" ADD COLUMN "ai_scored" BOOLEAN NOT NULL DEFAULT false`);
+    await queryRunner.query(
+      `ALTER TABLE "job_application" ADD COLUMN "screening_passed" BOOLEAN`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "job_application" ADD COLUMN "ai_scored" BOOLEAN NOT NULL DEFAULT false`,
+    );
 
-    await queryRunner.query(`ALTER TABLE "application_status_history" ADD COLUMN "credit_charged" INT NOT NULL DEFAULT 0`);
+    await queryRunner.query(
+      `ALTER TABLE "application_status_history" ADD COLUMN "credit_charged" INT NOT NULL DEFAULT 0`,
+    );
 
     // ══════════════════════════════════════════════════════
     // 14. SEED: SUBSCRIPTION PACKAGES
@@ -407,9 +419,15 @@ export class SubscriptionCreditSystem1777100000000
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Undo alter existing tables
-    await queryRunner.query(`ALTER TABLE "application_status_history" DROP COLUMN "credit_charged"`);
-    await queryRunner.query(`ALTER TABLE "job_application" DROP COLUMN "ai_scored"`);
-    await queryRunner.query(`ALTER TABLE "job_application" DROP COLUMN "screening_passed"`);
+    await queryRunner.query(
+      `ALTER TABLE "application_status_history" DROP COLUMN "credit_charged"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "job_application" DROP COLUMN "ai_scored"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "job_application" DROP COLUMN "screening_passed"`,
+    );
     await queryRunner.query(`ALTER TABLE "job" DROP COLUMN "bumped_until"`);
     await queryRunner.query(`ALTER TABLE "job" DROP COLUMN "is_bumped"`);
     await queryRunner.query(`ALTER TABLE "job" DROP COLUMN "require_cv"`);

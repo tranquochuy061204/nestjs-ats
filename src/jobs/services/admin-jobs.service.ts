@@ -11,6 +11,7 @@ import { JobFilterDto } from '../dto/job-filter.dto';
 import { getPaginatedResult } from '../../common/utils/pagination.util';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/entities/notification.entity';
+import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 
 @Injectable()
 export class AdminJobsService {
@@ -21,6 +22,7 @@ export class AdminJobsService {
     private readonly historyRepo: Repository<JobStatusHistoryEntity>,
     private readonly dataSource: DataSource,
     private readonly notificationsService: NotificationsService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async approveJob(jobId: number) {
@@ -51,6 +53,10 @@ export class AdminJobsService {
         }),
       );
     });
+
+    // Ghi nhận thời điểm publish để tính Free lock 7 ngày.
+    // Cần chạy ngoài transaction vì subscriptionsService dùng repo riêng.
+    await this.subscriptionsService.recordJobPublished(job.companyId);
 
     // --- REAL-TIME NOTIFICATION ---
     await this.notificationsService.createNotification({

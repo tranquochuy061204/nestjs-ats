@@ -42,11 +42,6 @@ import { MailModule } from '../mail/mail.module';
     JwtStrategy,
     JwtRefreshStrategy,
   ],
-  exports: [
-    AuthService,
-    AuthTokenService,
-    AuthVerificationService,
-    JwtModule,
-  ],
+  exports: [AuthService, AuthTokenService, AuthVerificationService, JwtModule],
 })
 export class AuthModule {}

@@ -47,7 +47,12 @@ export class CreditTransactionEntity {
   description: string | null;
 
   /** 'application_status_history' | 'credit_purchase' | 'contact_unlock' | 'payment_order' */
-  @Column({ name: 'reference_type', type: 'varchar', length: 50, nullable: true })
+  @Column({
+    name: 'reference_type',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+  })
   referenceType: string | null;
 
   @Column({ name: 'reference_id', type: 'int', nullable: true })

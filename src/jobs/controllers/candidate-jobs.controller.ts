@@ -1,4 +1,10 @@
-import { Controller, Get, ParseIntPipe, Query, DefaultValuePipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  ParseIntPipe,
+  Query,
+  DefaultValuePipe,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CandidateJobsService } from '../services/candidate-jobs.service';
 import { ApiAuth } from '../../common/decorators/api-auth.decorator';
@@ -11,7 +17,9 @@ export class CandidateJobsController {
 
   @Get('recommended')
   @ApiAuth()
-  @ApiOperation({ summary: 'Lấy danh sách việc làm gợi ý dựa trên hồ sơ ứng viên' })
+  @ApiOperation({
+    summary: 'Lấy danh sách việc làm gợi ý dựa trên hồ sơ ứng viên',
+  })
   @ApiResponse({ status: 200, description: 'Danh sách việc làm gợi ý' })
   getRecommendedJobs(
     @CurrentUser() user: { id: number },

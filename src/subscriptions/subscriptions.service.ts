@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { CompanySubscriptionEntity, SubscriptionStatus } from './entities/company-subscription.entity';
+import {
+  CompanySubscriptionEntity,
+  SubscriptionStatus,
+} from './entities/company-subscription.entity';
 import { SubscriptionPackageEntity } from './entities/subscription-package.entity';
 import { CreditPurchaseLogEntity } from '../credits/entities/credit-purchase-log.entity';
 
@@ -81,14 +84,16 @@ export class SubscriptionsService {
   ): Promise<{ creditCost: number; isFree: boolean; useFreeProceed: boolean }> {
     // Chỉ thu tiền khi ứng viên rời khỏi cột APPLIED sang các cột tiến trình (trừ REJECTED / WITHDRAWN)
     const isFirstTimeProceed = oldStatus === 'applied';
-    const isRejectedOrWithdrawn = newStatus === 'rejected' || newStatus === 'withdrawn';
+    const isRejectedOrWithdrawn =
+      newStatus === 'rejected' || newStatus === 'withdrawn';
 
     // Nếu không phải lần đầu pass, hoặc pass vào cột từ chối => Miễn phí (không thu charge, không cần check VIP quota)
     if (!isFirstTimeProceed || isRejectedOrWithdrawn) {
       return { creditCost: 0, isFree: true, useFreeProceed: false };
     }
 
-    const { subscription, package: pkg } = await this.getActiveSubscription(companyId);
+    const { subscription, package: pkg } =
+      await this.getActiveSubscription(companyId);
 
     // VIP với free proceeds còn
     if (
@@ -125,11 +130,14 @@ export class SubscriptionsService {
     currentActiveJobs: number;
     maxActiveJobs: number;
   }> {
-    const { subscription, package: pkg } = await this.getActiveSubscription(companyId);
+    const { subscription, package: pkg } =
+      await this.getActiveSubscription(companyId);
 
-    // Đếm số tin đang active
+    // Đếm số tin đang chiếm slot (pending chờ duyệt cũng tính vào quota —
+    // tránh lỗ hổng: gói Free submit nhiều PENDING rồi chờ admin duyệt hàng loạt)
     const activeJobsCount = await this.dataSource.query<{ count: string }[]>(
-      `SELECT COUNT(*) as count FROM "job" WHERE "company_id" = $1 AND "status" = 'published'`,
+      `SELECT COUNT(*) as count FROM "job"
+       WHERE "company_id" = $1 AND "status" IN ('pending', 'published')`,
       [companyId],
     );
     const currentActiveJobs = parseInt(activeJobsCount[0]?.count ?? '0', 10);
@@ -137,7 +145,9 @@ export class SubscriptionsService {
     // Free: hard lock 7 ngày
     if (pkg.name === 'free' && subscription.lastJobPublishedAt) {
       const lockMs = pkg.jobDurationDays * 24 * 60 * 60 * 1000;
-      const unlocksAt = new Date(subscription.lastJobPublishedAt.getTime() + lockMs);
+      const unlocksAt = new Date(
+        subscription.lastJobPublishedAt.getTime() + lockMs,
+      );
       if (new Date() < unlocksAt) {
         return {
           canPost: false,
@@ -157,9 +167,8 @@ export class SubscriptionsService {
       .andWhere('(pl.expires_at IS NULL OR pl.expires_at > NOW())')
       .getCount();
 
-    const effectiveMaxJobs = pkg.maxActiveJobs === -1
-      ? -1
-      : pkg.maxActiveJobs + extraSlots;
+    const effectiveMaxJobs =
+      pkg.maxActiveJobs === -1 ? -1 : pkg.maxActiveJobs + extraSlots;
 
     // [BUG#7 FIX] -1 = unlimited (VIP) — bỏ qua check quota
     if (effectiveMaxJobs !== -1 && currentActiveJobs >= effectiveMaxJobs) {
@@ -210,7 +219,8 @@ export class SubscriptionsService {
    * Ném BadRequestException nếu vượt giới hạn.
    */
   async incrementDailyProcessedCount(companyId: number): Promise<void> {
-    const { subscription, package: pkg } = await this.getActiveSubscription(companyId);
+    const { subscription, package: pkg } =
+      await this.getActiveSubscription(companyId);
 
     // -1 = unlimited (VIP)
     if (pkg.dailyApplicationProcessLimit === -1) return;
@@ -219,7 +229,9 @@ export class SubscriptionsService {
 
     // [BUG#6 FIX] Atomic: reset nếu sang ngày mới + tăng counter trong 1 câu SQL duy nhất
     // RETURNING cho phép đọc giá trị hậu-update mà không cần query lại
-    const result = await this.dataSource.query<{ daily_processed_count: number }[]>(
+    const result = await this.dataSource.query<
+      { daily_processed_count: number }[]
+    >(
       `UPDATE company_subscription
        SET
          daily_processed_count = CASE
@@ -274,7 +286,9 @@ export class SubscriptionsService {
       );
 
       const now = new Date();
-      const endDate = new Date(now.getTime() + vipPkg.durationDays * 24 * 60 * 60 * 1000);
+      const endDate = new Date(
+        now.getTime() + vipPkg.durationDays * 24 * 60 * 60 * 1000,
+      );
 
       const newSub = manager.create(CompanySubscriptionEntity, {
         companyId,
@@ -294,9 +308,14 @@ export class SubscriptionsService {
   // PRIVATE HELPERS
   // ──────────────────────────────────────────────────────
 
-  private async assignFreePackage(companyId: number): Promise<ActiveSubscription> {
+  private async assignFreePackage(
+    companyId: number,
+  ): Promise<ActiveSubscription> {
     const freePkg = await this.packageRepo.findOne({ where: { name: 'free' } });
-    if (!freePkg) throw new NotFoundException('Free package not found in DB. Run migrations.');
+    if (!freePkg)
+      throw new NotFoundException(
+        'Free package not found in DB. Run migrations.',
+      );
 
     const newSub = await this.subscriptionRepo.save(
       this.subscriptionRepo.create({

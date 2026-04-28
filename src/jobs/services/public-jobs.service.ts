@@ -282,11 +282,13 @@ export class PublicJobsService {
   ): void {
     const { sortBy, sortOrder, keyword, provinceId, categoryId } = dto;
 
-    // [Fix F] Bumped tin luôn ưu tiên lên đầu, bất kể sort mode
-    qb.addOrderBy(
-      'CASE WHEN job.is_bumped = true AND job.bumped_until > NOW() THEN 0 ELSE 1 END',
-      'ASC',
-    );
+    // [Fix F] Bumped tin luôn ưu tiên lên đầu, bất kể sort mode.
+    // Dùng addSelect + alias thay vì raw column string trong addOrderBy —
+    // TypeORM resolve alias trực tiếp, không intercept dot-notation.
+    qb.addSelect(
+      'CASE WHEN job.isBumped = true AND job.bumpedUntil > NOW() THEN 0 ELSE 1 END',
+      'bump_priority',
+    ).addOrderBy('bump_priority', 'ASC');
 
     if (sortBy === JobSortBy.RELEVANCE) {
       /**
@@ -323,10 +325,10 @@ export class PublicJobsService {
         qb.setParameters(params);
       }
 
-      qb.addOrderBy(scoreExpr, SortOrder.DESC).addOrderBy(
-        'job.createdAt',
-        SortOrder.DESC,
-      );
+      // Tương tự bump_priority: dùng alias để TypeORM không cần parse raw expr
+      qb.addSelect(scoreExpr, 'relevance_score')
+        .addOrderBy('relevance_score', SortOrder.DESC)
+        .addOrderBy('job.createdAt', SortOrder.DESC);
       return;
     }
 

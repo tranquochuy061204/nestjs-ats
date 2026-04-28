@@ -216,7 +216,10 @@ export class EmployerApplicationsService {
 
       // Kiểm tra candidate này đã được xem chưa (idempotent: không tính lại nếu xem tựa)
       const alreadyViewed = await this.profileViewRepo.findOne({
-        where: { jobId: application.jobId, candidateId: application.candidateId },
+        where: {
+          jobId: application.jobId,
+          candidateId: application.candidateId,
+        },
       });
 
       if (!alreadyViewed) {
@@ -560,7 +563,10 @@ export class EmployerApplicationsService {
   /**
    * Cho phép nhà tuyển dụng (Gói Free) chủ động mua lượt chấm điểm AI bằng Credit.
    */
-  async manuallyTriggerAiScoring(employerUserId: number, applicationId: number) {
+  async manuallyTriggerAiScoring(
+    employerUserId: number,
+    applicationId: number,
+  ) {
     const employer = await this.findEmployerByUserId(employerUserId);
 
     const application = await this.applicationRepo.findOne({
@@ -578,7 +584,9 @@ export class EmployerApplicationsService {
       application.status === (ApplicationStatus.WITHDRAWN as string) ||
       application.status === (ApplicationStatus.REJECTED as string)
     ) {
-      throw new BadRequestException('Không thể phân tích AI cho đơn ứng tuyển đã bị rút hoặc từ chối');
+      throw new BadRequestException(
+        'Không thể phân tích AI cho đơn ứng tuyển đã bị rút hoặc từ chối',
+      );
     }
 
     // 1. Phải nạp credit và trừ tiền
@@ -592,7 +600,9 @@ export class EmployerApplicationsService {
 
     // 2. Trigger AI scoring
     // Vì calculation tốn thời gian, fire-and-forget (không await).
-    void this.candidateApplicationsService.calculateAiMatchScore(application.id);
+    void this.candidateApplicationsService.calculateAiMatchScore(
+      application.id,
+    );
 
     return {
       message:

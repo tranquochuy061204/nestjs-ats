@@ -50,8 +50,17 @@ export class CreditsController {
       type: 'object',
       required: ['slug'],
       properties: {
-        slug: { type: 'string', example: 'bump_post', description: 'Slug của sản phẩm (VD: bump_post, extend_job, extra_job_slot)' },
-        targetJobId: { type: 'number', example: 42, description: 'ID của tin tuyển dụng (bắt buộc với scope=job)' },
+        slug: {
+          type: 'string',
+          example: 'bump_post',
+          description:
+            'Slug của sản phẩm (VD: bump_post, extend_job, extra_job_slot)',
+        },
+        targetJobId: {
+          type: 'number',
+          example: 42,
+          description: 'ID của tin tuyển dụng (bắt buộc với scope=job)',
+        },
       },
     },
   })

@@ -57,7 +57,11 @@ export class CompanySubscriptionEntity {
   dailyProcessedDate: string | null;
 
   /** Timestamp đăng tin gần nhất — để enforce lock 7 ngày cho Free */
-  @Column({ name: 'last_job_published_at', type: 'timestamptz', nullable: true })
+  @Column({
+    name: 'last_job_published_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
   lastJobPublishedAt: Date | null;
 
   // ── Headhunting Usage ─────────────────────────────────────
@@ -65,7 +69,11 @@ export class CompanySubscriptionEntity {
   @Column({ name: 'headhunting_views_used', type: 'int', default: 0 })
   headhuntingViewsUsed: number;
 
-  @Column({ name: 'headhunting_views_reset_at', type: 'timestamptz', nullable: true })
+  @Column({
+    name: 'headhunting_views_reset_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
   headhuntingViewsResetAt: Date | null;
 
   // ── Pipeline Proceed Usage ────────────────────────────────
