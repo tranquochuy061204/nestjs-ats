@@ -18,7 +18,7 @@ import {
 import { ApplicationStatusHistoryEntity } from '../../applications/entities/application-status-history.entity';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/entities/notification.entity';
-import { CandidateApplicationsService } from '../../applications/candidate-applications.service';
+import { ApplicationScoringService } from '../../applications/application-scoring.service';
 
 @Injectable()
 export class CandidateHeadhuntingService {
@@ -33,7 +33,7 @@ export class CandidateHeadhuntingService {
     private readonly applicationRepo: Repository<JobApplicationEntity>,
     private readonly dataSource: DataSource,
     private readonly notificationsService: NotificationsService,
-    private readonly candidateApplicationsService: CandidateApplicationsService,
+    private readonly applicationScoringService: ApplicationScoringService,
   ) {}
 
   async getMyInvitations(userId: number) {
@@ -104,7 +104,7 @@ export class CandidateHeadhuntingService {
     });
 
     // --- FIRE AND FORGET: AI Match Scoring ---
-    this.candidateApplicationsService
+    this.applicationScoringService
       .calculateAiMatchScore(newApplicationId!)
       .catch((err: unknown) => {
         this.logger.error(

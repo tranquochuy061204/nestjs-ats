@@ -10,6 +10,9 @@ import { CandidateApplicationsService } from './candidate-applications.service';
 import { EmployerApplicationsService } from './employer-applications.service';
 import { CandidateApplicationsController } from './candidate-applications.controller';
 import { EmployerApplicationsController } from './employer-applications.controller';
+import { ApplicationScoringService } from './application-scoring.service';
+import { ApplicationStatusService } from './application-status.service';
+import { ApplicationNotesService } from './application-notes.service';
 
 import { UserEntity } from '../users/entities/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -43,7 +46,13 @@ import { JobProfileViewEntity } from '../subscriptions/entities/job-profile-view
     CandidateApplicationsController,
     EmployerApplicationsController,
   ],
-  providers: [CandidateApplicationsService, EmployerApplicationsService],
-  exports: [CandidateApplicationsService],
+  providers: [
+    CandidateApplicationsService,
+    EmployerApplicationsService,
+    ApplicationScoringService,
+    ApplicationStatusService,
+    ApplicationNotesService,
+  ],
+  exports: [CandidateApplicationsService, ApplicationScoringService],
 })
 export class ApplicationsModule {}

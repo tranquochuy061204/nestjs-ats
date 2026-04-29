@@ -1,35 +1,23 @@
 import {
   Injectable,
   NotFoundException,
-  BadRequestException,
   ForbiddenException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
   JobApplicationEntity,
   ApplicationStatus,
 } from './entities/job-application.entity';
-import { ApplicationStatusHistoryEntity } from './entities/application-status-history.entity';
 import { JobEntity } from '../jobs/entities/job.entity';
 import { EmployerEntity } from '../employers/entities/employer.entity';
 import { ApplicationFilterDto } from './dto/application-filter.dto';
-import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
-import { ApplicationNoteEntity } from './entities/application-note.entity';
-import { CreateApplicationNoteDto } from './dto/create-application-note.dto';
-import { UpdateApplicationNoteDto } from './dto/update-application-note.dto';
-import { SocketGateway } from '../common/socket/socket.gateway';
-import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationType } from '../notifications/entities/notification.entity';
-import { UserEntity } from '../users/entities/user.entity';
-import { MailService } from '../mail/mail.service';
-import { ConfigService } from '@nestjs/config';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
-import { CreditsService } from '../credits/credits.service';
-import { CreditTransactionType } from '../credits/entities/credit-transaction.entity';
 import { JobProfileViewEntity } from '../subscriptions/entities/job-profile-view.entity';
-import { CandidateApplicationsService } from './candidate-applications.service';
+import { ApplicationScoringService } from './application-scoring.service';
+import { CreditsService } from '../credits/credits.service';
 
 @Injectable()
 export class EmployerApplicationsService {
@@ -38,26 +26,15 @@ export class EmployerApplicationsService {
   constructor(
     @InjectRepository(JobApplicationEntity)
     private readonly applicationRepo: Repository<JobApplicationEntity>,
-    @InjectRepository(ApplicationStatusHistoryEntity)
-    private readonly historyRepo: Repository<ApplicationStatusHistoryEntity>,
     @InjectRepository(JobEntity)
     private readonly jobRepo: Repository<JobEntity>,
     @InjectRepository(EmployerEntity)
     private readonly employerRepo: Repository<EmployerEntity>,
-    @InjectRepository(ApplicationNoteEntity)
-    private readonly noteRepo: Repository<ApplicationNoteEntity>,
-    @InjectRepository(UserEntity)
-    private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(JobProfileViewEntity)
     private readonly profileViewRepo: Repository<JobProfileViewEntity>,
-    private readonly dataSource: DataSource,
-    private readonly socketGateway: SocketGateway,
-    private readonly notificationsService: NotificationsService,
-    private readonly mailService: MailService,
-    private readonly configService: ConfigService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly creditsService: CreditsService,
-    private readonly candidateApplicationsService: CandidateApplicationsService,
+    private readonly applicationScoringService: ApplicationScoringService,
   ) {}
 
   async getJobApplications(
@@ -121,7 +98,6 @@ export class EmployerApplicationsService {
       { id: ApplicationStatus.WITHDRAWN, title: 'Đã rút đơn' },
     ];
 
-    // 1. Tính tổng số lượng ở mỗi cột
     const counts = await this.applicationRepo
       .createQueryBuilder('app')
       .select('app.status', 'status')
@@ -135,7 +111,6 @@ export class EmployerApplicationsService {
       countMap.set(row.status, row.count);
     }
 
-    // 2. Chạy 8 query song song để lấy 10 item mới nhất cho mỗi cột (tránh N+1 và load vào RAM)
     const columnPromises = columns.map(async (col) => {
       const items = await this.applicationRepo.find({
         where: { jobId, status: col.id },
@@ -159,20 +134,13 @@ export class EmployerApplicationsService {
     return Promise.all(columnPromises);
   }
 
-  /**
-   * [Feature #4] Lấy chi tiết đơn ứng tuyển — có kiểm tra quota xem CV.
-   *
-   * - Free: 30 lượt xem/job (max_profile_views_per_job)
-   * - VIP: -1 = unlimited
-   * Mỗi application._id chỉ tính 1 lượt xem (idempotent per candidate).
-   */
   async getApplicationDetail(employerUserId: number, applicationId: number) {
     const employer = await this.findEmployerByUserId(employerUserId);
 
     const application = await this.applicationRepo.findOne({
       where: {
         id: applicationId,
-        job: { companyId: employer.companyId }, // Early Check Authorization
+        job: { companyId: employer.companyId },
       },
       relations: [
         'job',
@@ -198,371 +166,51 @@ export class EmployerApplicationsService {
       );
     }
 
-    // [Feature #4] Track + enforce profile view quota
     const { package: pkg } =
       await this.subscriptionsService.getActiveSubscription(employer.companyId);
 
     let profileViewsRemaining: number | null = null;
+    const TEST_LIMIT = 3; // TODO: Đổi lại thành pkg.maxProfileViewsPerJob sau khi test xong
 
     if (pkg.maxProfileViewsPerJob === -1) {
-      // VIP: unlimited — ghi log nhưng không block
       profileViewsRemaining = -1;
     } else {
-      // Đếm số ứng viên (unique) đã xem trong job này
       const viewedCount = await this.profileViewRepo
         .createQueryBuilder('pv')
-        .where('pv.job_id = :jobId', { jobId: application.jobId })
+        .innerJoin('pv.job', 'job')
+        .where('job.company_id = :companyId', { companyId: employer.companyId })
         .getCount();
 
-      // Kiểm tra candidate này đã được xem chưa (idempotent: không tính lại nếu xem tựa)
-      const alreadyViewed = await this.profileViewRepo.findOne({
-        where: {
-          jobId: application.jobId,
+      const alreadyViewed = await this.profileViewRepo
+        .createQueryBuilder('pv')
+        .innerJoin('pv.job', 'job')
+        .where('job.company_id = :companyId', { companyId: employer.companyId })
+        .andWhere('pv.candidate_id = :candidateId', {
           candidateId: application.candidateId,
-        },
-      });
+        })
+        .getOne();
 
       if (!alreadyViewed) {
-        if (viewedCount >= pkg.maxProfileViewsPerJob) {
+        if (viewedCount >= TEST_LIMIT) {
           throw new ForbiddenException(
-            `Bạn đã đạt giới hạn xem ${pkg.maxProfileViewsPerJob} hồ sơ cho tin này. Nâng cấp VIP để xem không giới hạn.`,
+            `Bạn đã đạt giới hạn xem ${TEST_LIMIT} hồ sơ ứng tuyển của gói Free. Vui lòng nâng cấp VIP để xem không giới hạn.`,
           );
         }
-        // Ghi nhận lượt xem mới
         await this.profileViewRepo.save(
           this.profileViewRepo.create({
             jobId: application.jobId,
             candidateId: application.candidateId,
           }),
         );
-        profileViewsRemaining = pkg.maxProfileViewsPerJob - viewedCount - 1;
+        profileViewsRemaining = TEST_LIMIT - viewedCount - 1;
       } else {
-        profileViewsRemaining = pkg.maxProfileViewsPerJob - viewedCount;
+        profileViewsRemaining = TEST_LIMIT - viewedCount;
       }
     }
 
     return { ...application, profileViewsRemaining };
   }
 
-  async updateApplicationStatus(
-    employerUserId: number,
-    applicationId: number,
-    dto: UpdateApplicationStatusDto,
-  ) {
-    const employer = await this.findEmployerByUserId(employerUserId);
-
-    const application = await this.applicationRepo.findOne({
-      where: {
-        id: applicationId,
-        job: { companyId: employer.companyId },
-      },
-      relations: ['job', 'job.company', 'candidate', 'candidate.user'],
-    });
-
-    if (!application) {
-      throw new NotFoundException(
-        'Đơn ứng tuyển không tồn tại hoặc bạn không có quyền truy cập',
-      );
-    }
-
-    const finalStatuses: string[] = [
-      ApplicationStatus.HIRED,
-      ApplicationStatus.REJECTED,
-      ApplicationStatus.WITHDRAWN,
-    ];
-
-    const finalStatusMessages: Record<string, string> = {
-      [ApplicationStatus.HIRED]:
-        'Không thể thay đổi trạng thái đơn đã được tuyển dụng',
-      [ApplicationStatus.REJECTED]:
-        'Không thể thay đổi trạng thái đơn đã bị từ chối. Hãy tạo đơn mới nếu cần.',
-      [ApplicationStatus.WITHDRAWN]:
-        'Không thể thay đổi trạng thái đơn đã được ứng viên rút',
-    };
-
-    if (finalStatuses.includes(application.status)) {
-      throw new BadRequestException(
-        finalStatusMessages[application.status] ??
-          'Đơn ứng tuyển đã ở trạng thái cuối, không thể thay đổi',
-      );
-    }
-
-    const employerForbiddenStatuses: string[] = [
-      ApplicationStatus.APPLIED,
-      ApplicationStatus.WITHDRAWN,
-    ];
-    if (employerForbiddenStatuses.includes(dto.status)) {
-      throw new BadRequestException(
-        `Nhà tuyển dụng không được phép chuyển sang trạng thái "${dto.status}"`,
-      );
-    }
-
-    if (dto.status === ApplicationStatus.REJECTED && !dto.reason) {
-      throw new BadRequestException(
-        'Vui lòng cung cấp lý do khi từ chối ứng viên',
-      );
-    }
-
-    const oldStatus = application.status;
-    application.status = dto.status;
-
-    if (dto.status === ApplicationStatus.REJECTED) {
-      application.rejectionReason = dto.reason ?? null;
-    }
-
-    // ── Pipeline Fee Enforcement ──────────────────────────
-    let creditCharged = 0;
-    const companyId = application.job.companyId;
-
-    const { creditCost, isFree, useFreeProceed } =
-      await this.subscriptionsService.calculateProceedFee(
-        companyId,
-        oldStatus,
-        dto.status,
-      );
-
-    if (!isFree) {
-      // Enforce daily processing limit
-      await this.subscriptionsService.incrementDailyProcessedCount(companyId);
-
-      if (useFreeProceed) {
-        // VIP dùng free proceed — không trừ Credit
-        await this.subscriptionsService.consumeFreeProceed(companyId);
-        creditCharged = 0;
-      } else if (creditCost > 0) {
-        // Trừ Credit (ném exception nếu không đủ)
-        await this.creditsService.chargeCredit(companyId, creditCost, {
-          type: CreditTransactionType.PIPELINE_FEE,
-          description: `Phí proceed ứng viên sang "${dto.status}" — Application #${applicationId}`,
-          referenceType: 'job_application',
-          referenceId: applicationId,
-          createdBy: employerUserId,
-        });
-        creditCharged = creditCost;
-      }
-    }
-    // ─────────────────────────────────────────────────────
-
-    await this.dataSource.transaction(async (manager) => {
-      await manager.save(JobApplicationEntity, application);
-      await manager.save(
-        ApplicationStatusHistoryEntity,
-        manager.create(ApplicationStatusHistoryEntity, {
-          applicationId,
-          oldStatus,
-          newStatus: dto.status,
-          reason: dto.reason ?? null,
-          changedById: employerUserId,
-          creditCharged,
-        }),
-      );
-      if (dto.note) {
-        await manager.save(
-          ApplicationNoteEntity,
-          manager.create(ApplicationNoteEntity, {
-            applicationId,
-            authorId: employerUserId,
-            content: dto.note,
-          }),
-        );
-      }
-    });
-
-    // --- REAL-TIME INTEGRATION ---
-    try {
-      // 1. Cập nhật Bảng Kanban (Real-time cho các Recruiter khác)
-      this.socketGateway.sendToJobBoard(application.jobId, 'kanban_update', {
-        applicationId,
-        oldStatus,
-        newStatus: dto.status,
-        actor: employer.fullName || 'Nhà tuyển dụng',
-      });
-
-      // 2. Thông báo cho Ứng viên (DB Persistence + Real-time)
-      if (application.candidate?.userId) {
-        await this.notificationsService.createNotification({
-          userId: application.candidate.userId,
-          type: NotificationType.APPLICATION_STATUS,
-          title: 'Cập nhật trạng thái ứng tuyển',
-          content: `Hồ sơ của bạn cho vị trí "${application.job.title}" đã được chuyển sang trạng thái: ${dto.status}`,
-          metadata: {
-            jobId: application.jobId,
-            applicationId,
-            status: dto.status,
-          },
-        });
-      }
-      // 3. Gửi Email thông báo (Chỉ các trạng thái quan trọng)
-      const importantStatuses = [
-        ApplicationStatus.INTERVIEW,
-        ApplicationStatus.OFFER,
-        ApplicationStatus.HIRED,
-        ApplicationStatus.REJECTED,
-      ];
-
-      if (
-        importantStatuses.includes(dto.status) &&
-        application.candidate?.user?.email
-      ) {
-        const appUrl =
-          this.configService.get<string>('FRONTEND_URL') ||
-          'http://localhost:5173';
-        const actionUrl = `${appUrl}/candidate/applications/${applicationId}`;
-
-        void this.mailService.sendApplicationStatusEmail(
-          application.candidate.user.email,
-          application.candidate.fullName || 'Ứng viên',
-          application.job.title,
-          dto.status,
-          application.job.company?.name || 'Công ty',
-          actionUrl,
-          dto.reason || undefined,
-        );
-      }
-    } catch (error) {
-      this.logger.error(
-        'External notification integration failed in update status',
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
-
-    return {
-      message: `Đã cập nhật trạng thái thành "${dto.status}"`,
-    };
-  }
-
-  async getApplicationHistory(employerUserId: number, applicationId: number) {
-    const employer = await this.findEmployerByUserId(employerUserId);
-
-    const application = await this.applicationRepo.findOne({
-      where: {
-        id: applicationId,
-        job: { companyId: employer.companyId },
-      },
-      relations: ['job'],
-    });
-
-    if (!application) {
-      throw new NotFoundException(
-        'Đơn ứng tuyển không tồn tại hoặc bạn không có quyền truy cập',
-      );
-    }
-
-    return this.historyRepo.find({
-      where: { applicationId },
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  async addNote(
-    employerUserId: number,
-    applicationId: number,
-    dto: CreateApplicationNoteDto,
-  ) {
-    const employer = await this.findEmployerByUserId(employerUserId);
-
-    const application = await this.applicationRepo.findOne({
-      where: {
-        id: applicationId,
-        job: { companyId: employer.companyId },
-      },
-      relations: ['job'],
-    });
-
-    if (!application) {
-      throw new NotFoundException(
-        'Đơn ứng tuyển không tồn tại hoặc bạn không có quyền truy cập',
-      );
-    }
-
-    const note = this.noteRepo.create({
-      applicationId,
-      authorId: employerUserId,
-      content: dto.content,
-    });
-
-    const savedNote = await this.noteRepo.save(note);
-
-    // Fetch full note with author info — dùng cho cả real-time emit lẫn HTTP response
-    const fullNote = await this.noteRepo.findOne({
-      where: { id: savedNote.id },
-      relations: ['author', 'author.employer'],
-    });
-
-    // --- REAL-TIME INTEGRATION ---
-    try {
-      // 1. Emit tới phòng chi tiết hồ sơ (Real-time Timeline)
-      this.socketGateway.sendToApplicationDetail(
-        applicationId,
-        'new_note',
-        fullNote,
-      );
-
-      // 2. Emit tới bảng Kanban (Để cập nhật badge hoặc preview)
-      const noteCount = await this.noteRepo.count({ where: { applicationId } });
-      this.socketGateway.sendToJobBoard(application.jobId, 'kanban_note', {
-        applicationId,
-        noteCount,
-      });
-    } catch (error) {
-      this.logger.error(
-        'Real-time emit failed for add note',
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
-
-    return fullNote ?? savedNote;
-  }
-
-  async updateNote(
-    employerUserId: number,
-    noteId: number,
-    dto: UpdateApplicationNoteDto,
-  ) {
-    const employer = await this.findEmployerByUserId(employerUserId);
-
-    const note = await this.noteRepo.findOne({
-      where: { id: noteId },
-      relations: ['application', 'application.job'],
-    });
-
-    if (!note) {
-      throw new NotFoundException('Không tìm thấy ghi chú');
-    }
-
-    // Kiểm tra quyền: Chỉ người tạo và thuộc cùng công ty mới được sửa
-    if (note.authorId !== employerUserId) {
-      throw new ForbiddenException(
-        'Bạn không có quyền sửa ghi chú của người khác',
-      );
-    }
-
-    if (note.application.job.companyId !== employer.companyId) {
-      throw new ForbiddenException('Ghi chú không thuộc công ty của bạn');
-    }
-
-    note.content = dto.content;
-    return this.noteRepo.save(note);
-  }
-
-  private async findEmployerByUserId(userId: number) {
-    const employer = await this.employerRepo.findOne({
-      where: { userId },
-    });
-    if (!employer) {
-      throw new ForbiddenException('Tài khoản không phải nhà tuyển dụng');
-    }
-    if (employer.companyId === null || employer.companyId === undefined) {
-      throw new ForbiddenException(
-        'Bạn phải tham gia vào một công ty trước khi quản lý ứng tuyển',
-      );
-    }
-    return employer as EmployerEntity & { companyId: number };
-  }
-
-  /**
-   * Cho phép nhà tuyển dụng (Gói Free) chủ động mua lượt chấm điểm AI bằng Credit.
-   */
   async manuallyTriggerAiScoring(
     employerUserId: number,
     applicationId: number,
@@ -589,25 +237,34 @@ export class EmployerApplicationsService {
       );
     }
 
-    // 1. Phải nạp credit và trừ tiền
-    // 'ai_scoring' là product có type 'job'. Do đó cần tryền targetJobId (chính là jobId chứa app này)
     await this.creditsService.purchaseProduct(
       employer.companyId,
       'ai_scoring',
-      application.job.id, // targetJobId, dùng cho mục đích logging
-      employerUserId, // userId
+      application.job.id,
+      employerUserId,
     );
 
-    // 2. Trigger AI scoring
-    // Vì calculation tốn thời gian, fire-and-forget (không await).
-    void this.candidateApplicationsService.calculateAiMatchScore(
-      application.id,
-    );
+    void this.applicationScoringService.calculateAiMatchScore(application.id);
 
     return {
       message:
         'Đã mua lượt phân tích AI thành công. Hệ thống đang xử lý ngầm, vui lòng tải lại trang sau ít phút.',
       applicationId,
     };
+  }
+
+  public async findEmployerByUserId(userId: number) {
+    const employer = await this.employerRepo.findOne({
+      where: { userId },
+    });
+    if (!employer) {
+      throw new ForbiddenException('Tài khoản không phải nhà tuyển dụng');
+    }
+    if (employer.companyId === null || employer.companyId === undefined) {
+      throw new ForbiddenException(
+        'Bạn phải tham gia vào một công ty trước khi quản lý ứng tuyển',
+      );
+    }
+    return employer as EmployerEntity & { companyId: number };
   }
 }

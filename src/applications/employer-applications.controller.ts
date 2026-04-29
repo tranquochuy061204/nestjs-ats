@@ -19,11 +19,16 @@ import { CreateApplicationNoteDto } from './dto/create-application-note.dto';
 import { UpdateApplicationNoteDto } from './dto/update-application-note.dto';
 import type { Request } from 'express';
 
+import { ApplicationStatusService } from './application-status.service';
+import { ApplicationNotesService } from './application-notes.service';
+
 @ApiTags('Applications - Employer')
 @Controller('employer/applications')
 export class EmployerApplicationsController {
   constructor(
     private readonly applicationsService: EmployerApplicationsService,
+    private readonly applicationStatusService: ApplicationStatusService,
+    private readonly applicationNotesService: ApplicationNotesService,
   ) {}
 
   @Get('job/:jobId')
@@ -102,7 +107,11 @@ export class EmployerApplicationsController {
     @Body() dto: UpdateApplicationStatusDto,
   ) {
     const user = req.user as { id: number };
-    return this.applicationsService.updateApplicationStatus(user.id, id, dto);
+    return this.applicationStatusService.updateApplicationStatus(
+      user.id,
+      id,
+      dto,
+    );
   }
 
   @Get(':id/history')
@@ -116,7 +125,7 @@ export class EmployerApplicationsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     const user = req.user as { id: number };
-    return this.applicationsService.getApplicationHistory(user.id, id);
+    return this.applicationStatusService.getApplicationHistory(user.id, id);
   }
 
   @Post(':id/notes')
@@ -131,7 +140,7 @@ export class EmployerApplicationsController {
     @Body() dto: CreateApplicationNoteDto,
   ) {
     const user = req.user as { id: number };
-    return this.applicationsService.addNote(user.id, id, dto);
+    return this.applicationNotesService.addNote(user.id, id, dto);
   }
 
   @Patch('notes/:noteId')
@@ -147,7 +156,7 @@ export class EmployerApplicationsController {
     @Body() dto: UpdateApplicationNoteDto,
   ) {
     const user = req.user as { id: number };
-    return this.applicationsService.updateNote(user.id, noteId, dto);
+    return this.applicationNotesService.updateNote(user.id, noteId, dto);
   }
 
   @Post(':id/ai-analyze')
