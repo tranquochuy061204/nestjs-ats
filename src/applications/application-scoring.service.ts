@@ -37,7 +37,7 @@ export class ApplicationScoringService {
 
     void this.subscriptionsService
       .getActiveSubscription(companyId)
-      .then(({ package: pkg }: { package: any }) => {
+      .then(({ package: pkg }: { package: Record<string, any> }) => {
         if (!pkg.freeAiScoring) {
           this.logger.debug(
             `AI scoring skipped for application ${applicationId} — company ${companyId} is on Free plan`,
@@ -79,7 +79,8 @@ export class ApplicationScoringService {
       yearsOfExperience: application.job.yearsOfExperience,
       skillTags:
         application.job.skills?.map(
-          (s: any) => s.skillMetadata?.canonicalName,
+          (s: { skillMetadata?: { canonicalName: string } }) =>
+            s.skillMetadata?.canonicalName,
         ) || [],
     };
 
@@ -102,21 +103,30 @@ export class ApplicationScoringService {
       yearsOfExperience: application.candidate.yearWorkingExperience,
       skills:
         application.candidate.skills?.map(
-          (s: any) => s.skillMetadata?.canonicalName,
+          (s: { skillMetadata?: { canonicalName: string } }) =>
+            s.skillMetadata?.canonicalName,
         ) || [],
       workExperiences:
-        application.candidate.workExperiences?.map((we: any) => ({
-          position: we.position,
-          company: we.companyName,
-          description: we.description,
-        })) || [],
+        application.candidate.workExperiences?.map(
+          (we: {
+            position: string;
+            companyName: string;
+            description: string;
+          }) => ({
+            position: we.position,
+            company: we.companyName,
+            description: we.description,
+          }),
+        ) || [],
       projects:
-        application.candidate.projects?.map((p: any) => ({
-          name: p.name,
-          description: p.description,
-        })) || [],
+        application.candidate.projects?.map(
+          (p: { name: string; description: string }) => ({
+            name: p.name,
+            description: p.description,
+          }),
+        ) || [],
       certificates:
-        application.candidate.certificates?.map((c: any) => ({
+        application.candidate.certificates?.map((c: { name: string }) => ({
           name: c.name,
         })) || [],
     };
