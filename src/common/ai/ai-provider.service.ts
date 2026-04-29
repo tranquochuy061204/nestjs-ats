@@ -101,12 +101,35 @@ export class AiProviderService {
    * Gửi file (PDF/ảnh) + text prompt tới AI.
    *
    * Luồng:
-   *   1. Gemini multimodal (inlineData + prompt)
-   *   2. Nếu Gemini lỗi + mimeType = PDF → pdf-parse → GLM text
-   *   3. Nếu Gemini lỗi + mimeType = image/* → throw (không thể extract text)
+   *   1. (Text-First) Nếu là PDF, thử dùng pdf-parse trích xuất text.
+   *      - Nếu thành công -> gửi text qua generateText() (Rất nhanh)
+   *   2. Nếu không phải PDF hoặc extract text thất bại (file scan), dùng Gemini Multimodal (inlineData).
+   *   3. Nếu Multimodal cũng thất bại -> báo lỗi.
    */
   async generateWithFile(prompt: string, file: FileData): Promise<string> {
-    // 1. Thử Gemini multimodal
+    // 1. Text-First Strategy: Thử trích xuất văn bản nội bộ cho PDF để tăng tốc
+    if (file.mimeType.includes('pdf')) {
+      const extractedText = await this._extractPdfText(file);
+      if (extractedText) {
+        this.logger.log(
+          `PDF text extracted (${extractedText.length} chars) — using fast text-only generation`,
+        );
+
+        const textPrompt =
+          `[NOTE: The following is the raw text extracted from the candidate's CV PDF. Process it according to the instructions below.]\n\n` +
+          `=== CV TEXT START ===\n${extractedText}\n=== CV TEXT END ===\n\n` +
+          prompt;
+
+        // Tận dụng hàm generateText() có sẵn (Gemini Text -> Fallback OpenRouter)
+        return this.generateText(textPrompt);
+      } else {
+        this.logger.warn(
+          `Could not extract text from PDF (might be scanned). Falling back to multimodal.`,
+        );
+      }
+    }
+
+    // 2. Multimodal Fallback: Dùng cho file ảnh hoặc PDF scan không có text layer
     if (this.genAI) {
       try {
         const model = this.genAI.getGenerativeModel({
@@ -122,39 +145,18 @@ export class AiProviderService {
         );
         return text;
       } catch (geminiError: unknown) {
-        this.logger.warn(
-          `Gemini generateWithFile failed: ${this._errMsg(geminiError)}. Attempting PDF text-extraction fallback...`,
+        this.logger.error(
+          `Gemini multimodal failed: ${this._errMsg(geminiError)}`,
+        );
+        throw new Error(
+          'Hệ thống AI xử lý file không khả dụng lúc này hoặc file không hợp lệ. Vui lòng thử lại sau.',
         );
       }
     }
 
-    // 2. Fallback — chỉ khả dụng cho PDF
-    if (!file.mimeType.includes('pdf')) {
-      throw new Error(
-        'AI tạm thời không khả dụng. File ảnh cần Gemini để xử lý — vui lòng thử lại sau.',
-      );
-    }
-
-    const extractedText = await this._extractPdfText(file);
-    if (!extractedText) {
-      throw new Error(
-        'AI tạm thời không khả dụng và CV có vẻ là file scan (không có text layer). ' +
-          'Vui lòng thử lại sau hoặc điền thông tin thủ công.',
-      );
-    }
-
-    this.logger.log(
-      `PDF text extracted (${extractedText.length} chars) — using GLM fallback`,
+    throw new Error(
+      'Không thể phân tích file: cấu hình AI chưa hợp lệ cho Multimodal.',
     );
-
-    // Bọc text vào prompt cho GLM
-    const textPrompt =
-      `[NOTE: The original CV file could not be read by the primary AI. ` +
-      `The following is the raw text extracted from the PDF. Process it according to the instructions below.]\n\n` +
-      `=== CV TEXT START ===\n${extractedText}\n=== CV TEXT END ===\n\n` +
-      prompt;
-
-    return this._callOpenRouter(textPrompt);
   }
 
   // ─── Private: OpenRouter call ─────────────────────────────────────────────
