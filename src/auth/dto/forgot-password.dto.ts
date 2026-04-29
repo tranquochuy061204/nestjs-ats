@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ApiProperty } from '@nestjs/swagger';
 
 const ForgotPasswordSchema = z.object({
-  email: z.email('Email is invalid').nonempty('Email is required'),
+  email: z.email('Email is invalid'),
 });
 
 export class ForgotPasswordDto extends createZodDto(ForgotPasswordSchema) {

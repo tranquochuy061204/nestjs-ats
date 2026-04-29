@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ApiProperty } from '@nestjs/swagger';
 
 const LoginSchema = z.object({
-  email: z.email('Email is invalid').nonempty('Email is required'),
+  email: z.email('Email is invalid'),
   password: z
     .string({ error: 'Password is required' })
     .min(6, 'Password must be at least 6 characters long'),
