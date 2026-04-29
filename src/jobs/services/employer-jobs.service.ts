@@ -165,15 +165,29 @@ export class EmployerJobsService {
 
     // [Feature #1] max_active_jobs — enforce khi recruiter submit (PUBLISHED intent),
     // kể cả khi company chưa verified và bài sẽ chuyển sang PENDING.
-    // Lý do: pending cũng chiếm slot (tránh lỗ hổng đăng nhiều bài chờ duyệt).
+    // Chính sách Free: tại 1 thời điểm chỉ được có 1 tin (published HOẶC pending).
     if (status === JobStatus.PUBLISHED) {
-      const { canPost, currentActiveJobs, maxActiveJobs, unlocksAt } =
-        await this.subscriptionsService.checkJobSlotLock(employer.companyId);
+      const {
+        canPost,
+        currentActiveJobs,
+        maxActiveJobs,
+        unlocksAt,
+        blockReason,
+      } = await this.subscriptionsService.checkJobSlotLock(employer.companyId);
 
       if (!canPost) {
-        const reason = unlocksAt
-          ? `Gói Free chỉ cho phép đăng 1 tin mỗi ${pkg.jobDurationDays} ngày. Mở khoá lúc ${unlocksAt.toLocaleString('vi-VN')}.`
-          : `Bạn đã đạt tối đa ${maxActiveJobs} tin đang tuyển hoặc chờ duyệt (hiện có: ${currentActiveJobs}).`;
+        let reason: string;
+        if (blockReason === 'has_published') {
+          reason =
+            'Bạn đang có 1 tin tuyển dụng đang hiển thị. Vui lòng đóng tin hiện tại trước khi đăng tin mới.';
+        } else if (blockReason === 'has_pending') {
+          reason =
+            'Bạn đang có 1 tin đang chờ Admin duyệt. Vui lòng chờ kết quả duyệt trước khi gửi tin mới.';
+        } else if (blockReason === 'time_lock') {
+          reason = `Gói Free chỉ cho phép đăng 1 tin mỗi ${pkg.jobDurationDays} ngày. Mở khoá lúc ${unlocksAt!.toLocaleString('vi-VN')}.`;
+        } else {
+          reason = `Bạn đã đạt tối đa ${maxActiveJobs} tin đang tuyển hoặc chờ duyệt (hiện có: ${currentActiveJobs}).`;
+        }
         throw new ForbiddenException(reason);
       }
 
@@ -207,8 +221,11 @@ export class EmployerJobsService {
             }),
           );
 
-          // [Feature #1] record publish timestamp cho Free lock
-          if (finalStatus === (JobStatus.PUBLISHED as string)) {
+          // [Feature #1] record publish/pending timestamp để lock slot cho Free
+          if (
+            finalStatus === (JobStatus.PUBLISHED as string) ||
+            finalStatus === (JobStatus.PENDING as string)
+          ) {
             await this.subscriptionsService.recordJobPublished(
               employer.companyId!,
             );

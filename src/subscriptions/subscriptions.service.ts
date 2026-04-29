@@ -121,44 +121,101 @@ export class SubscriptionsService {
   }
 
   /**
-   * Kiểm tra Free job slot lock 7 ngày.
-   * Trả về { canPost, unlocksAt } — unlocksAt là khi nào được đăng tiếp.
+   * Kiểm tra quota đăng tin trước khi publish/pending.
+   *
+   * Chính sách Free (chưa VIP):
+   *  - Tại một thời điểm chỉ được có đúng 1 tin (pending HOẶC published).
+   *  - Nếu đang có 1 published → không được gửi pending.
+   *  - Nếu đang có 1 pending chờ duyệt → không được gửi thêm.
+   *  - Sau khi tin bị rejected/closed, slot được giải phóng ngay.
+   *
+   * Trả về { canPost, unlocksAt, blockReason, currentActiveJobs, maxActiveJobs }
    */
   async checkJobSlotLock(companyId: number): Promise<{
     canPost: boolean;
     unlocksAt: Date | null;
+    blockReason:
+      | 'has_published'
+      | 'has_pending'
+      | 'quota_full'
+      | 'time_lock'
+      | null;
     currentActiveJobs: number;
     maxActiveJobs: number;
   }> {
     const { subscription, package: pkg } =
       await this.getActiveSubscription(companyId);
 
-    // Đếm số tin đang chiếm slot (pending chờ duyệt cũng tính vào quota —
-    // tránh lỗ hổng: gói Free submit nhiều PENDING rồi chờ admin duyệt hàng loạt)
-    const activeJobsCount = await this.dataSource.query<{ count: string }[]>(
-      `SELECT COUNT(*) as count FROM "job"
-       WHERE "company_id" = $1 AND "status" IN ('pending', 'published')`,
+    // Đếm số tin theo từng trạng thái
+    const statusCounts = await this.dataSource.query<
+      { status: string; count: string }[]
+    >(
+      `SELECT "status", COUNT(*) as count FROM "job"
+       WHERE "company_id" = $1 AND "status" IN ('pending', 'published')
+       GROUP BY "status"`,
       [companyId],
     );
-    const currentActiveJobs = parseInt(activeJobsCount[0]?.count ?? '0', 10);
 
-    // Free: hard lock 7 ngày
-    if (pkg.name === 'free' && subscription.lastJobPublishedAt) {
-      const lockMs = pkg.jobDurationDays * 24 * 60 * 60 * 1000;
-      const unlocksAt = new Date(
-        subscription.lastJobPublishedAt.getTime() + lockMs,
-      );
-      if (new Date() < unlocksAt) {
+    const countMap: Record<string, number> = {};
+    for (const row of statusCounts) {
+      countMap[row.status] = parseInt(row.count, 10);
+    }
+    const publishedCount = countMap['published'] ?? 0;
+    const pendingCount = countMap['pending'] ?? 0;
+    const currentActiveJobs = publishedCount + pendingCount;
+
+    // ── Chính sách Free: mutual exclusion (1 slot tại một thời điểm) ──
+    if (pkg.name === 'free') {
+      // Case 1: Đang có tin published → không thể gửi pending
+      if (publishedCount > 0) {
         return {
           canPost: false,
-          unlocksAt,
+          unlocksAt: null,
+          blockReason: 'has_published',
           currentActiveJobs,
           maxActiveJobs: pkg.maxActiveJobs,
         };
       }
+
+      // Case 2: Đang có tin pending chờ admin duyệt → không thể gửi thêm
+      if (pendingCount > 0) {
+        return {
+          canPost: false,
+          unlocksAt: null,
+          blockReason: 'has_pending',
+          currentActiveJobs,
+          maxActiveJobs: pkg.maxActiveJobs,
+        };
+      }
+
+      // Case 3: Slot trống nhưng vẫn trong thời gian lock (7 ngày) → chặn
+      if (subscription.lastJobPublishedAt) {
+        const lockMs = pkg.jobDurationDays * 24 * 60 * 60 * 1000;
+        const unlocksAt = new Date(
+          subscription.lastJobPublishedAt.getTime() + lockMs,
+        );
+        if (new Date() < unlocksAt) {
+          return {
+            canPost: false,
+            unlocksAt,
+            blockReason: 'time_lock',
+            currentActiveJobs,
+            maxActiveJobs: pkg.maxActiveJobs,
+          };
+        }
+      }
+
+      // Slot trống và hết thời gian lock → cho phép
+      return {
+        canPost: true,
+        unlocksAt: null,
+        blockReason: null,
+        currentActiveJobs,
+        maxActiveJobs: pkg.maxActiveJobs,
+      };
     }
 
-    // Đếm số extra_job_slot đang active (mua bằng Credit)
+    // ── Chính sách VIP: kiểm tra maxActiveJobs + extra slots ──
     const extraSlots = await this.purchaseLogRepo
       .createQueryBuilder('pl')
       .innerJoin('pl.product', 'p')
@@ -170,11 +227,12 @@ export class SubscriptionsService {
     const effectiveMaxJobs =
       pkg.maxActiveJobs === -1 ? -1 : pkg.maxActiveJobs + extraSlots;
 
-    // [BUG#7 FIX] -1 = unlimited (VIP) — bỏ qua check quota
+    // -1 = unlimited (VIP không giới hạn)
     if (effectiveMaxJobs !== -1 && currentActiveJobs >= effectiveMaxJobs) {
       return {
         canPost: false,
         unlocksAt: null,
+        blockReason: 'quota_full',
         currentActiveJobs,
         maxActiveJobs: effectiveMaxJobs,
       };
@@ -183,13 +241,15 @@ export class SubscriptionsService {
     return {
       canPost: true,
       unlocksAt: null,
+      blockReason: null,
       currentActiveJobs,
       maxActiveJobs: effectiveMaxJobs,
     };
   }
 
   /**
-   * Ghi nhận đã đăng tin (cập nhật last_job_published_at).
+   * Ghi nhận đã submit tin (cập nhật last_job_published_at).
+   * Gọi khi tin chuyển sang PUBLISHED hoặc PENDING để lock thời gian cho Free.
    */
   async recordJobPublished(companyId: number): Promise<void> {
     await this.subscriptionRepo.update(
