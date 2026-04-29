@@ -324,7 +324,7 @@ export class PublicJobsService {
       const scoreExpr = parts.length > 0 ? `(${parts.join(' + ')})` : '0';
 
       if (Object.keys(params).length > 0) {
-        qb.setParameters(params);
+        qb.setParameters({ ...qb.getParameters(), ...params });
       }
 
       // Tương tự bump_priority: dùng alias để TypeORM không cần parse raw expr

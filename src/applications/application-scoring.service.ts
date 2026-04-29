@@ -78,8 +78,9 @@ export class ApplicationScoringService {
       requirements: application.job.requirements,
       yearsOfExperience: application.job.yearsOfExperience,
       skillTags:
-        application.job.skills?.map((s: any) => s.skillMetadata?.canonicalName) ||
-        [],
+        application.job.skills?.map(
+          (s: any) => s.skillMetadata?.canonicalName,
+        ) || [],
     };
 
     const promises: Promise<void>[] = [];
@@ -124,13 +125,7 @@ export class ApplicationScoringService {
 
     try {
       const text = await this.aiProvider.generateText(prompt);
-
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON object found in AI response');
-      }
-
-      const parsed = JSON.parse(jsonMatch[0]) as MatchScoreResult;
+      const parsed = this.parseAiJsonResult(text) as MatchScoreResult;
 
       if (typeof parsed.matchScore === 'number') {
         await this.applicationRepo.update(application.id, {
@@ -167,15 +162,9 @@ export class ApplicationScoringService {
       }
 
       const prompt = CV_MATCH_SCORE_PROMPT(jobData);
-
       const text = await this.aiProvider.generateWithFile(prompt, fileData);
 
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON object found in AI CV response');
-      }
-
-      const parsed = JSON.parse(jsonMatch[0]) as CvMatchScoreResult;
+      const parsed = this.parseAiJsonResult(text) as CvMatchScoreResult;
 
       if (typeof parsed.cvMatchScore === 'number') {
         await this.applicationRepo.update(application.id, {
@@ -192,6 +181,49 @@ export class ApplicationScoringService {
         `Failed to calculate AI CV Score for application ${application.id}`,
         error instanceof Error ? error.message : String(error),
       );
+    }
+  }
+
+  private parseAiJsonResult(text: string): Record<string, any> {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON object found in AI response');
+    }
+
+    const jsonString = jsonMatch[0];
+    try {
+      return JSON.parse(jsonString) as Record<string, any>;
+    } catch {
+      this.logger.warn(
+        'JSON parse failed, attempting regex extraction fallback...',
+      );
+
+      const result: Record<string, any> = {};
+
+      const matchScoreMatch = jsonString.match(/"matchScore"\s*:\s*(\d+)/);
+      if (matchScoreMatch) {
+        result.matchScore = parseInt(matchScoreMatch[1], 10);
+      }
+
+      const cvMatchScoreMatch = jsonString.match(/"cvMatchScore"\s*:\s*(\d+)/);
+      if (cvMatchScoreMatch) {
+        result.cvMatchScore = parseInt(cvMatchScoreMatch[1], 10);
+      }
+
+      const reasoningMatch = jsonString.match(
+        /"reasoning"\s*:\s*"([\s\S]*?)"\s*\}/,
+      );
+      if (reasoningMatch) {
+        result.reasoning = reasoningMatch[1]
+          .replace(/\\n/g, '\n')
+          .replace(/\\"/g, '"');
+      }
+
+      if (Object.keys(result).length === 0) {
+        throw new Error('Regex extraction also failed');
+      }
+
+      return result;
     }
   }
 

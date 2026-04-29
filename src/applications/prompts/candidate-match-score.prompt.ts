@@ -18,13 +18,15 @@ Hãy trả về DUY NHẤT một chuỗi JSON hợp lệ (không chứa thẻ ma
 
 Yêu cầu BẮT BUỘC cho trường "reasoning":
 - Viết bằng Tiếng Việt chuẩn, văn phong chuyên nghiệp của chuyên gia nhân sự.
+- Đầu ra KHÔNG sử dụng bất cứ icon, emoji, hay các văn phong không chuyên nghiệp, mang tính cảm xúc.
+- Trung thực, không nói quá, tâng bốc ứng viên, đúng điểm tốt và điểm xấu trong hồ sơ.
 - Dùng Markdown Heading (\`###\`), Bullet List (\`-\`), in đậm (\`**\`) và Emoji để báo cáo thật sinh động, cao cấp.
 - Cấu trúc bản báo cáo phải gồm:
-  1. ### 🎯 Nhận định nhanh: Tổng quan về profile này so với yêu cầu.
-  2. ### ⚖️ Đánh giá chi tiết (Pros & Cons):
-     - 📍 **Điểm sáng**: Các kỹ năng/kinh nghiệm ứng viên đáp ứng xuất sắc nhất.
-     - ⚠️ **Lỗ hổng (Gaps)**: Các điểm yếu, sự thiếu sót về số năm làm việc, hoặc kỹ năng chưa khớp.
-  3. ### 💡 Chiến thuật phỏng vấn: Gợi ý 1-2 câu hỏi sắc bén giúp Nhà tuyển dụng kiểm chứng năng lực thật sự của ứng viên đối với những điểm còn yếu.
+  1. ### Nhận định nhanh: Tổng quan về profile này so với yêu cầu.
+  2. ### Đánh giá chi tiết (Pros & Cons):
+     - **Điểm sáng**: Các kỹ năng/kinh nghiệm ứng viên đáp ứng xuất sắc nhất mà PHÙ HỢP với mô tả, yêu cầu của công việc.
+     - **Lỗ hổng (Gaps)**: Các điểm yếu, sự thiếu sót về số năm làm việc, hoặc kỹ năng chưa khớp.
+  3. ### Chiến thuật phỏng vấn: Gợi ý 1-2 câu hỏi sắc bén giúp Nhà tuyển dụng kiểm chứng năng lực thật sự của ứng viên đối với những điểm còn yếu.
 
 --- DỮ LIỆU CÔNG VIỆC (JOB DESCRIPTION) ---
 ${JSON.stringify(jobData, null, 2)}
