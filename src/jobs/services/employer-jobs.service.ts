@@ -207,11 +207,14 @@ export class EmployerJobsService {
         const { skills, ...jobDataUpdates } = updateJobDto;
         delete jobDataUpdates.status; // handled above
 
-        await manager.update(
-          JobEntity,
-          { id: jobId },
-          { ...jobDataUpdates, status: finalStatus },
-        );
+        const updates: any = { ...jobDataUpdates, status: finalStatus };
+        if (finalStatus === JobStatus.CLOSED) {
+          updates.isBumped = false;
+          updates.bumpedUntil = null;
+          updates.bumpedAt = null;
+        }
+
+        await manager.update(JobEntity, { id: jobId }, updates);
 
         if (finalStatus !== job.status) {
           await manager.save(

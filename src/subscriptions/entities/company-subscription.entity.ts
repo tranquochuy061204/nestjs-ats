@@ -48,6 +48,9 @@ export class CompanySubscriptionEntity {
   @Column({ name: 'used_bump_post_quota', type: 'int', default: 0 })
   usedBumpPostQuota: number;
 
+  @Column({ name: 'bump_quota_reset_at', type: 'timestamptz', nullable: true })
+  bumpQuotaResetAt: Date | null;
+
   /** Số đơn đã xử lý hôm nay */
   @Column({ name: 'daily_processed_count', type: 'int', default: 0 })
   dailyProcessedCount: number;

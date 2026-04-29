@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { EmployerJobsService } from '../services/employer-jobs.service';
+import { EmployerJobBumpService } from '../services/employer-job-bump.service';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
 import { JobFilterDto } from '../dto/job-filter.dto';
@@ -21,7 +22,10 @@ import { UserRole } from '../../users/entities/user.entity';
 @ApiTags('Jobs - Quản lý Nhà Tuyển Dụng')
 @Controller('jobs/employer')
 export class EmployerJobsController {
-  constructor(private readonly employerJobsService: EmployerJobsService) {}
+  constructor(
+    private readonly employerJobsService: EmployerJobsService,
+    private readonly employerJobBumpService: EmployerJobBumpService,
+  ) {}
 
   @Get()
   @ApiAuth(UserRole.EMPLOYER)
@@ -62,5 +66,13 @@ export class EmployerJobsController {
   ) {
     const user = req.user as { id: number };
     return this.employerJobsService.updateJob(user.id, id, updateJobDto);
+  }
+
+  @Post(':id/bump')
+  @ApiAuth(UserRole.EMPLOYER)
+  @ApiOperation({ summary: 'Đẩy tin lên đầu trang (Bump Post)' })
+  bumpJob(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    const user = req.user as { id: number };
+    return this.employerJobBumpService.bumpJob(user.id, id);
   }
 }

@@ -14,6 +14,7 @@ import { EmployerJobsService } from './services/employer-jobs.service';
 import { AdminJobsService } from './services/admin-jobs.service';
 import { JobTasksService } from './services/job-tasks.service';
 import { CandidateJobsService } from './services/candidate-jobs.service';
+import { EmployerJobBumpService } from './services/employer-job-bump.service';
 
 // New Controllers
 import { PublicJobsController } from './controllers/public-jobs.controller';
@@ -26,6 +27,7 @@ import { UserEntity } from '../users/entities/user.entity';
 import { CommonGuardsModule } from '../common/guards/common-guards.module';
 import { CandidateEntity } from '../candidates/entities/candidate.entity';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { CreditsModule } from '../credits/credits.module';
 
 @Module({
   imports: [
@@ -42,6 +44,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     NotificationsModule,
     CommonGuardsModule,
     SubscriptionsModule,
+    CreditsModule,
   ],
   controllers: [
     PublicJobsController,
@@ -56,6 +59,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     AdminJobsService,
     JobTasksService,
     CandidateJobsService,
+    EmployerJobBumpService,
   ],
   exports: [
     PublicJobsService,

@@ -180,6 +180,12 @@ export class CreditsService {
     targetJobId?: number,
     userId?: number,
   ): Promise<CreditPurchaseLogEntity> {
+    if (slug === 'bump_post') {
+      throw new BadRequestException(
+        'Vui lòng sử dụng tính năng Đẩy Tin trong trang quản lý tin tuyển dụng thay vì mua trực tiếp.',
+      );
+    }
+
     const product = await this.productRepo.findOne({
       where: { slug, isActive: true },
     });
@@ -207,105 +213,40 @@ export class CreditsService {
       }
     }
 
-    // ── [BumpQuota FIX] Kiểm tra quota đẩy tin miễn phí cho VIP ──
-    // Dùng raw query tránh circular dependency với SubscriptionsModule
-    let usedFreeBumpQuota = false;
-    if (slug === 'bump_post') {
-      const rows = await this.dataSource.query<
-        {
-          used_bump_post_quota: number;
-          bump_post_quota: number;
-          subscription_id: number;
-        }[]
-      >(
-        `SELECT cs.id AS subscription_id,
-                cs.used_bump_post_quota,
-                sp.bump_post_quota
-         FROM company_subscription cs
-         JOIN subscription_package sp ON sp.id = cs.package_id
-         WHERE cs.company_id = $1 AND cs.status = 'active'
-         ORDER BY cs.created_at DESC
-         LIMIT 1`,
-        [companyId],
-      );
-
-      if (rows.length) {
-        const { used_bump_post_quota, bump_post_quota, subscription_id } =
-          rows[0];
-        if (bump_post_quota > 0 && used_bump_post_quota < bump_post_quota) {
-          // Còn lượt miễn phí — tăng counter, không trừ Credit
-          await this.dataSource.query(
-            `UPDATE company_subscription
-             SET used_bump_post_quota = used_bump_post_quota + 1
-             WHERE id = $1`,
-            [subscription_id],
-          );
-          usedFreeBumpQuota = true;
-          this.logger.log(
-            `bump_post: used free quota for company=${companyId} ` +
-              `(${used_bump_post_quota + 1}/${bump_post_quota})`,
-          );
-        }
-      }
-    }
-    // ─────────────────────────────────────────────────────────────
-
     return this.dataSource.transaction(async (manager) => {
-      let creditSpent = product.creditCost;
+      const creditSpent = product.creditCost;
 
-      if (!usedFreeBumpQuota) {
-        // Trừ Credit bình thường
-        const wallet = await manager
-          .getRepository(CreditWalletEntity)
-          .createQueryBuilder('w')
-          .setLock('pessimistic_write')
-          .where('w.company_id = :companyId', { companyId })
-          .getOne();
+      // Trừ Credit bình thường
+      const wallet = await manager
+        .getRepository(CreditWalletEntity)
+        .createQueryBuilder('w')
+        .setLock('pessimistic_write')
+        .where('w.company_id = :companyId', { companyId })
+        .getOne();
 
-        if (!wallet) throw new NotFoundException('Credit wallet not found');
-        if (wallet.balance < product.creditCost) {
-          throw new BadRequestException(
-            `Không đủ Credit (cần ${product.creditCost}, hiện có ${wallet.balance}). ` +
-              `Lưu ý: Gói VIP được tặng ${product.creditCost > 0 ? 'quota bump miễn phí hàng tháng' : ''}.`,
-          );
-        }
-
-        wallet.balance -= product.creditCost;
-        wallet.totalSpent += product.creditCost;
-        await manager.save(CreditWalletEntity, wallet);
-
-        const tx = manager.create(CreditTransactionEntity, {
-          walletId: wallet.id,
-          type: CreditTransactionType.PURCHASE,
-          amount: -product.creditCost,
-          balanceAfter: wallet.balance,
-          description: `Mua: ${product.displayName}`,
-          referenceType: 'credit_product',
-          referenceId: product.id,
-          createdBy: userId ?? null,
-        });
-        await manager.save(CreditTransactionEntity, tx);
-      } else {
-        // Dùng free bump quota — ghi transaction 0 Credit để audit trail
-        creditSpent = 0;
-        const wallet = await manager
-          .getRepository(CreditWalletEntity)
-          .findOne({ where: { companyId } });
-
-        if (wallet) {
-          const tx = manager.create(CreditTransactionEntity, {
-            walletId: wallet.id,
-            type: CreditTransactionType.PURCHASE,
-            amount: 0,
-            balanceAfter: wallet.balance,
-            description: `Mua: ${product.displayName} (Miễn phí — VIP Quota)`,
-            referenceType: 'credit_product',
-            referenceId: product.id,
-            createdBy: userId ?? null,
-          });
-          await manager.save(CreditTransactionEntity, tx);
-        }
+      if (!wallet) throw new NotFoundException('Credit wallet not found');
+      if (wallet.balance < product.creditCost) {
+        throw new BadRequestException(
+          `Không đủ Credit (cần ${product.creditCost}, hiện có ${wallet.balance}). ` +
+            `Lưu ý: Gói VIP được tặng ${product.creditCost > 0 ? 'quota bump miễn phí hàng tháng' : ''}.`,
+        );
       }
+
+      wallet.balance -= product.creditCost;
+      wallet.totalSpent += product.creditCost;
+      await manager.save(CreditWalletEntity, wallet);
+
+      const tx = manager.create(CreditTransactionEntity, {
+        walletId: wallet.id,
+        type: CreditTransactionType.PURCHASE,
+        amount: -product.creditCost,
+        balanceAfter: wallet.balance,
+        description: `Mua: ${product.displayName}`,
+        referenceType: 'credit_product',
+        referenceId: product.id,
+        createdBy: userId ?? null,
+      });
+      await manager.save(CreditTransactionEntity, tx);
 
       // Ghi purchase log
       const expiresAt = product.durationDays
@@ -346,18 +287,6 @@ export class CreditsService {
     expiresAt: Date | null,
   ): Promise<void> {
     switch (slug) {
-      case 'bump_post': {
-        if (!targetJobId) break;
-        await manager.update(JobEntity, targetJobId, {
-          isBumped: true,
-          bumpedUntil: expiresAt,
-        });
-        this.logger.log(
-          `bump_post applied: job=${targetJobId} until=${expiresAt?.toISOString()}`,
-        );
-        break;
-      }
-
       case 'extend_job': {
         if (!targetJobId) break;
         const job = await manager.findOne(JobEntity, {
@@ -475,5 +404,69 @@ export class CreditsService {
       take: limit,
     });
     return { data, total, page, lastPage: Math.ceil(total / limit) };
+  }
+
+  // ──────────────────────────────────────────────────────
+  // SPECIALIZED PURCHASES
+  // ──────────────────────────────────────────────────────
+
+  async spendCreditsWithManager(
+    manager: import('typeorm').EntityManager,
+    companyId: number,
+    slug: string,
+    userId: number,
+    targetJobId?: number,
+  ): Promise<{ creditsSpent: number; purchaseLogId: number }> {
+    const product = await manager.findOne(CreditProductEntity, {
+      where: { slug, isActive: true },
+    });
+    if (!product)
+      throw new NotFoundException(`Sản phẩm '${slug}' không tồn tại`);
+
+    const wallet = await manager
+      .getRepository(CreditWalletEntity)
+      .createQueryBuilder('w')
+      .setLock('pessimistic_write')
+      .where('w.company_id = :companyId', { companyId })
+      .getOne();
+
+    if (!wallet) throw new NotFoundException('Credit wallet not found');
+    if (wallet.balance < product.creditCost) {
+      throw new BadRequestException(
+        `Không đủ Credit (cần ${product.creditCost}, hiện có ${wallet.balance}).`,
+      );
+    }
+
+    wallet.balance -= product.creditCost;
+    wallet.totalSpent += product.creditCost;
+    await manager.save(CreditWalletEntity, wallet);
+
+    const tx = manager.create(CreditTransactionEntity, {
+      walletId: wallet.id,
+      type: CreditTransactionType.PURCHASE,
+      amount: -product.creditCost,
+      balanceAfter: wallet.balance,
+      description: `Mua: ${product.displayName}`,
+      referenceType: 'credit_product',
+      referenceId: product.id,
+      createdBy: userId,
+    });
+    await manager.save(CreditTransactionEntity, tx);
+
+    const expiresAt = product.durationDays
+      ? new Date(Date.now() + product.durationDays * 24 * 60 * 60 * 1000)
+      : null;
+
+    const log = manager.create(CreditPurchaseLogEntity, {
+      companyId,
+      productId: product.id,
+      creditSpent: product.creditCost,
+      targetJobId: targetJobId ?? null,
+      activatedAt: new Date(),
+      expiresAt,
+    });
+    const savedLog = await manager.save(CreditPurchaseLogEntity, log);
+
+    return { creditsSpent: product.creditCost, purchaseLogId: savedLog.id };
   }
 }

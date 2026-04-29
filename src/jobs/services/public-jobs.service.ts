@@ -288,7 +288,9 @@ export class PublicJobsService {
     qb.addSelect(
       'CASE WHEN job.isBumped = true AND job.bumpedUntil > NOW() THEN 0 ELSE 1 END',
       'bump_priority',
-    ).addOrderBy('bump_priority', 'ASC');
+    )
+      .addOrderBy('bump_priority', 'ASC')
+      .addOrderBy('job.bumpedAt', 'DESC', 'NULLS LAST');
 
     if (sortBy === JobSortBy.RELEVANCE) {
       /**

@@ -63,4 +63,26 @@ export class JobTasksService {
       );
     }
   }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async expireOldBumps() {
+    this.logger.log('Checking for expired bumped jobs...');
+    try {
+      const result = await this.dataSource.query(`
+        UPDATE job SET is_bumped = false, bumped_until = NULL, bumped_at = NULL
+        WHERE is_bumped = true
+          AND (bumped_until < NOW() OR (deadline IS NOT NULL AND deadline < NOW()))
+      `);
+      // Note: typeorm raw update returns [records, affectedCount]
+      const affected = result[1] || 0;
+      if (affected > 0) {
+        this.logger.log(`Expired ${affected} bumped jobs.`);
+      }
+    } catch (error) {
+      this.logger.error(
+        'Failed to expire bumps',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
 }

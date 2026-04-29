@@ -121,6 +121,34 @@ export class SubscriptionsService {
   }
 
   /**
+   * Trừ 1 quota bump tin miễn phí (trong transaction).
+   */
+  async consumeBumpPostQuotaWithManager(
+    manager: any,
+    subscriptionId: number,
+    maxQuota: number,
+  ): Promise<number> {
+    const result = await manager.query(
+      `UPDATE company_subscription
+       SET
+         used_bump_post_quota = CASE
+           WHEN bump_quota_reset_at IS NULL OR bump_quota_reset_at < NOW() THEN 1
+           ELSE used_bump_post_quota + 1
+         END,
+         bump_quota_reset_at = CASE
+           WHEN bump_quota_reset_at IS NULL OR bump_quota_reset_at < NOW() THEN NOW() + INTERVAL '30 days'
+           ELSE bump_quota_reset_at
+         END
+       WHERE id = $1
+       RETURNING used_bump_post_quota`,
+      [subscriptionId],
+    );
+
+    const newUsed = result[0]?.used_bump_post_quota ?? 1;
+    return Math.max(0, maxQuota - newUsed);
+  }
+
+  /**
    * Kiểm tra quota đăng tin trước khi publish/pending.
    *
    * Chính sách Free (chưa VIP):

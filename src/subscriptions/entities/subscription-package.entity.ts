@@ -70,13 +70,6 @@ export class SubscriptionPackageEntity {
   })
   canHeadhuntSaveAndInvite: boolean;
 
-  @Column({
-    name: 'can_view_advanced_analytics',
-    type: 'boolean',
-    default: false,
-  })
-  canViewAdvancedAnalytics: boolean;
-
   @Column({ name: 'can_hide_salary', type: 'boolean', default: false })
   canHideSalary: boolean;
 
@@ -85,9 +78,6 @@ export class SubscriptionPackageEntity {
 
   @Column({ name: 'has_vip_badge', type: 'boolean', default: false })
   hasVipBadge: boolean;
-
-  @Column({ name: 'can_use_premium_filters', type: 'boolean', default: false })
-  canUsePremiumFilters: boolean;
 
   /** VIP: unlock liên hệ ứng viên trong Headhunting miễn phí */
   @Column({ name: 'free_contact_unlock', type: 'boolean', default: false })
