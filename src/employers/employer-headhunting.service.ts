@@ -18,6 +18,7 @@ import {
 import { SaveCandidateDto } from './dto/save-candidate.dto';
 import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UserEntity } from '../users/entities/user.entity';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { HEADHUNTING_CONFIG } from '../common/constants/headhunting.constant';
 import { MailService } from '../mail/mail.service';
@@ -332,6 +333,7 @@ export class EmployerHeadhuntingService {
     const candidate = await this.candidateRepo.findOne({
       where: { id: candidateId, isPublic: true },
       relations: [
+        'user',
         'jobType',
         'skills',
         'skills.skillMetadata',
@@ -416,6 +418,15 @@ export class EmployerHeadhuntingService {
       `Contact unlock: company=${companyId} candidate=${candidateId} ` +
         `freeQuota=${usedFreeQuota} creditSpent=${creditSpent}`,
     );
+
+    // Xóa các trường nhạy cảm khỏi user trước khi trả về frontend
+    if (candidate.user) {
+      const userRef = candidate.user as Partial<UserEntity> &
+        Record<string, unknown>;
+      delete userRef.password;
+      delete userRef.emailVerificationToken;
+      delete userRef.resetPasswordToken;
+    }
 
     return { ...candidate, contactUnlocked: true, creditSpent };
   }
