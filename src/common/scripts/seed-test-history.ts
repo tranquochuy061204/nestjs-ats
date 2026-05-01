@@ -130,4 +130,4 @@ async function seedTestData() {
   }
 }
 
-seedTestData();
+void seedTestData();

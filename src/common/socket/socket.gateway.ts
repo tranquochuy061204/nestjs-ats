@@ -70,16 +70,17 @@ export class SocketGateway
         return;
       }
 
-      const payload = await this.jwtService.verifyAsync(token, {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
 
-      // 2. Lưu thông tin user vào socket data
-      client.data.user = payload;
+      // 2. Lưu thông tin user vào socket data (cast sau khi verify để type-safe)
+      const authedClient = client as AuthenticatedSocket;
+      authedClient.data.user = payload;
 
       // 3. Tự động tham gia phòng cá nhân: user_{userId}
       const userId = payload.id;
-      await client.join(`user_${userId}`);
+      await authedClient.join(`user_${userId}`);
 
       this.logger.log(
         `Client ${client.id} (User: ${userId}) đã kết nối và tham gia phòng cá nhân`,

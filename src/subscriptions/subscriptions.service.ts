@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   CompanySubscriptionEntity,
   SubscriptionStatus,
@@ -124,11 +124,11 @@ export class SubscriptionsService {
    * Trừ 1 quota bump tin miễn phí (trong transaction).
    */
   async consumeBumpPostQuotaWithManager(
-    manager: any,
+    manager: EntityManager,
     subscriptionId: number,
     maxQuota: number,
   ): Promise<number> {
-    const result = await manager.query(
+    const result = await manager.query<{ used_bump_post_quota: number }[]>(
       `UPDATE company_subscription
        SET
          used_bump_post_quota = CASE

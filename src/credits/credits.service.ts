@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { CreditWalletEntity } from './entities/credit-wallet.entity';
 import {
   CreditTransactionEntity,
@@ -83,42 +83,51 @@ export class CreditsService {
     amount: number,
     options: ChargeCreditOptions,
   ): Promise<CreditTransactionEntity> {
+    return this.dataSource.transaction(async (manager) => {
+      return this.chargeCreditWithManager(manager, companyId, amount, options);
+    });
+  }
+
+  async chargeCreditWithManager(
+    manager: EntityManager,
+    companyId: number,
+    amount: number,
+    options: ChargeCreditOptions,
+  ): Promise<CreditTransactionEntity> {
     if (amount <= 0)
       throw new BadRequestException('Credit amount must be positive');
 
-    return this.dataSource.transaction(async (manager) => {
-      // Pessimistic write lock
-      const wallet = await manager
-        .getRepository(CreditWalletEntity)
-        .createQueryBuilder('w')
-        .setLock('pessimistic_write')
-        .where('w.company_id = :companyId', { companyId })
-        .getOne();
+    // Pessimistic write lock
+    const wallet = await manager
+      .getRepository(CreditWalletEntity)
+      .createQueryBuilder('w')
+      .setLock('pessimistic_write')
+      .where('w.company_id = :companyId', { companyId })
+      .getOne();
 
-      if (!wallet) throw new NotFoundException('Credit wallet not found');
-      if (wallet.balance < amount) {
-        throw new BadRequestException(
-          `Không đủ Credit (cần ${amount}, hiện có ${wallet.balance}). Vui lòng nạp thêm Credit.`,
-        );
-      }
+    if (!wallet) throw new NotFoundException('Credit wallet not found');
+    if (wallet.balance < amount) {
+      throw new BadRequestException(
+        `Không đủ Credit (cần ${amount}, hiện có ${wallet.balance}). Vui lòng nạp thêm Credit.`,
+      );
+    }
 
-      wallet.balance -= amount;
-      wallet.totalSpent += amount;
-      await manager.save(CreditWalletEntity, wallet);
+    wallet.balance -= amount;
+    wallet.totalSpent += amount;
+    await manager.save(CreditWalletEntity, wallet);
 
-      const tx = manager.create(CreditTransactionEntity, {
-        walletId: wallet.id,
-        type: options.type,
-        amount: -amount,
-        balanceAfter: wallet.balance,
-        description: options.description,
-        referenceType: options.referenceType ?? null,
-        referenceId: options.referenceId ?? null,
-        createdBy: options.createdBy ?? null,
-      });
-
-      return manager.save(CreditTransactionEntity, tx);
+    const tx = manager.create(CreditTransactionEntity, {
+      walletId: wallet.id,
+      type: options.type,
+      amount: -amount,
+      balanceAfter: wallet.balance,
+      description: options.description,
+      referenceType: options.referenceType ?? null,
+      referenceId: options.referenceId ?? null,
+      createdBy: options.createdBy ?? null,
     });
+
+    return manager.save(CreditTransactionEntity, tx);
   }
 
   // ──────────────────────────────────────────────────────

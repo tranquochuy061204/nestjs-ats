@@ -72,4 +72,4 @@ async function evaluate() {
   }
 }
 
-evaluate();
+void evaluate();

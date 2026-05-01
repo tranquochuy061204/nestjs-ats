@@ -162,7 +162,7 @@ export class EmployerJobsService {
     }
 
     const isCompanyVerified = job.company?.status === CompanyStatus.APPROVED;
-    let finalStatus = (status as string) ?? job.status;
+    let finalStatus: JobStatus = status ?? (job.status as JobStatus);
 
     // [Feature #1] max_active_jobs — enforce khi recruiter submit (PUBLISHED intent),
     // kể cả khi company chưa verified và bài sẽ chuyển sang PENDING.
@@ -207,7 +207,10 @@ export class EmployerJobsService {
         const { skills, ...jobDataUpdates } = updateJobDto;
         delete jobDataUpdates.status; // handled above
 
-        const updates: any = { ...jobDataUpdates, status: finalStatus };
+        const updates: Partial<JobEntity> = {
+          ...jobDataUpdates,
+          status: finalStatus,
+        };
         if (finalStatus === JobStatus.CLOSED) {
           updates.isBumped = false;
           updates.bumpedUntil = null;
@@ -216,7 +219,7 @@ export class EmployerJobsService {
 
         await manager.update(JobEntity, { id: jobId }, updates);
 
-        if (finalStatus !== job.status) {
+        if (finalStatus !== (job.status as JobStatus)) {
           await manager.save(
             JobStatusHistoryEntity,
             manager.create(JobStatusHistoryEntity, {
@@ -230,8 +233,8 @@ export class EmployerJobsService {
 
           // [Feature #1] record publish/pending timestamp để lock slot cho Free
           if (
-            finalStatus === (JobStatus.PUBLISHED as string) ||
-            finalStatus === (JobStatus.PENDING as string)
+            finalStatus === JobStatus.PUBLISHED ||
+            finalStatus === JobStatus.PENDING
           ) {
             await this.subscriptionsService.recordJobPublished(
               employer.companyId!,
@@ -246,7 +249,7 @@ export class EmployerJobsService {
 
       return {
         message:
-          finalStatus === (JobStatus.PENDING as string)
+          finalStatus === JobStatus.PENDING
             ? 'Tin đã được gửi duyệt. Vui lòng chờ Admin xác nhận.'
             : 'Cập nhật tin tuyển dụng thành công',
       };

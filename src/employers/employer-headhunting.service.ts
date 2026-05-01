@@ -387,23 +387,30 @@ export class EmployerHeadhuntingService {
     }
 
     // 3. Charge credit nếu cần + ghi log trong 1 transaction
-    if (creditSpent > 0) {
-      await this.creditsService.chargeCredit(companyId, creditSpent, {
-        type: CreditTransactionType.PURCHASE,
-        description: `Mở khoá liên hệ ứng viên #${candidateId}`,
-        referenceType: 'candidate',
-        referenceId: candidateId,
-        createdBy: employerUserId,
-      });
-    }
+    await this.dataSource.transaction(async (manager) => {
+      if (creditSpent > 0) {
+        await this.creditsService.chargeCreditWithManager(
+          manager,
+          companyId,
+          creditSpent,
+          {
+            type: CreditTransactionType.CONTACT_UNLOCK,
+            description: `Mở khoá liên hệ ứng viên #${candidateId}`,
+            referenceType: 'candidate',
+            referenceId: candidateId,
+            createdBy: employerUserId,
+          },
+        );
+      }
 
-    // Ghi log unlock (dùng upsert để an toàn khi race condition)
-    await this.dataSource.query(
-      `INSERT INTO contact_unlock_log (company_id, candidate_id, credit_spent)
-       VALUES ($1, $2, $3)
-       ON CONFLICT DO NOTHING`,
-      [companyId, candidateId, creditSpent],
-    );
+      // Ghi log unlock (dùng upsert để an toàn khi race condition)
+      await manager.query(
+        `INSERT INTO contact_unlock_log (company_id, candidate_id, credit_spent)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [companyId, candidateId, creditSpent],
+      );
+    });
 
     this.logger.log(
       `Contact unlock: company=${companyId} candidate=${candidateId} ` +
@@ -573,6 +580,73 @@ export class EmployerHeadhuntingService {
       relations: ['candidate', 'job'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async getQuota(employerUserId: number) {
+    const employer = await this.findEmployerWithCompany(employerUserId);
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(employer.companyId);
+
+    const firstOfMonth = new Date();
+    firstOfMonth.setDate(1);
+    firstOfMonth.setHours(0, 0, 0, 0);
+
+    const usedThisMonth = await this.contactUnlockRepo
+      .createQueryBuilder('ul')
+      .where('ul.company_id = :companyId', { companyId: employer.companyId })
+      .andWhere('ul.unlocked_at >= :firstOfMonth', { firstOfMonth })
+      .getCount();
+
+    return {
+      totalMonthlyQuota: pkg.monthlyHeadhuntProfileViews,
+      usedThisMonth,
+      remainingThisMonth:
+        pkg.monthlyHeadhuntProfileViews === -1
+          ? -1
+          : Math.max(0, pkg.monthlyHeadhuntProfileViews - usedThisMonth),
+      canUsePremiumFilters: pkg.canUsePremiumFilters,
+      freeContactUnlock: pkg.freeContactUnlock,
+    };
+  }
+
+  async getUnlockedCandidates(
+    employerUserId: number,
+    page: number,
+    limit: number,
+  ) {
+    const employer = await this.findEmployerWithCompany(employerUserId);
+
+    const [logs, total] = await this.contactUnlockRepo.findAndCount({
+      where: { companyId: employer.companyId },
+      relations: [
+        'candidate',
+        'candidate.jobType',
+        'candidate.skills',
+        'candidate.skills.skillMetadata',
+        'candidate.jobCategories',
+        'candidate.jobCategories.jobCategory',
+        'candidate.user',
+      ],
+      order: { unlockedAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    const data = logs.map((log) => {
+      // Return unmasked details because they are unlocked
+      return {
+        ...log.candidate,
+        unlockedAt: log.unlockedAt,
+        creditSpent: log.creditSpent,
+      };
+    });
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   /**

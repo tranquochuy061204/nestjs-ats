@@ -5,15 +5,33 @@ import { CandidateEntity } from '../entities/candidate.entity';
 import { CandidateFilterDto } from '../dto/candidate-filter.dto';
 import { getPaginatedResult } from '../../common/utils/pagination.util';
 import { CandidateSortBy, SortOrder } from '../../common/enums/sort-order.enum';
+import { ContactUnlockLogEntity } from '../../subscriptions/entities/contact-unlock-log.entity';
+import { EmployersService } from '../../employers/employers.service';
 
-/** Fields ẩn trong kết quả tìm kiếm (thông tin nhạy cảm) */
-const HIDDEN_FIELDS = [
+/**
+ * Fields nhạy cảm ẩn trực tiếp trên CandidateEntity.
+ * NOTE: email KHÔNG có cột trực tiếp trên candidate — nó nằm ở UserEntity.
+ *       Xem USER_SENSITIVE_FIELDS bên dưới để mask nested user object.
+ */
+const HIDDEN_FIELDS: Array<keyof CandidateEntity> = [
   'phone',
   'cvUrl',
   'linkedinUrl',
   'githubUrl',
   'portfolioUrl',
 ];
+
+/**
+ * Fields nhạy cảm cần strip khỏi nested UserEntity nếu relation `user` được load.
+ * Đây là lớp bảo vệ thứ hai — buildBaseQuery() cố tình KHÔNG join user.
+ * Nếu sau này có ai thêm join user, sanitizer này sẽ tự động ngăn data leak.
+ */
+const USER_SENSITIVE_FIELDS = [
+  'email',
+  'password',
+  'refreshToken',
+  'role',
+] as const;
 
 @Injectable()
 export class CandidateSearchService {
@@ -22,16 +40,19 @@ export class CandidateSearchService {
   constructor(
     @InjectRepository(CandidateEntity)
     private readonly candidateRepo: Repository<CandidateEntity>,
+    @InjectRepository(ContactUnlockLogEntity)
+    private readonly contactUnlockRepo: Repository<ContactUnlockLogEntity>,
+    private readonly employersService: EmployersService,
   ) {}
 
   // ─── Public API ──────────────────────────────────────────────────────────
 
   /**
-   * Tìm kiếm ứng viên đa yếu tố cho employer.
+   * Tìm kiếm ứng viên với filter phức tạp (salary overlap, skill OR, category OR).
    * Chỉ trả về candidate có isPublic = true.
    * Ẩn các trường nhạy cảm (phone, cvUrl, social links).
    */
-  async searchCandidates(dto: CandidateFilterDto) {
+  async searchCandidates(dto: CandidateFilterDto, employerUserId?: number) {
     const { page, limit } = dto;
 
     const qb = this.buildBaseQuery();
@@ -45,10 +66,35 @@ export class CandidateSearchService {
 
     const result = await getPaginatedResult(qb, page, limit);
 
-    // Ẩn fields nhạy cảm khỏi response
+    let unlockedCandidateIds = new Set<number>();
+    if (employerUserId) {
+      try {
+        const employer = await this.employersService.getProfile(employerUserId);
+        if (employer.companyId) {
+          const unlockedLogs: Pick<ContactUnlockLogEntity, 'candidateId'>[] =
+            await this.contactUnlockRepo.find({
+              where: { companyId: employer.companyId },
+              select: ['candidateId'],
+            });
+          unlockedCandidateIds = new Set(
+            unlockedLogs.map((log) => log.candidateId),
+          );
+        }
+      } catch (err) {
+        this.logger.warn(`Lấy profile employer thất bại: ${err}`);
+      }
+    }
+
+    // Ẩn fields nhạy cảm khỏi response và thêm status đã unlock
     return {
       ...result,
-      data: result.data.map((c) => this.sanitizeForPublic(c)),
+      data: result.data.map((c) => {
+        const sanitized = this.sanitizeForPublic(c);
+        return {
+          ...sanitized,
+          contactUnlocked: unlockedCandidateIds.has(c.id),
+        };
+      }),
     };
   }
 
@@ -209,14 +255,34 @@ export class CandidateSearchService {
 
   // ─── Data Sanitizer ───────────────────────────────────────────────────────
 
-  /** Ẩn thông tin nhạy cảm trước khi trả về cho employer. */
+  /**
+   * Ẩn thông tin nhạy cảm trước khi trả về cho employer.
+   *
+   * Hai lớp bảo vệ (thuần in-memory, không thêm SQL):
+   *  1. Strip HIDDEN_FIELDS khỏi candidate (phone, cvUrl, social links)
+   *  2. Strip USER_SENSITIVE_FIELDS khỏi nested `user` object nếu được load
+   *     → defensive guard: buildBaseQuery() cố tình không join user,
+   *       nhưng nếu code tương lai thêm join, layer này sẽ ngăn leak.
+   */
   private sanitizeForPublic(
     candidate: CandidateEntity,
   ): Partial<CandidateEntity> {
     const result = { ...candidate } as Record<string, unknown>;
+
+    // Layer 1: Strip sensitive top-level fields
     for (const field of HIDDEN_FIELDS) {
       delete result[field];
     }
+
+    // Layer 2: Strip sensitive fields from nested user relation (if loaded)
+    if (result['user'] != null && typeof result['user'] === 'object') {
+      const sanitizedUser = { ...(result['user'] as Record<string, unknown>) };
+      for (const field of USER_SENSITIVE_FIELDS) {
+        delete sanitizedUser[field];
+      }
+      result['user'] = sanitizedUser;
+    }
+
     return result as Partial<CandidateEntity>;
   }
 }

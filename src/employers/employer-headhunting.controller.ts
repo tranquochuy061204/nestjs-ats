@@ -28,6 +28,35 @@ export class EmployerHeadhuntingController {
     private readonly candidateSearchService: CandidateSearchService,
   ) {}
 
+  @Get('quota')
+  @ApiOperation({
+    summary: 'Lấy thông tin quota xem hồ sơ Headhunting của tháng hiện tại',
+  })
+  @ApiResponse({ status: 200, description: 'Thông tin quota' })
+  getQuota(@CurrentUser() user: { id: number }) {
+    return this.headhuntingService.getQuota(user.id);
+  }
+
+  @Get('unlocked-candidates')
+  @ApiOperation({
+    summary: 'Lấy danh sách các ứng viên đã mở khoá thông tin liên hệ',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách ứng viên đã mở khoá (có pagination)',
+  })
+  getUnlockedCandidates(
+    @CurrentUser() user: { id: number },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.headhuntingService.getUnlockedCandidates(
+      user.id,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 10,
+    );
+  }
+
   @Get('jobs/:jobId/suggested-candidates')
   @ApiOperation({
     summary: 'Lấy danh sách ứng viên đề xuất tự động cho một công việc',
@@ -69,8 +98,11 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
     status: 200,
     description: 'Danh sách ứng viên phù hợp (đã ẩn thông tin nhạy cảm)',
   })
-  searchCandidates(@Query() filterDto: CandidateFilterDto) {
-    return this.candidateSearchService.searchCandidates(filterDto);
+  searchCandidates(
+    @Query() filterDto: CandidateFilterDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.candidateSearchService.searchCandidates(filterDto, user.id);
   }
 
   @Get('candidates/:id')

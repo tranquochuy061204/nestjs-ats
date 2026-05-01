@@ -68,13 +68,13 @@ export class JobTasksService {
   async expireOldBumps() {
     this.logger.log('Checking for expired bumped jobs...');
     try {
-      const result = await this.dataSource.query(`
+      // Note: TypeORM raw UPDATE via pg driver returns [rows, affectedCount]
+      const queryResult: unknown = await this.dataSource.query(`
         UPDATE job SET is_bumped = false, bumped_until = NULL, bumped_at = NULL
         WHERE is_bumped = true
           AND (bumped_until < NOW() OR (deadline IS NOT NULL AND deadline < NOW()))
       `);
-      // Note: typeorm raw update returns [records, affectedCount]
-      const affected = result[1] || 0;
+      const [, affected = 0] = queryResult as [unknown, number?];
       if (affected > 0) {
         this.logger.log(`Expired ${affected} bumped jobs.`);
       }

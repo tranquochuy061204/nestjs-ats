@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmployersService } from './employers.service';
 import { EmployersController } from './employers.controller';
@@ -39,7 +39,7 @@ import { ContactUnlockLogEntity } from '../subscriptions/entities/contact-unlock
     StorageModule,
     NotificationsModule,
     MailModule,
-    CandidatesModule,
+    forwardRef(() => CandidatesModule),
     SubscriptionsModule,
     CreditsModule,
   ],

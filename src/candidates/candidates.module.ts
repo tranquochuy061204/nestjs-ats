@@ -40,6 +40,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonGuardsModule } from '../common/guards/common-guards.module';
 import { UserEntity } from '../users/entities/user.entity';
 import { ApplicationsModule } from '../applications/applications.module';
+import { ContactUnlockLogEntity } from '../subscriptions/entities/contact-unlock-log.entity';
+import { EmployersModule } from '../employers/employers.module';
 
 @Module({
   imports: [
@@ -59,8 +61,10 @@ import { ApplicationsModule } from '../applications/applications.module';
       JobApplicationEntity,
       ApplicationStatusHistoryEntity,
       UserEntity,
+      ContactUnlockLogEntity,
     ]),
     forwardRef(() => AuthModule),
+    forwardRef(() => EmployersModule),
     MetadataModule,
     StorageModule,
     NotificationsModule,
