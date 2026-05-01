@@ -12,7 +12,10 @@ import { CertificateEntity } from '../candidates/entities/certificate.entity';
 import { StorageModule } from '../storage/storage.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MailModule } from '../mail/mail.module';
-import { EmployerHeadhuntingService } from './employer-headhunting.service';
+import { EmployerCandidateMatchingService } from './services/employer-candidate-matching.service';
+import { EmployerContactUnlockService } from './services/employer-contact-unlock.service';
+import { EmployerTalentPoolService } from './services/employer-talent-pool.service';
+import { EmployerInvitationService } from './services/employer-invitation.service';
 import { EmployerHeadhuntingController } from './employer-headhunting.controller';
 import { UserEntity } from '../users/entities/user.entity';
 import { EmployerCompanyDashboardService } from './services/employer-company-dashboard.service';
@@ -50,7 +53,10 @@ import { ContactUnlockLogEntity } from '../subscriptions/entities/contact-unlock
   ],
   providers: [
     EmployersService,
-    EmployerHeadhuntingService,
+    EmployerCandidateMatchingService,
+    EmployerContactUnlockService,
+    EmployerTalentPoolService,
+    EmployerInvitationService,
     EmployerCompanyDashboardService,
     EmployerJobDashboardService,
   ],

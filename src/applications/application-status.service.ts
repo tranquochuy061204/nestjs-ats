@@ -13,8 +13,7 @@ import {
 import { ApplicationStatusHistoryEntity } from './entities/application-status-history.entity';
 import { ApplicationNoteEntity } from './entities/application-note.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
-import { CreditsService } from '../credits/credits.service';
-import { CreditTransactionType } from '../credits/entities/credit-transaction.entity';
+import { ApplicationPipelineFeeService } from './application-pipeline-fee.service';
 import { SocketGateway } from '../common/socket/socket.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
@@ -37,7 +36,7 @@ export class ApplicationStatusService {
     private readonly employerRepo: Repository<EmployerEntity>,
     private readonly dataSource: DataSource,
     private readonly subscriptionsService: SubscriptionsService,
-    private readonly creditsService: CreditsService,
+    private readonly pipelineFeeService: ApplicationPipelineFeeService,
     private readonly socketGateway: SocketGateway,
     private readonly notificationsService: NotificationsService,
     private readonly mailService: MailService,
@@ -111,36 +110,13 @@ export class ApplicationStatusService {
     }
 
     // ── Pipeline Fee Enforcement ──────────────────────────
-    let creditCharged = 0;
-    const companyId = application.job.companyId;
-
-    const { creditCost, isFree, useFreeProceed } =
-      await this.subscriptionsService.calculateProceedFee(
-        companyId,
-        oldStatus,
-        dto.status,
-      );
-
-    if (!isFree) {
-      // Enforce daily processing limit
-      await this.subscriptionsService.incrementDailyProcessedCount(companyId);
-
-      if (useFreeProceed) {
-        // VIP dùng free proceed — không trừ Credit
-        await this.subscriptionsService.consumeFreeProceed(companyId);
-        creditCharged = 0;
-      } else if (creditCost > 0) {
-        // Trừ Credit (ném exception nếu không đủ)
-        await this.creditsService.chargeCredit(companyId, creditCost, {
-          type: CreditTransactionType.PIPELINE_FEE,
-          description: `Phí proceed ứng viên sang "${dto.status}" — Application #${applicationId}`,
-          referenceType: 'job_application',
-          referenceId: applicationId,
-          createdBy: employerUserId,
-        });
-        creditCharged = creditCost;
-      }
-    }
+    const creditCharged = await this.pipelineFeeService.enforcePipelineFee(
+      application.job.companyId,
+      oldStatus,
+      dto.status,
+      applicationId,
+      employerUserId,
+    );
     // ─────────────────────────────────────────────────────
 
     await this.dataSource.transaction(async (manager) => {

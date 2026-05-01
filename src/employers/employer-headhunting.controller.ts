@@ -11,7 +11,6 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { EmployerHeadhuntingService } from './employer-headhunting.service';
 import { CandidateSearchService } from '../candidates/services/candidate-search.service';
 import { CandidateFilterDto } from '../candidates/dto/candidate-filter.dto';
 import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
@@ -19,13 +18,22 @@ import { SaveCandidateDto } from './dto/save-candidate.dto';
 import { SuggestionFilterDto } from './dto/suggestion-filter.dto';
 import { UserRole } from '../users/entities/user.entity';
 
+// New services
+import { EmployerCandidateMatchingService } from './services/employer-candidate-matching.service';
+import { EmployerContactUnlockService } from './services/employer-contact-unlock.service';
+import { EmployerTalentPoolService } from './services/employer-talent-pool.service';
+import { EmployerInvitationService } from './services/employer-invitation.service';
+
 @ApiTags('Employers - Headhunting')
 @ApiAuth(UserRole.EMPLOYER)
 @Controller('employers/headhunting')
 export class EmployerHeadhuntingController {
   constructor(
-    private readonly headhuntingService: EmployerHeadhuntingService,
     private readonly candidateSearchService: CandidateSearchService,
+    private readonly matchingService: EmployerCandidateMatchingService,
+    private readonly unlockService: EmployerContactUnlockService,
+    private readonly talentPoolService: EmployerTalentPoolService,
+    private readonly invitationService: EmployerInvitationService,
   ) {}
 
   @Get('quota')
@@ -34,7 +42,7 @@ export class EmployerHeadhuntingController {
   })
   @ApiResponse({ status: 200, description: 'Thông tin quota' })
   getQuota(@CurrentUser() user: { id: number }) {
-    return this.headhuntingService.getQuota(user.id);
+    return this.unlockService.getQuota(user.id);
   }
 
   @Get('unlocked-candidates')
@@ -50,7 +58,7 @@ export class EmployerHeadhuntingController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.headhuntingService.getUnlockedCandidates(
+    return this.unlockService.getUnlockedCandidates(
       user.id,
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 10,
@@ -70,7 +78,7 @@ export class EmployerHeadhuntingController {
     @Param('jobId', ParseIntPipe) jobId: number,
     @Query() filterDto: SuggestionFilterDto,
   ) {
-    return this.headhuntingService.getSuggestedCandidates(
+    return this.matchingService.getSuggestedCandidates(
       user.id,
       jobId,
       filterDto.page,
@@ -106,20 +114,35 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
   }
 
   @Get('candidates/:id')
-  @ApiOperation({ summary: 'Xem chi tiết hồ sơ ứng viên (VIP - Không che)' })
-  @ApiResponse({ status: 200, description: 'Full Profile Ứng viên' })
+  @ApiOperation({
+    summary: 'Xem chi tiết hồ sơ ứng viên (Che nếu chưa mở khóa)',
+  })
+  @ApiResponse({ status: 200, description: 'Profile Ứng viên' })
   getCandidateDetail(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.headhuntingService.getCandidateDetail(user.id, id);
+    return this.unlockService.getCandidateDetail(user.id, id);
+  }
+
+  @Post('candidates/:id/unlock')
+  @ApiOperation({ summary: 'Mở khóa thông tin liên hệ ứng viên' })
+  @ApiResponse({
+    status: 200,
+    description: 'Mở khóa thành công (trả về full profile)',
+  })
+  unlockCandidateContact(
+    @CurrentUser() user: { id: number },
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.unlockService.unlockCandidateContact(user.id, id);
   }
 
   @Get('saved-candidates')
   @ApiOperation({ summary: 'Lấy danh sách ứng viên trong Talent Pool' })
   @ApiResponse({ status: 200, description: 'Danh sách ứng viên đã lưu' })
   getSavedCandidates(@CurrentUser() user: { id: number }) {
-    return this.headhuntingService.getSavedCandidates(user.id);
+    return this.talentPoolService.getSavedCandidates(user.id);
   }
 
   @Post('saved-candidates/:candidateId')
@@ -130,7 +153,7 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
     @Param('candidateId', ParseIntPipe) candidateId: number,
     @Body() dto: SaveCandidateDto,
   ) {
-    return this.headhuntingService.saveCandidate(user.id, candidateId, dto);
+    return this.talentPoolService.saveCandidate(user.id, candidateId, dto);
   }
 
   @Delete('saved-candidates/:candidateId')
@@ -140,7 +163,7 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
     @CurrentUser() user: { id: number },
     @Param('candidateId', ParseIntPipe) candidateId: number,
   ) {
-    return this.headhuntingService.unsaveCandidate(user.id, candidateId);
+    return this.talentPoolService.unsaveCandidate(user.id, candidateId);
   }
 
   @Post('invitations')
@@ -150,13 +173,13 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
     @CurrentUser() user: { id: number },
     @Body() dto: CreateJobInvitationDto,
   ) {
-    return this.headhuntingService.sendJobInvitation(user.id, dto);
+    return this.invitationService.sendJobInvitation(user.id, dto);
   }
 
   @Get('invitations')
   @ApiOperation({ summary: 'Lấy danh sách thư mời đã gửi' })
   @ApiResponse({ status: 200, description: 'Danh sách thư mời' })
   getSentInvitations(@CurrentUser() user: { id: number }) {
-    return this.headhuntingService.getSentInvitations(user.id);
+    return this.invitationService.getSentInvitations(user.id);
   }
 }

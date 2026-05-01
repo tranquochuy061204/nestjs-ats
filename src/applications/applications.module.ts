@@ -13,6 +13,7 @@ import { EmployerApplicationsController } from './employer-applications.controll
 import { ApplicationScoringService } from './application-scoring.service';
 import { ApplicationStatusService } from './application-status.service';
 import { ApplicationNotesService } from './application-notes.service';
+import { ApplicationPipelineFeeService } from './application-pipeline-fee.service';
 
 import { UserEntity } from '../users/entities/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -52,6 +53,7 @@ import { JobProfileViewEntity } from '../subscriptions/entities/job-profile-view
     ApplicationScoringService,
     ApplicationStatusService,
     ApplicationNotesService,
+    ApplicationPipelineFeeService,
   ],
   exports: [CandidateApplicationsService, ApplicationScoringService],
 })
