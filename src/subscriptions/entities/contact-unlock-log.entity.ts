@@ -6,11 +6,13 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { CompanyEntity } from '../../companies/entities/company.entity';
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
 
 @Entity('contact_unlock_log')
+@Unique(['companyId', 'candidateId'])
 export class ContactUnlockLogEntity {
   @PrimaryGeneratedColumn()
   id: number;

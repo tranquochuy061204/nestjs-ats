@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   ParseIntPipe,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
@@ -23,6 +24,8 @@ import { EmployerCandidateMatchingService } from './services/employer-candidate-
 import { EmployerContactUnlockService } from './services/employer-contact-unlock.service';
 import { EmployerTalentPoolService } from './services/employer-talent-pool.service';
 import { EmployerInvitationService } from './services/employer-invitation.service';
+import { EmployersService } from './employers.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @ApiTags('Employers - Headhunting')
 @ApiAuth(UserRole.EMPLOYER)
@@ -34,6 +37,8 @@ export class EmployerHeadhuntingController {
     private readonly unlockService: EmployerContactUnlockService,
     private readonly talentPoolService: EmployerTalentPoolService,
     private readonly invitationService: EmployerInvitationService,
+    private readonly employersService: EmployersService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   @Get('quota')
@@ -106,10 +111,34 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
     status: 200,
     description: 'Danh sách ứng viên phù hợp (đã ẩn thông tin nhạy cảm)',
   })
-  searchCandidates(
+  async searchCandidates(
     @Query() filterDto: CandidateFilterDto,
     @CurrentUser() user: { id: number },
   ) {
+    const hasPremiumFilters =
+      filterDto.provinceId ||
+      filterDto.jobTypeId ||
+      (filterDto.skillIds && filterDto.skillIds.length > 0) ||
+      (filterDto.categoryIds && filterDto.categoryIds.length > 0) ||
+      filterDto.salaryMin !== undefined ||
+      filterDto.salaryMax !== undefined ||
+      filterDto.minExperience !== undefined;
+
+    if (hasPremiumFilters) {
+      const employer = await this.employersService.getProfile(user.id);
+      if (employer?.companyId) {
+        const canUse = await this.subscriptionsService.canUseFeature(
+          employer.companyId,
+          'canUsePremiumFilters',
+        );
+        if (!canUse) {
+          throw new ForbiddenException(
+            'Vui lòng nâng cấp gói VIP để sử dụng bộ lọc nâng cao',
+          );
+        }
+      }
+    }
+
     return this.candidateSearchService.searchCandidates(filterDto, user.id);
   }
 
@@ -148,11 +177,23 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
   @Post('saved-candidates/:candidateId')
   @ApiOperation({ summary: 'Lưu ứng viên vào Talent Pool' })
   @ApiResponse({ status: 201, description: 'Lưu thành công' })
-  saveCandidate(
+  async saveCandidate(
     @CurrentUser() user: { id: number },
     @Param('candidateId', ParseIntPipe) candidateId: number,
     @Body() dto: SaveCandidateDto,
   ) {
+    const employer = await this.employersService.getProfile(user.id);
+    if (employer?.companyId) {
+      const canUse = await this.subscriptionsService.canUseFeature(
+        employer.companyId,
+        'canHeadhuntSaveAndInvite',
+      );
+      if (!canUse) {
+        throw new ForbiddenException(
+          'Vui lòng nâng cấp gói VIP để lưu ứng viên',
+        );
+      }
+    }
     return this.talentPoolService.saveCandidate(user.id, candidateId, dto);
   }
 
@@ -169,10 +210,22 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
   @Post('invitations')
   @ApiOperation({ summary: 'Gửi thư mời ứng tuyển cho ứng viên' })
   @ApiResponse({ status: 201, description: 'Gửi thành công' })
-  sendInvitation(
+  async sendInvitation(
     @CurrentUser() user: { id: number },
     @Body() dto: CreateJobInvitationDto,
   ) {
+    const employer = await this.employersService.getProfile(user.id);
+    if (employer?.companyId) {
+      const canUse = await this.subscriptionsService.canUseFeature(
+        employer.companyId,
+        'canHeadhuntSaveAndInvite',
+      );
+      if (!canUse) {
+        throw new ForbiddenException(
+          'Vui lòng nâng cấp gói VIP để gửi thư mời',
+        );
+      }
+    }
     return this.invitationService.sendJobInvitation(user.id, dto);
   }
 

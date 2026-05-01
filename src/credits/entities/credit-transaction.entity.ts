@@ -21,6 +21,7 @@ export enum CreditTransactionType {
 }
 
 @Entity('credit_transaction')
+@Index(['walletId', 'createdAt'])
 export class CreditTransactionEntity {
   @PrimaryGeneratedColumn()
   id: number;

@@ -60,7 +60,9 @@ export class SubscriptionsService {
       return this.getActiveSubscription(companyId);
     }
 
-    return { subscription, package: subscription.package };
+    const updatedSub = await this.checkAndResetMonthlyProceeds(subscription);
+
+    return { subscription: updatedSub, package: subscription.package };
   }
 
   /**
@@ -366,6 +368,27 @@ export class SubscriptionsService {
     if (!vipPkg) throw new NotFoundException('VIP package not found');
 
     return this.dataSource.transaction(async (manager) => {
+      const activeSub = await manager.findOne(CompanySubscriptionEntity, {
+        where: { companyId, status: SubscriptionStatus.ACTIVE },
+        relations: ['package'],
+      });
+
+      let baseDate = new Date();
+      
+      // Nếu có gói VIP đang active và chưa hết hạn, cộng dồn từ endDate hiện tại
+      if (
+        activeSub &&
+        activeSub.package.name === 'vip' &&
+        activeSub.endDate &&
+        activeSub.endDate > baseDate
+      ) {
+        baseDate = activeSub.endDate;
+      }
+
+      const endDate = new Date(
+        baseDate.getTime() + vipPkg.durationDays * 24 * 60 * 60 * 1000,
+      );
+
       // Cancel tất cả subscription cũ
       await manager.update(
         CompanySubscriptionEntity,
@@ -374,9 +397,6 @@ export class SubscriptionsService {
       );
 
       const now = new Date();
-      const endDate = new Date(
-        now.getTime() + vipPkg.durationDays * 24 * 60 * 60 * 1000,
-      );
 
       const newSub = manager.create(CompanySubscriptionEntity, {
         companyId,
@@ -385,7 +405,7 @@ export class SubscriptionsService {
         startDate: now,
         endDate,
         usedFreeProceeds: 0,
-        proceedsResetAt: endDate,
+        proceedsResetAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
       });
 
       return manager.save(CompanySubscriptionEntity, newSub);
@@ -428,5 +448,29 @@ export class SubscriptionsService {
     this.logger.log(
       `VIP expired for company ${expired.companyId}, fell back to Free`,
     );
+  }
+
+  private async checkAndResetMonthlyProceeds(
+    subscription: CompanySubscriptionEntity,
+  ): Promise<CompanySubscriptionEntity> {
+    if (
+      subscription.proceedsResetAt &&
+      new Date() > subscription.proceedsResetAt
+    ) {
+      let nextReset = new Date(subscription.proceedsResetAt.getTime());
+      const now = new Date();
+      while (nextReset <= now) {
+        nextReset = new Date(nextReset.getTime() + 30 * 24 * 60 * 60 * 1000);
+      }
+
+      await this.subscriptionRepo.update(subscription.id, {
+        usedFreeProceeds: 0,
+        proceedsResetAt: nextReset,
+      });
+
+      subscription.usedFreeProceeds = 0;
+      subscription.proceedsResetAt = nextReset;
+    }
+    return subscription;
   }
 }

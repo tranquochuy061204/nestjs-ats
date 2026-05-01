@@ -5,9 +5,10 @@ import {
   Body,
   Query,
   Req,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
+  ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -105,7 +106,9 @@ export class CreditsController {
 
   private async getCompanyId(userId: number): Promise<number> {
     const employer = await this.employerRepo.findOne({ where: { userId } });
-    if (!employer?.companyId) throw new Error('Chưa tham gia công ty');
+    if (!employer?.companyId) {
+      throw new ForbiddenException('Chưa tham gia công ty');
+    }
     return employer.companyId;
   }
 }

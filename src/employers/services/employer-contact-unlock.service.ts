@@ -284,34 +284,53 @@ export class EmployerContactUnlockService {
 
     const [logs, total] = await this.contactUnlockRepo.findAndCount({
       where: { companyId: employer.companyId },
-      relations: [
-        'candidate',
-        'candidate.jobType',
-        'candidate.skills',
-        'candidate.skills.skillMetadata',
-        'candidate.jobCategories',
-        'candidate.jobCategories.jobCategory',
-        'candidate.user',
-      ],
       order: { unlockedAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
     });
 
+    if (logs.length === 0) {
+      return {
+        data: [],
+        total,
+        page,
+        lastPage: Math.ceil(total / limit),
+      };
+    }
+
+    const candidateIds = logs.map((log) => log.candidateId);
+    
+    // Batch load relations to avoid huge JOINS / Cartesian products in pagination
+    const candidates = await this.candidateRepo.find({
+      where: { id: In(candidateIds) },
+      relations: [
+        'jobType',
+        'skills',
+        'skills.skillMetadata',
+        'jobCategories',
+        'jobCategories.jobCategory',
+        'user',
+      ],
+    });
+
+    const candidateMap = new Map(candidates.map((c) => [c.id, c]));
+
     const data = logs.map((log) => {
-      if (log.candidate.user) {
-        const userRef = log.candidate.user as Partial<UserEntity> &
-          Record<string, unknown>;
+      const candidate = candidateMap.get(log.candidateId);
+      if (!candidate) return null;
+      
+      if (candidate.user) {
+        const userRef = candidate.user as Partial<UserEntity> & Record<string, unknown>;
         delete userRef.password;
         delete userRef.emailVerificationToken;
         delete userRef.resetPasswordToken;
       }
       return {
-        ...log.candidate,
+        ...candidate,
         unlockedAt: log.unlockedAt,
         creditSpent: log.creditSpent,
       };
-    });
+    }).filter(Boolean);
 
     return {
       data,

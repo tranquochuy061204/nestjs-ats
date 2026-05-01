@@ -5,10 +5,11 @@ import {
   Body,
   Query,
   Req,
-  UseGuards,
   HttpCode,
   HttpStatus,
   Res,
+  ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as express from 'express';
@@ -111,7 +112,9 @@ export class PaymentsController {
 
   private async getCompanyId(userId: number): Promise<number> {
     const employer = await this.employerRepo.findOne({ where: { userId } });
-    if (!employer?.companyId) throw new Error('Chưa tham gia công ty');
+    if (!employer?.companyId) {
+      throw new ForbiddenException('Chưa tham gia công ty');
+    }
     return employer.companyId;
   }
 }

@@ -141,10 +141,7 @@ export class PaymentsService {
       return { RspCode: '01', Message: 'Order not found' };
     }
 
-    // 3. Kiểm tra đã xử lý chưa (idempotent)
-    if (order.paymentStatus === 'completed') {
-      return { RspCode: '02', Message: 'Order already completed' };
-    }
+    // 3. (Removed early check, handled atomically in step 5)
 
     // 4. Verify amount
     if (Math.round(order.amount) !== vnpAmount) {
@@ -160,12 +157,20 @@ export class PaymentsService {
 
     // 5. Cập nhật trạng thái
     if (this.vnpayService.isSuccessResponse(responseCode)) {
-      await this.orderRepo.update(order.id, {
-        paymentStatus: 'completed',
-        gatewayTransactionId: transactionNo,
-        gatewayResponseData: JSON.stringify(query),
-        paidAt: new Date(),
-      });
+      const updateResult = await this.orderRepo.update(
+        { id: order.id, paymentStatus: PaymentOrderStatus.PENDING },
+        {
+          paymentStatus: 'completed', // PaymentOrderStatus.COMPLETED actually
+          gatewayTransactionId: transactionNo,
+          gatewayResponseData: JSON.stringify(query),
+          paidAt: new Date(),
+        },
+      );
+
+      // Đã xử lý bởi Return URL trước đó
+      if (updateResult.affected === 0) {
+        return { RspCode: '02', Message: 'Order already completed' };
+      }
 
       // 6. Kích hoạt dịch vụ
       try {
@@ -213,14 +218,7 @@ export class PaymentsService {
       return { success: false, message: 'Không tìm thấy đơn hàng' };
     }
 
-    // 3. Nếu đơn hàng đã xử lý rồi (bằng IPN) thì chỉ trả về success
-    if (order.paymentStatus === 'completed') {
-      return {
-        success: true,
-        message: 'Thanh toán thành công',
-        orderId: txnRef,
-      };
-    }
+    // 3. (Removed early check, handled atomically in step 6)
 
     // 4. Kiểm tra mã phản hồi thành công
     const isSuccess = this.vnpayService.isSuccessResponse(responseCode);
@@ -244,13 +242,25 @@ export class PaymentsService {
       return { success: false, message: 'Số tiền không khớp', orderId: txnRef };
     }
 
-    // 6. Cập nhật thành công & Fulfilment
-    await this.orderRepo.update(order.id, {
-      paymentStatus: 'completed',
-      gatewayTransactionId: query['vnp_TransactionNo'],
-      gatewayResponseData: JSON.stringify(query),
-      paidAt: new Date(),
-    });
+    // 6. Cập nhật thành công & Fulfilment (Atomic)
+    const updateResult = await this.orderRepo.update(
+      { id: order.id, paymentStatus: PaymentOrderStatus.PENDING },
+      {
+        paymentStatus: 'completed',
+        gatewayTransactionId: query['vnp_TransactionNo'],
+        gatewayResponseData: JSON.stringify(query),
+        paidAt: new Date(),
+      },
+    );
+
+    if (updateResult.affected === 0) {
+      // Đã được xử lý bởi IPN
+      return {
+        success: true,
+        message: 'Thanh toán thành công',
+        orderId: txnRef,
+      };
+    }
 
     try {
       await this.fulfillOrder(order);

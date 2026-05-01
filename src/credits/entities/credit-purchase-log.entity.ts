@@ -12,6 +12,7 @@ import { CreditProductEntity } from './credit-product.entity';
 import { JobEntity } from '../../jobs/entities/job.entity';
 
 @Entity('credit_purchase_log')
+@Index(['companyId', 'productId', 'expiresAt'])
 export class CreditPurchaseLogEntity {
   @PrimaryGeneratedColumn()
   id: number;

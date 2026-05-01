@@ -170,30 +170,31 @@ export class EmployerApplicationsService {
       await this.subscriptionsService.getActiveSubscription(employer.companyId);
 
     let profileViewsRemaining: number | null = null;
-    const TEST_LIMIT = 3; // TODO: Đổi lại thành pkg.maxProfileViewsPerJob sau khi test xong
 
     if (pkg.maxProfileViewsPerJob === -1) {
       profileViewsRemaining = -1;
     } else {
-      const viewedCount = await this.profileViewRepo
-        .createQueryBuilder('pv')
-        .innerJoin('pv.job', 'job')
-        .where('job.company_id = :companyId', { companyId: employer.companyId })
-        .getCount();
-
-      const alreadyViewed = await this.profileViewRepo
-        .createQueryBuilder('pv')
-        .innerJoin('pv.job', 'job')
-        .where('job.company_id = :companyId', { companyId: employer.companyId })
-        .andWhere('pv.candidate_id = :candidateId', {
-          candidateId: application.candidateId,
-        })
-        .getOne();
+      const limit = pkg.maxProfileViewsPerJob;
+      const [viewedCount, alreadyViewed] = await Promise.all([
+        this.profileViewRepo
+          .createQueryBuilder('pv')
+          .innerJoin('pv.job', 'job')
+          .where('job.company_id = :companyId', { companyId: employer.companyId })
+          .getCount(),
+        this.profileViewRepo
+          .createQueryBuilder('pv')
+          .innerJoin('pv.job', 'job')
+          .where('job.company_id = :companyId', { companyId: employer.companyId })
+          .andWhere('pv.candidate_id = :candidateId', {
+            candidateId: application.candidateId,
+          })
+          .getOne(),
+      ]);
 
       if (!alreadyViewed) {
-        if (viewedCount >= TEST_LIMIT) {
+        if (viewedCount >= limit) {
           throw new ForbiddenException(
-            `Bạn đã đạt giới hạn xem ${TEST_LIMIT} hồ sơ ứng tuyển của gói Free. Vui lòng nâng cấp VIP để xem không giới hạn.`,
+            `Bạn đã đạt giới hạn xem ${limit} hồ sơ ứng tuyển của gói hiện tại. Vui lòng nâng cấp VIP để xem không giới hạn.`,
           );
         }
         await this.profileViewRepo.save(
@@ -202,9 +203,9 @@ export class EmployerApplicationsService {
             candidateId: application.candidateId,
           }),
         );
-        profileViewsRemaining = TEST_LIMIT - viewedCount - 1;
+        profileViewsRemaining = limit - viewedCount - 1;
       } else {
-        profileViewsRemaining = TEST_LIMIT - viewedCount;
+        profileViewsRemaining = limit - viewedCount;
       }
     }
 
@@ -237,12 +238,17 @@ export class EmployerApplicationsService {
       );
     }
 
-    await this.creditsService.purchaseProduct(
-      employer.companyId,
-      'ai_scoring',
-      application.job.id,
-      employerUserId,
-    );
+    const { package: pkg } =
+      await this.subscriptionsService.getActiveSubscription(employer.companyId);
+
+    if (!pkg.freeAiScoring) {
+      await this.creditsService.purchaseProduct(
+        employer.companyId,
+        'ai_scoring',
+        application.job.id,
+        employerUserId,
+      );
+    }
 
     void this.applicationScoringService.calculateAiMatchScore(application.id);
 

@@ -67,17 +67,7 @@ export class CompanySubscriptionEntity {
   })
   lastJobPublishedAt: Date | null;
 
-  // ── Headhunting Usage ─────────────────────────────────────
-
-  @Column({ name: 'headhunting_views_used', type: 'int', default: 0 })
-  headhuntingViewsUsed: number;
-
-  @Column({
-    name: 'headhunting_views_reset_at',
-    type: 'timestamptz',
-    nullable: true,
-  })
-  headhuntingViewsResetAt: Date | null;
+  // ── Headhunting Usage (Removed dead columns) ─────────────────────────────────────
 
   // ── Pipeline Proceed Usage ────────────────────────────────
 
