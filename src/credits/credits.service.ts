@@ -13,27 +13,9 @@ import {
 } from './entities/credit-transaction.entity';
 import { CreditProductEntity } from './entities/credit-product.entity';
 import { CreditPurchaseLogEntity } from './entities/credit-purchase-log.entity';
+import { CreditPackageEntity } from './entities/credit-package.entity';
 import { JobEntity } from '../jobs/entities/job.entity';
-
-export interface ChargeCreditOptions {
-  type: CreditTransactionType | string;
-  description: string;
-  referenceType?: string;
-  referenceId?: number;
-  createdBy?: number;
-}
-
-/**
- * Bảng nạp Credit — số Credit và bonus
- */
-const CREDIT_TOPUP_PACKS = [
-  { id: 'starter', creditBase: 100, bonus: 0, priceVnd: 100_000 },
-  { id: 'plus', creditBase: 500, bonus: 50, priceVnd: 450_000 },
-  { id: 'pro', creditBase: 1000, bonus: 200, priceVnd: 800_000 },
-  { id: 'enterprise', creditBase: 5000, bonus: 1500, priceVnd: 3_500_000 },
-] as const;
-
-export type TopupPackId = (typeof CREDIT_TOPUP_PACKS)[number]['id'];
+import { ChargeCreditOptions } from './interfaces/credits.interface';
 
 @Injectable()
 export class CreditsService {
@@ -48,6 +30,8 @@ export class CreditsService {
     private readonly productRepo: Repository<CreditProductEntity>,
     @InjectRepository(CreditPurchaseLogEntity)
     private readonly purchaseLogRepo: Repository<CreditPurchaseLogEntity>,
+    @InjectRepository(CreditPackageEntity)
+    private readonly packageRepo: Repository<CreditPackageEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -136,11 +120,11 @@ export class CreditsService {
 
   async topupCredit(
     companyId: number,
-    packId: TopupPackId,
+    packSlug: string,
     paymentOrderId?: number,
   ): Promise<CreditTransactionEntity> {
-    const pack = CREDIT_TOPUP_PACKS.find((p) => p.id === packId);
-    if (!pack) throw new BadRequestException('Invalid topup pack');
+    const pack = await this.packageRepo.findOne({ where: { slug: packSlug } });
+    if (!pack) throw new BadRequestException('Gói nạp không tồn tại');
 
     const totalCredit = pack.creditBase + pack.bonus;
 
@@ -162,8 +146,8 @@ export class CreditsService {
 
       const description =
         pack.bonus > 0
-          ? `Nạp ${pack.creditBase} Credit (+ ${pack.bonus} bonus) — gói ${pack.id}`
-          : `Nạp ${pack.creditBase} Credit — gói ${pack.id}`;
+          ? `Nạp ${pack.creditBase} Credit (+ ${pack.bonus} bonus) — gói ${pack.slug}`
+          : `Nạp ${pack.creditBase} Credit — gói ${pack.slug}`;
 
       const tx = manager.create(CreditTransactionEntity, {
         walletId: wallet.id,
@@ -392,8 +376,11 @@ export class CreditsService {
   // TOPUP PACKS (expose to controller)
   // ──────────────────────────────────────────────────────
 
-  getTopupPacks() {
-    return CREDIT_TOPUP_PACKS;
+  async getTopupPacks() {
+    return this.packageRepo.find({
+      where: { isActive: true },
+      order: { priceVnd: 'ASC' },
+    });
   }
 
   /** Trả về danh sách credit product đang active (cho FE hiển thị cửa hàng) */

@@ -12,11 +12,7 @@ import {
 } from './entities/company-subscription.entity';
 import { SubscriptionPackageEntity } from './entities/subscription-package.entity';
 import { CreditPurchaseLogEntity } from '../credits/entities/credit-purchase-log.entity';
-
-export interface ActiveSubscription {
-  subscription: CompanySubscriptionEntity;
-  package: SubscriptionPackageEntity;
-}
+import { ActiveSubscription } from './interfaces/subscriptions.interface';
 
 @Injectable()
 export class SubscriptionsService {
@@ -356,6 +352,12 @@ export class SubscriptionsService {
     return this.packageRepo.find({ order: { price: 'ASC' } });
   }
 
+  async getPackageByName(
+    name: string,
+  ): Promise<SubscriptionPackageEntity | null> {
+    return this.packageRepo.findOne({ where: { name } });
+  }
+
   async getCompanySubscription(companyId: number): Promise<ActiveSubscription> {
     return this.getActiveSubscription(companyId);
   }
@@ -374,7 +376,7 @@ export class SubscriptionsService {
       });
 
       let baseDate = new Date();
-      
+
       // Nếu có gói VIP đang active và chưa hết hạn, cộng dồn từ endDate hiện tại
       if (
         activeSub &&

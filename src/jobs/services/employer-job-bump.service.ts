@@ -10,14 +10,7 @@ import { DataSource, Repository } from 'typeorm';
 import { JobEntity, JobStatus } from '../entities/job.entity';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 import { CreditsService } from '../../credits/credits.service';
-
-export interface BumpJobResult {
-  message: string;
-  bumpedUntil: Date;
-  source: 'quota' | 'credit';
-  creditsSpent: number;
-  quotaRemaining: number;
-}
+import { BumpJobResult } from '../interfaces/job-bump.interface';
 
 @Injectable()
 export class EmployerJobBumpService {

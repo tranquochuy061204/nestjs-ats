@@ -89,7 +89,7 @@ export class CreditsController {
 
   @Get('topup-packs')
   @ApiOperation({ summary: 'Danh sách gói nạp Credit' })
-  getTopupPacks() {
+  async getTopupPacks() {
     return this.creditsService.getTopupPacks();
   }
 

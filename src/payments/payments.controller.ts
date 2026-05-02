@@ -15,7 +15,6 @@ import { ConfigService } from '@nestjs/config';
 import * as express from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
-import type { TopupPackId } from '../credits/credits.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -32,7 +31,7 @@ class CreateCreditTopupDto {
     example: 'starter',
     enum: ['starter', 'plus', 'pro', 'enterprise'], // Tuỳ theo TopupPackId
   })
-  packId: TopupPackId;
+  packId: string;
 }
 
 @ApiTags('Payments')

@@ -9,13 +9,11 @@ import {
   PaymentOrderType,
 } from './entities/payment-order.entity';
 import { VnpayService } from './vnpay.service';
-import { CreditsService, TopupPackId } from '../credits/credits.service';
+import { CreditsService } from '../credits/credits.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
-
-export interface CreateOrderResult {
-  orderId: number;
-  paymentUrl: string;
-}
+import { SubscriptionPackageEntity } from '../subscriptions/entities/subscription-package.entity';
+import { CreditPackageEntity } from '../credits/entities/credit-package.entity';
+import { CreateOrderResult } from './interfaces/payments.interface';
 
 @Injectable()
 export class PaymentsService {
@@ -37,8 +35,10 @@ export class PaymentsService {
     companyId: number,
     req: Request,
   ): Promise<CreateOrderResult> {
-    // VIP = 499.000 VNĐ — lấy từ package table nếu cần
-    const amount = 499_000;
+    const vipPkg: SubscriptionPackageEntity | null =
+      await this.subscriptionsService.getPackageByName('vip');
+    if (!vipPkg) throw new BadRequestException('Gói VIP không tồn tại');
+    const amount = Number(vipPkg.price);
 
     const order = await this.orderRepo.save(
       this.orderRepo.create({
@@ -75,13 +75,15 @@ export class PaymentsService {
    */
   async createCreditTopupOrder(
     companyId: number,
-    packId: TopupPackId,
+    packSlug: string,
     req: Request,
   ): Promise<CreateOrderResult> {
-    const packs = this.creditsService.getTopupPacks();
-    const pack = packs.find((p) => p.id === packId);
+    const packs: CreditPackageEntity[] =
+      await this.creditsService.getTopupPacks();
+    const pack = packs.find((p) => p.slug === packSlug);
     if (!pack) throw new BadRequestException('Gói nạp không hợp lệ');
 
+    const amount = Number(pack.priceVnd);
     const totalCredit = pack.creditBase + pack.bonus;
 
     const order = await this.orderRepo.save(
@@ -105,7 +107,7 @@ export class PaymentsService {
     const returnUrl = `${backendUrl}/api/payments/vnpay/return`;
     const paymentUrl = this.vnpayService.createPaymentUrl({
       orderId: txnRef,
-      amount: pack.priceVnd,
+      amount,
       orderInfo: `Nap ${totalCredit} Credit - CT ${companyId}`,
       returnUrl,
       ipAddr: this.getClientIp(req),
@@ -289,11 +291,11 @@ export class PaymentsService {
         `VIP activated for company ${order.companyId} via order ${order.id}`,
       );
     } else if (order.orderType === 'credit_topup' && order.creditAmount) {
-      const packId = this.extractPackIdFromTxnRef(order.gatewayOrderId ?? '');
-      if (packId) {
+      const packSlug = this.extractPackIdFromTxnRef(order.gatewayOrderId ?? '');
+      if (packSlug) {
         await this.creditsService.topupCredit(
           order.companyId,
-          packId as TopupPackId,
+          packSlug,
           order.id,
         );
         this.logger.log(
