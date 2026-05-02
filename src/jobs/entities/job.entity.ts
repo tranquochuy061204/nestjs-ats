@@ -101,8 +101,12 @@ export class JobEntity {
   requiredDegree: Degree;
 
   @Index()
-  @Column({ type: 'varchar', length: 20, default: JobStatus.DRAFT })
-  status: string;
+  @Column({
+    type: 'enum',
+    enum: JobStatus,
+    default: JobStatus.DRAFT,
+  })
+  status: JobStatus;
 
   @Column({ type: 'int', nullable: true })
   slots: number;

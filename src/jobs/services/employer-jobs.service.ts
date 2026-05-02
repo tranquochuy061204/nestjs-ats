@@ -147,30 +147,28 @@ export class EmployerJobsService {
     const { status } = updateJobDto;
 
     // VALIDATE ALLOWED STATUS
-    // Lưu ý: PENDING không nằm trong danh sách cho phép — đây là trạng thái hệ thống tự gán
-    // khi company chưa verified gửi bài đăng. Employer không được phép set thủ công.
     const employerAllowedStatuses = [
       JobStatus.DRAFT,
       JobStatus.PUBLISHED,
       JobStatus.CLOSED,
+      JobStatus.PENDING,
     ];
 
-    if (status && !employerAllowedStatuses.includes(status)) {
+    if (
+      status &&
+      status !== job.status &&
+      !employerAllowedStatuses.includes(status)
+    ) {
       throw new BadRequestException(
         `Nhà tuyển dụng không thể cập nhật tin sang trạng thái "${status}"`,
       );
     }
 
     const isCompanyVerified = job.company?.status === CompanyStatus.APPROVED;
-    let finalStatus: JobStatus = status ?? (job.status as JobStatus);
+    let finalStatus: JobStatus = status ?? job.status;
 
-    // [Feature #1] max_active_jobs — enforce khi recruiter submit (PUBLISHED intent),
-    // kể cả khi company chưa verified và bài sẽ chuyển sang PENDING.
-    // Chính sách Free: tại 1 thời điểm chỉ được có 1 tin (published HOẶC pending).
-    //
-    // NOTE: Employer không được phép set PENDING trực tiếp (bị chặn ở allowed statuses).
-    // PENDING chỉ được hệ thống tự gán khi công ty chưa verified gửi "PUBLISHED".
-    if (status === JobStatus.PUBLISHED) {
+    // [Feature #1] max_active_jobs — enforce khi recruiter submit (PUBLISHED HOẶC PENDING intent)
+    if (status === JobStatus.PUBLISHED || status === JobStatus.PENDING) {
       const {
         canPost,
         currentActiveJobs,
@@ -219,7 +217,7 @@ export class EmployerJobsService {
 
         await manager.update(JobEntity, { id: jobId }, updates);
 
-        if (finalStatus !== (job.status as JobStatus)) {
+        if (finalStatus !== job.status) {
           await manager.save(
             JobStatusHistoryEntity,
             manager.create(JobStatusHistoryEntity, {
