@@ -60,13 +60,25 @@ export class CandidateSearchService {
     );
 
     this.applyTextSearch(qb, dto);
-    this.applyBasicFilters(qb, dto, job);
-    this.applySalaryFilter(qb, dto, job);
-    this.applySkillFilter(qb, dto, job);
-    this.applyCategoryFilter(qb, dto, job);
-    this.applyExperienceFilter(qb, dto, job);
 
-    if (dto.sortBy === CandidateSortBy.RELEVANCE) {
+    // Nếu có jobId (tính năng gợi ý), ta nới lỏng các filter cứng để chuyển sang chấm điểm (Scoring)
+    // Chỉ dùng filter cứng khi user chủ động lọc trên UI (không có jobId)
+    const isSuggestion = !!jobId;
+
+    if (!isSuggestion) {
+      this.applyBasicFilters(qb, dto, job);
+      this.applySalaryFilter(qb, dto, job);
+      this.applySkillFilter(qb, dto, job);
+      this.applyCategoryFilter(qb, dto, job);
+      this.applyExperienceFilter(qb, dto, job);
+    } else {
+      // Với gợi ý: vẫn lọc Skill và Category (vì đây là tiêu chí cốt lõi)
+      // Nhưng các thông số khác sẽ để Scoring xử lý
+      this.applySkillFilter(qb, dto, job);
+      this.applyCategoryFilter(qb, dto, job);
+    }
+
+    if (dto.sortBy === CandidateSortBy.RELEVANCE || isSuggestion) {
       this.applyRelevanceScoring(qb, dto, weights, job);
     } else {
       this.applySort(qb, dto);
@@ -382,12 +394,9 @@ export class CandidateSearchService {
     const criteriaScoreExpr = this.buildCriteriaScoreExpr(dto, weights, job);
     const keywordMultExpr = this.buildKeywordMultiplierExpr(dto);
 
-    qb.addSelect(`(${criteriaScoreExpr}) * (${keywordMultExpr})`, 'matchScore');
-
-    // Filter out candidates with very low relevance if needed
-    // qb.andHaving('matchScore >= :minScore', { minScore: HEADHUNTING_CONFIG.SEARCH_SCORING.MIN_RELEVANCE_SCORE });
-
-    qb.orderBy('matchScore', 'DESC');
+    const scoreExpr = `(${criteriaScoreExpr}) * (${keywordMultExpr})`;
+    qb.addSelect(scoreExpr, 'match_score');
+    qb.orderBy('match_score', 'DESC');
   }
 
   /** Tính hệ số nhân dựa trên vị trí khớp từ khóa. */
@@ -433,23 +442,28 @@ export class CandidateSearchService {
       lId > 0
         ? `(CASE 
             WHEN candidate.level_id = ${lId} THEN 1.0 
-            WHEN ABS(candidate.level_id - ${lId}) = 1 THEN 0.5 
-            ELSE 0 
+            WHEN candidate.level_id IS NULL THEN 0.3
+            WHEN ABS(candidate.level_id - ${lId}) = 1 THEN 0.6 
+            ELSE 0.1 
           END)`
         : '1.0';
 
     // 3. Experience Match Score
     const expExpr = `(CASE 
       WHEN candidate.year_working_experience >= ${expReq} THEN 1.0
-      WHEN candidate.year_working_experience >= ${expReq} - 1 THEN 0.5
-      ELSE 0
+      WHEN candidate.year_working_experience IS NULL THEN 0.3
+      WHEN candidate.year_working_experience >= ${expReq} - 1 THEN 0.7
+      WHEN candidate.year_working_experience >= ${expReq} - 2 THEN 0.4
+      ELSE 0.1
     END)`;
 
-    // 4. Salary Match Score (Simplified overlap)
+    // 4. Salary Match Score (More lenient)
     const salaryExpr = `(CASE 
+      WHEN candidate.salaryMin IS NULL AND candidate.salaryMax IS NULL THEN 0.5
       WHEN candidate.salaryMin <= ${sMax} AND candidate.salaryMax >= ${sMin} THEN 1.0
-      WHEN candidate.salaryMin <= ${sMax} OR candidate.salaryMax >= ${sMin} THEN 0.5
-      ELSE 0
+      WHEN candidate.salaryMin <= ${sMax} * 1.2 AND candidate.salaryMax >= ${sMin} * 0.8 THEN 0.7
+      WHEN candidate.salaryMin <= ${sMax} * 1.5 AND candidate.salaryMax >= ${sMin} * 0.5 THEN 0.3
+      ELSE 0.1
     END)`;
 
     // 5. Degree Match Score
@@ -458,13 +472,18 @@ export class CandidateSearchService {
     const rRank = ranks[dReq] || 0;
     const degreeExpr = `(CASE 
       WHEN (SELECT MAX(CASE degree WHEN 'postgraduate' THEN 6 WHEN 'university' THEN 5 WHEN 'college' THEN 4 WHEN 'intermediate' THEN 3 WHEN 'high_school' THEN 2 WHEN 'certificate' THEN 1 ELSE 0 END) FROM education WHERE candidate_id = candidate.id) >= ${rRank} THEN 1.0
-      ELSE 0
+      WHEN (SELECT MAX(CASE degree WHEN 'postgraduate' THEN 6 WHEN 'university' THEN 5 WHEN 'college' THEN 4 WHEN 'intermediate' THEN 3 WHEN 'high_school' THEN 2 WHEN 'certificate' THEN 1 ELSE 0 END) FROM education WHERE candidate_id = candidate.id) IS NULL THEN 0.2
+      ELSE 0.1
     END)`;
 
     // 6. Location Match Score
     const locExpr =
       pId > 0
-        ? `(CASE WHEN candidate.province_id = ${pId} THEN 1.0 ELSE 0 END)`
+        ? `(CASE 
+            WHEN candidate.province_id = ${pId} THEN 1.0 
+            WHEN candidate.province_id IS NULL THEN 0.5
+            ELSE 0.2 
+          END)`
         : '1.0';
 
     // 7. Profile Completeness Score
