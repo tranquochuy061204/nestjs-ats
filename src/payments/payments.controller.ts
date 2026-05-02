@@ -27,11 +27,10 @@ import { ApiProperty } from '@nestjs/swagger';
 
 class CreateCreditTopupDto {
   @ApiProperty({
-    description: 'ID của Gói nạp',
+    description: 'Slug của Gói nạp (ví dụ: starter, plus, pro...)',
     example: 'starter',
-    enum: ['starter', 'plus', 'pro', 'enterprise'], // Tuỳ theo TopupPackId
   })
-  packId: string;
+  packSlug: string;
 }
 
 @ApiTags('Payments')
@@ -70,7 +69,7 @@ export class PaymentsController {
     const companyId = await this.getCompanyId(req.user.id);
     return this.paymentsService.createCreditTopupOrder(
       companyId,
-      dto.packId,
+      dto.packSlug,
       req,
     );
   }

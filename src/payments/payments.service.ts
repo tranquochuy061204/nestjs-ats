@@ -98,7 +98,7 @@ export class PaymentsService {
       }),
     );
 
-    const txnRef = `CR-${pack.id}-${order.id}-${Date.now()}`;
+    const txnRef = `CR-${pack.slug}-${order.id}-${Date.now()}`;
     await this.orderRepo.update(order.id, { gatewayOrderId: txnRef });
 
     const backendUrl =
@@ -162,7 +162,7 @@ export class PaymentsService {
       const updateResult = await this.orderRepo.update(
         { id: order.id, paymentStatus: PaymentOrderStatus.PENDING },
         {
-          paymentStatus: 'completed', // PaymentOrderStatus.COMPLETED actually
+          paymentStatus: PaymentOrderStatus.COMPLETED,
           gatewayTransactionId: transactionNo,
           gatewayResponseData: JSON.stringify(query),
           paidAt: new Date(),
@@ -185,7 +185,7 @@ export class PaymentsService {
       return { RspCode: '00', Message: 'Confirm success' };
     } else {
       await this.orderRepo.update(order.id, {
-        paymentStatus: 'failed',
+        paymentStatus: PaymentOrderStatus.FAILED,
         gatewayResponseData: JSON.stringify(query),
       });
       return { RspCode: '00', Message: 'Confirm success' }; // VNPay vẫn yêu cầu 00
@@ -226,7 +226,7 @@ export class PaymentsService {
     const isSuccess = this.vnpayService.isSuccessResponse(responseCode);
     if (!isSuccess) {
       await this.orderRepo.update(order.id, {
-        paymentStatus: 'failed',
+        paymentStatus: PaymentOrderStatus.FAILED,
         gatewayResponseData: JSON.stringify(query),
       });
       return {
@@ -248,7 +248,7 @@ export class PaymentsService {
     const updateResult = await this.orderRepo.update(
       { id: order.id, paymentStatus: PaymentOrderStatus.PENDING },
       {
-        paymentStatus: 'completed',
+        paymentStatus: PaymentOrderStatus.COMPLETED,
         gatewayTransactionId: query['vnp_TransactionNo'],
         gatewayResponseData: JSON.stringify(query),
         paidAt: new Date(),
@@ -306,10 +306,11 @@ export class PaymentsService {
   }
 
   private extractPackIdFromTxnRef(txnRef: string): string | null {
-    // Format: CR-{packId}-{orderId}-{timestamp}
+    // Format: CR-{packSlug}-{orderId}-{timestamp}
     const parts = txnRef.split('-');
-    if (parts[0] === 'CR' && parts.length >= 3) {
-      return parts[1]; // starter | plus | pro | enterprise
+    if (parts[0] === 'CR' && parts.length >= 4) {
+      // Slug có thể chứa dấu gạch ngang, orderId và timestamp nằm ở cuối
+      return parts.slice(1, -2).join('-');
     }
     return null;
   }
