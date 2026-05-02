@@ -270,7 +270,7 @@ export class EmployerContactUnlockService {
         pkg.monthlyHeadhuntProfileViews === -1
           ? -1
           : Math.max(0, pkg.monthlyHeadhuntProfileViews - usedThisMonth),
-      canUsePremiumFilters: pkg.canUsePremiumFilters,
+      canUsePremiumFilters: true,
       freeContactUnlock: pkg.freeContactUnlock,
     };
   }

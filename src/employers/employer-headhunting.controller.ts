@@ -115,30 +115,6 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
     @Query() filterDto: CandidateFilterDto,
     @CurrentUser() user: { id: number },
   ) {
-    const hasPremiumFilters =
-      filterDto.provinceId ||
-      filterDto.jobTypeId ||
-      (filterDto.skillIds && filterDto.skillIds.length > 0) ||
-      (filterDto.categoryIds && filterDto.categoryIds.length > 0) ||
-      filterDto.salaryMin !== undefined ||
-      filterDto.salaryMax !== undefined ||
-      filterDto.minExperience !== undefined;
-
-    if (hasPremiumFilters) {
-      const employer = await this.employersService.getProfile(user.id);
-      if (employer?.companyId) {
-        const canUse = await this.subscriptionsService.canUseFeature(
-          employer.companyId,
-          'canUsePremiumFilters',
-        );
-        if (!canUse) {
-          throw new ForbiddenException(
-            'Vui lòng nâng cấp gói VIP để sử dụng bộ lọc nâng cao',
-          );
-        }
-      }
-    }
-
     return this.candidateSearchService.searchCandidates(filterDto, user.id);
   }
 
