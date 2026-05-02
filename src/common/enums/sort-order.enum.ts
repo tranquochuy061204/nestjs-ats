@@ -13,4 +13,5 @@ export enum JobSortBy {
 export enum CandidateSortBy {
   CREATED_AT = 'createdAt',
   EXPERIENCE = 'yearWorkingExperience',
+  RELEVANCE = 'relevance',
 }

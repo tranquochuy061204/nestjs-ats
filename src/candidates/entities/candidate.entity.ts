@@ -17,6 +17,7 @@ import { EducationEntity } from './education.entity';
 import { ProjectEntity } from './project.entity';
 import { CandidateSkillTagEntity } from './candidate-skill-tag.entity';
 import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
+import { JobLevelMetadataEntity } from '../../metadata/job-levels/job-level.entity';
 
 @Entity('candidate')
 export class CandidateEntity {
@@ -76,6 +77,14 @@ export class CandidateEntity {
   @ManyToOne(() => JobTypeMetadataEntity)
   @JoinColumn({ name: 'job_type_id' })
   jobType: JobTypeMetadataEntity;
+
+  @Index()
+  @Column({ name: 'level_id', type: 'int', nullable: true })
+  levelId: number;
+
+  @ManyToOne(() => JobLevelMetadataEntity)
+  @JoinColumn({ name: 'level_id' })
+  level: JobLevelMetadataEntity;
 
   @Index()
   @Column({ name: 'year_working_experience', type: 'int', nullable: true })

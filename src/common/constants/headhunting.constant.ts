@@ -1,19 +1,30 @@
 export const HEADHUNTING_CONFIG = {
-  SCORING: {
-    MAX_SKILL: 40,
-    NEUTRAL_SKILL: 20,
-    MAX_EXPERIENCE: 25,
-    SALARY: {
-      MATCH: 20,
-      PARTIAL: 10,
-      MISMATCH: 0,
+  SEARCH_SCORING: {
+    KEYWORD_MULTIPLIER: {
+      NAME_POSITION: 3,
+      SKILL: 2,
+      BIO: 1.5,
+      OTHER: 1,
     },
-    PROFILE: {
-      HAS_CV: 4,
-      HAS_WORK_EXP: 3,
-      HAS_CERTIFICATE: 3,
+    DEFAULT_WEIGHTS: {
+      SKILL: 30,
+      LEVEL: 20,
+      EXPERIENCE: 15,
+      SALARY: 15,
+      DEGREE: 10,
+      LOCATION: 5,
+      PROFILE: 5,
     },
-    LOCATION: 5,
+    MIN_RELEVANCE_SCORE: 10,
+    DEGREE_RANK: {
+      postgraduate: 6,
+      university: 5,
+      college: 4,
+      intermediate: 3,
+      high_school: 2,
+      certificate: 1,
+      none: 0,
+    },
   },
   THRESHOLDS: {
     MIN_SUGGESTION_SCORE: 30,

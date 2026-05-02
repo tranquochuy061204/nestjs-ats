@@ -4,6 +4,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PAGINATION_DEFAULTS } from '../../common/constants/headhunting.constant';
 import { VALIDATION_LIMITS } from '../../common/constants/validation.constant';
 import { CandidateSortBy, SortOrder } from '../../common/enums/sort-order.enum';
+import { Degree } from '../../common/enums/degree.enum';
 
 /** Coerce một query param thành number[] (hỗ trợ cả ?id=1&id=2 lẫn ?id=1,2) */
 const coerceNumberArray = () =>
@@ -64,6 +65,28 @@ const CandidateFilterSchema = z.object({
   /** Số năm kinh nghiệm tối thiểu */
   minExperience: z.coerce.number().int().nonnegative().optional(),
 
+  /** ID của Job để tự động lấy tiêu chí so khớp */
+  jobId: z.coerce.number().int().positive().optional(),
+
+  /** ID của trình độ (Senior, Junior, ...) */
+  levelId: z.coerce.number().int().positive().optional(),
+
+  /** Bằng cấp tối thiểu yêu cầu */
+  requiredDegree: z.nativeEnum(Degree).optional(),
+
+  /** Tùy chỉnh trọng số điểm (normalize về 100) */
+  scoring: z
+    .object({
+      skillWeight: z.coerce.number().nonnegative().optional(),
+      levelWeight: z.coerce.number().nonnegative().optional(),
+      experienceWeight: z.coerce.number().nonnegative().optional(),
+      salaryWeight: z.coerce.number().nonnegative().optional(),
+      degreeWeight: z.coerce.number().nonnegative().optional(),
+      locationWeight: z.coerce.number().nonnegative().optional(),
+      profileWeight: z.coerce.number().nonnegative().optional(),
+    })
+    .optional(),
+
   // ─── Sorting ─────────────────────────────────────────────────────────────
   sortBy: z
     .enum(
@@ -122,6 +145,35 @@ export class CandidateFilterDto extends createZodDto(CandidateFilterSchema) {
 
   @ApiPropertyOptional({ description: 'Số năm kinh nghiệm tối thiểu' })
   minExperience: number | undefined;
+
+  @ApiPropertyOptional({
+    description: 'ID của Job để tự động lấy tiêu chí so khớp',
+  })
+  jobId: number | undefined;
+
+  @ApiPropertyOptional({ description: 'ID của trình độ (Senior, Junior, ...)' })
+  levelId: number | undefined;
+
+  @ApiPropertyOptional({
+    description: 'Bằng cấp tối thiểu yêu cầu',
+    enum: Degree,
+  })
+  requiredDegree: Degree | undefined;
+
+  @ApiPropertyOptional({
+    description: 'Tùy chỉnh trọng số điểm (tổng tự normalize về 100)',
+    type: 'object',
+    properties: {
+      skillWeight: { type: 'number', example: 30 },
+      levelWeight: { type: 'number', example: 20 },
+      experienceWeight: { type: 'number', example: 15 },
+      salaryWeight: { type: 'number', example: 15 },
+      degreeWeight: { type: 'number', example: 10 },
+      locationWeight: { type: 'number', example: 5 },
+      profileWeight: { type: 'number', example: 5 },
+    },
+  })
+  scoring: any;
 
   @ApiPropertyOptional({
     description: 'Trường sắp xếp',
