@@ -32,18 +32,22 @@ export class AdminJobsService {
     });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
-    if (job.status === (JobStatus.PUBLISHED as string)) {
+    if (job.status === JobStatus.PUBLISHED) {
       throw new BadRequestException('Tin đã được duyệt trước đó');
     }
 
     const oldStatus = job.status;
+    const companyId = job.companyId;
 
     await this.dataSource.transaction(async (manager) => {
+      // 1. Cập nhật trạng thái tin và ngày công khai ngay trong transaction
       await manager.update(JobEntity, jobId, {
         status: JobStatus.PUBLISHED,
+        publishedAt: new Date(),
         rejectionReason: null,
       });
 
+      // 2. Lưu lịch sử thay đổi
       await manager.save(
         JobStatusHistoryEntity,
         manager.create(JobStatusHistoryEntity, {
@@ -52,11 +56,14 @@ export class AdminJobsService {
           newStatus: JobStatus.PUBLISHED,
         }),
       );
-    });
 
-    // Ghi nhận thời điểm publish để tính Free lock 7 ngày.
-    // Cần chạy ngoài transaction vì subscriptionsService dùng repo riêng.
-    await this.subscriptionsService.recordJobPublished(job.id, job.companyId);
+      // 3. Cập nhật thời điểm publish cuối của công ty (dùng cho logic lock slot)
+      await this.subscriptionsService.recordJobPublished(
+        jobId,
+        companyId,
+        manager,
+      );
+    });
 
     // --- REAL-TIME NOTIFICATION ---
     await this.notificationsService.createNotification({
@@ -80,7 +87,7 @@ export class AdminJobsService {
     });
     if (!job) throw new NotFoundException('Không tìm thấy tin');
 
-    if (job.status === (JobStatus.REJECTED as string)) {
+    if (job.status === JobStatus.REJECTED) {
       throw new BadRequestException('Tin đã bị từ chối trước đó');
     }
 

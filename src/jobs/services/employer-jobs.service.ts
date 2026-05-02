@@ -194,7 +194,9 @@ export class EmployerJobsService {
       }
 
       // Sau khi pass quota check: quyết định PUBLISHED hay PENDING
-      if (!isCompanyVerified) {
+      // Nếu tin đang PUBLISHED (đã được admin duyệt) thì cho phép giữ PUBLISHED
+      // kể cả khi công ty chưa verified. Chỉ bắt PENDING với tin mới hoặc đang chờ duyệt.
+      if (!isCompanyVerified && job.status !== JobStatus.PUBLISHED) {
         finalStatus = JobStatus.PENDING;
       }
       // (else: giữ finalStatus = PUBLISHED — đã set ở trên)
