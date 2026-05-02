@@ -275,6 +275,8 @@ export class EmployerJobsService {
       .createQueryBuilder('job')
       .leftJoinAndSelect('job.category', 'category')
       .leftJoinAndSelect('job.company', 'company')
+      .leftJoinAndSelect('job.skills', 'skills')
+      .leftJoinAndSelect('skills.skillMetadata', 'skillMetadata')
       .where('job.companyId = :companyId', {
         companyId: employer.companyId,
       });
