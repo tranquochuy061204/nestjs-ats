@@ -53,8 +53,7 @@ export const BaseJobSchema = z.object({
         tagText: z.string().max(100).optional(),
       }),
     )
-    .optional()
-    .default([]),
+    .min(5, 'Cần ít nhất 5 kỹ năng khi đăng tin tuyển dụng'),
 
   /** [VIP] Ẩn mác lương — chỉ có tác dụng khi công ty đang dùng gói VIP */
   hideSalary: z.boolean().optional().default(false),

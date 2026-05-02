@@ -274,6 +274,7 @@ export class EmployerJobsService {
     const qb = this.jobRepository
       .createQueryBuilder('job')
       .leftJoinAndSelect('job.category', 'category')
+      .leftJoinAndSelect('job.company', 'company')
       .where('job.companyId = :companyId', {
         companyId: employer.companyId,
       });

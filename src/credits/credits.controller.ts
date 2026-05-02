@@ -104,6 +104,14 @@ export class CreditsController {
     return this.creditsService.getTransactionHistory(companyId, page, limit);
   }
 
+  @Get('extra-slots')
+  @ApiOperation({ summary: 'Xem số lượng slot tin mua thêm đang hoạt động' })
+  async getExtraSlots(@Req() req: Request & { user: { id: number } }) {
+    const companyId = await this.getCompanyId(req.user.id);
+    const count = await this.creditsService.getExtraJobSlots(companyId);
+    return { count };
+  }
+
   private async getCompanyId(userId: number): Promise<number> {
     const employer = await this.employerRepo.findOne({ where: { userId } });
     if (!employer?.companyId) {
