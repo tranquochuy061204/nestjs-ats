@@ -6,6 +6,7 @@
     "dist",
     "**/*spec.ts",
     "client",
-    "gitnexus-setup"
+    "gitnexus-setup",
+    "scratch"
   ]
 }

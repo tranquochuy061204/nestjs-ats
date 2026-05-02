@@ -5,3 +5,8 @@ npm-debug.log
 .env
 .DS_Store
 coverage
+scratch
+.agents
+.claude
+.gitnexus
+.gemini
