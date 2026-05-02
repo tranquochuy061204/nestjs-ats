@@ -14,7 +14,7 @@ import { ParsedWorkExperience } from '../interfaces/parsed-work-experience.inter
 import { ParsedEducation } from '../interfaces/parsed-education.interface';
 import { ParsedProject } from '../interfaces/parsed-project.interface';
 import { Degree } from '../../common/enums/degree.enum';
-import { MAX_SKILLS_PER_CANDIDATE } from './candidate-skills.service';
+import { MAX_SKILLS_PER_CANDIDATE } from '../constants/candidate-skills.constant';
 import { toSlug } from '../../common/utils/string.util';
 import { ParseAndApplyResult } from '../interfaces/cv-parser.interface';
 

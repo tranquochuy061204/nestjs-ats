@@ -1,0 +1,1 @@
+export const MAX_SKILLS_PER_CANDIDATE = 10;

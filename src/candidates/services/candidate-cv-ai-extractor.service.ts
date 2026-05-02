@@ -13,8 +13,10 @@ import {
   sanitizeStringArray,
 } from '../utils/cv-sanitizer.util';
 
-const MAX_CV_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-const VALID_CV_MIME_TYPES = ['pdf', 'image'];
+import {
+  MAX_CV_SIZE_BYTES,
+  VALID_CV_MIME_TYPES,
+} from '../constants/candidate-cv.constant';
 
 @Injectable()
 export class CandidateCvAiExtractorService {

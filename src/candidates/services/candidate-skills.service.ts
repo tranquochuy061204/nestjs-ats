@@ -11,7 +11,7 @@ import { AddSkillsDto } from '../dto/add-skills.dto';
 import { UpdateJobCategoriesDto } from '../dto/update-job-categories.dto';
 import { BadRequestException } from '@nestjs/common';
 
-export const MAX_SKILLS_PER_CANDIDATE = 10;
+import { MAX_SKILLS_PER_CANDIDATE } from '../constants/candidate-skills.constant';
 
 @Injectable()
 export class CandidateSkillsService {

@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
 import { CandidateEntity } from '../entities/candidate.entity';
-import { JobEntity } from '../../jobs/entities/job.entity';
+import { JobEntity, JobStatus } from '../../jobs/entities/job.entity';
 import { CandidateFilterDto } from '../dto/candidate-filter.dto';
 import { getPaginatedResult } from '../../common/utils/pagination.util';
 import { CandidateSortBy, SortOrder } from '../../common/enums/sort-order.enum';
@@ -11,40 +11,11 @@ import { EmployersService } from '../../employers/employers.service';
 import { HEADHUNTING_CONFIG } from '../../common/constants/headhunting.constant';
 import { Degree } from '../../common/enums/degree.enum';
 
-/**
- * Fields nhạy cảm ẩn trực tiếp trên CandidateEntity.
- * NOTE: email KHÔNG có cột trực tiếp trên candidate — nó nằm ở UserEntity.
- *       Xem USER_SENSITIVE_FIELDS bên dưới để mask nested user object.
- */
-const HIDDEN_FIELDS: Array<keyof CandidateEntity> = [
-  'phone',
-  'cvUrl',
-  'linkedinUrl',
-  'githubUrl',
-  'portfolioUrl',
-];
-
-/**
- * Fields nhạy cảm cần strip khỏi nested UserEntity nếu relation `user` được load.
- * Đây là lớp bảo vệ thứ hai — buildBaseQuery() cố tình KHÔNG join user.
- * Nếu sau này có ai thêm join user, sanitizer này sẽ tự động ngăn data leak.
- */
-const USER_SENSITIVE_FIELDS = [
-  'email',
-  'password',
-  'refreshToken',
-  'role',
-] as const;
-
-interface ScoringWeights {
-  skillWeight: number;
-  levelWeight: number;
-  experienceWeight: number;
-  salaryWeight: number;
-  degreeWeight: number;
-  locationWeight: number;
-  profileWeight: number;
-}
+import {
+  HIDDEN_FIELDS,
+  USER_SENSITIVE_FIELDS,
+} from '../constants/candidate-search.constant';
+import { ScoringWeights } from '../interfaces/candidate-search.interface';
 
 @Injectable()
 export class CandidateSearchService {
@@ -73,9 +44,14 @@ export class CandidateSearchService {
     let job: JobEntity | null = null;
     if (jobId) {
       job = await this.jobRepo.findOne({
-        where: { id: jobId },
+        where: { id: jobId, status: JobStatus.PUBLISHED },
         relations: ['skills'],
       });
+      if (!job) {
+        throw new BadRequestException(
+          'Tin tuyển dụng không tồn tại, đã đóng hoặc chưa được duyệt để tìm kiếm ứng viên.',
+        );
+      }
     }
 
     const qb = this.buildBaseQuery();
