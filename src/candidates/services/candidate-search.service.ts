@@ -295,8 +295,7 @@ export class CandidateSearchService {
     dto: CandidateFilterDto,
     job?: JobEntity | null,
   ): void {
-    const skillIds =
-      dto.skillIds || job?.skills?.map((s) => s.skillId);
+    const skillIds = dto.skillIds || job?.skills?.map((s) => s.skillId);
     if (!skillIds || skillIds.length === 0) return;
 
     qb.andWhere(
@@ -318,7 +317,8 @@ export class CandidateSearchService {
     dto: CandidateFilterDto,
     job?: JobEntity | null,
   ): void {
-    const categoryIds = dto.categoryIds || (job?.categoryId ? [job.categoryId] : []);
+    const categoryIds =
+      dto.categoryIds || (job?.categoryId ? [job.categoryId] : []);
     if (!categoryIds || categoryIds.length === 0) return;
 
     qb.andWhere(
@@ -353,12 +353,12 @@ export class CandidateSearchService {
   ): void {
     const { sortBy, sortOrder } = dto;
 
-    const columnMap: Record<string, string> = {
+    const columnMap: Partial<Record<CandidateSortBy, string>> = {
       [CandidateSortBy.CREATED_AT]: 'candidate.id',
       [CandidateSortBy.EXPERIENCE]: 'candidate.yearWorkingExperience',
     };
 
-    const column = columnMap[sortBy as string] ?? 'candidate.id';
+    const column = columnMap[sortBy] ?? 'candidate.id';
     qb.orderBy(column, sortOrder ?? SortOrder.DESC);
   }
 
@@ -377,17 +377,20 @@ export class CandidateSearchService {
       profileWeight: input.profileWeight ?? defaults.PROFILE,
     };
 
-    const total = Object.values(merged).reduce(
-      (sum: number, w: number) => sum + w,
-      0,
-    );
-    if (total === 0) return defaults as unknown as ScoringWeights;
+    const weightsArray = Object.values(merged) as number[];
+    const total = weightsArray.reduce((sum, w) => sum + w, 0);
 
-    const normalized = Object.fromEntries(
-      Object.entries(merged).map(([key, val]) => [key, (val / total) * 100]),
-    );
+    if (total === 0) return merged;
 
-    return normalized as unknown as ScoringWeights;
+    return {
+      skillWeight: (merged.skillWeight / total) * 100,
+      levelWeight: (merged.levelWeight / total) * 100,
+      experienceWeight: (merged.experienceWeight / total) * 100,
+      salaryWeight: (merged.salaryWeight / total) * 100,
+      degreeWeight: (merged.degreeWeight / total) * 100,
+      locationWeight: (merged.locationWeight / total) * 100,
+      profileWeight: (merged.profileWeight / total) * 100,
+    };
   }
 
   /**
@@ -441,8 +444,7 @@ export class CandidateSearchService {
     const pId = dto.provinceId || job?.provinceId || 0;
     const lId = dto.levelId || job?.levelId || 0;
 
-    const skillIds =
-      dto.skillIds || job?.skills?.map((s) => s.skillId) || [];
+    const skillIds = dto.skillIds || job?.skills?.map((s) => s.skillId) || [];
 
     // 1. Skill Match Score (0 - 1)
     const skillExpr =
