@@ -4,4 +4,6 @@ import { SubscriptionPackageEntity } from '../entities/subscription-package.enti
 export interface ActiveSubscription {
   subscription: CompanySubscriptionEntity;
   package: SubscriptionPackageEntity;
+  extraSlots: number;
+  effectiveMaxJobs: number;
 }

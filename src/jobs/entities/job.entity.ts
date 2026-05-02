@@ -130,6 +130,9 @@ export class JobEntity {
   @Column({ name: 'bumped_at', type: 'timestamp', nullable: true })
   bumpedAt: Date | null;
 
+  @Column({ name: 'published_at', type: 'timestamp', nullable: true })
+  publishedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

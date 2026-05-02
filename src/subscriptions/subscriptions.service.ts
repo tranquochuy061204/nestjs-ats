@@ -13,6 +13,7 @@ import {
 import { SubscriptionPackageEntity } from './entities/subscription-package.entity';
 import { CreditPurchaseLogEntity } from '../credits/entities/credit-purchase-log.entity';
 import { ActiveSubscription } from './interfaces/subscriptions.interface';
+import { JobEntity } from '../jobs/entities/job.entity';
 
 @Injectable()
 export class SubscriptionsService {
@@ -25,6 +26,8 @@ export class SubscriptionsService {
     private readonly packageRepo: Repository<SubscriptionPackageEntity>,
     @InjectRepository(CreditPurchaseLogEntity)
     private readonly purchaseLogRepo: Repository<CreditPurchaseLogEntity>,
+    @InjectRepository(JobEntity)
+    private readonly jobRepo: Repository<JobEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -58,7 +61,25 @@ export class SubscriptionsService {
 
     const updatedSub = await this.checkAndResetMonthlyProceeds(subscription);
 
-    return { subscription: updatedSub, package: subscription.package };
+    const extraSlots = await this.purchaseLogRepo
+      .createQueryBuilder('pl')
+      .innerJoin('pl.product', 'p')
+      .where('pl.company_id = :companyId', { companyId })
+      .andWhere("p.slug = 'extra_job_slot'")
+      .andWhere('(pl.expires_at IS NULL OR pl.expires_at > NOW())')
+      .getCount();
+
+    const effectiveMaxJobs =
+      subscription.package.maxActiveJobs === -1
+        ? -1
+        : subscription.package.maxActiveJobs + extraSlots;
+
+    return {
+      subscription: updatedSub,
+      package: subscription.package,
+      extraSlots,
+      effectiveMaxJobs,
+    };
   }
 
   /**
@@ -169,8 +190,7 @@ export class SubscriptionsService {
     currentActiveJobs: number;
     maxActiveJobs: number;
   }> {
-    const { subscription, package: pkg } =
-      await this.getActiveSubscription(companyId);
+    const { package: pkg } = await this.getActiveSubscription(companyId);
 
     // Đếm số tin theo từng trạng thái
     const statusCounts = await this.dataSource.query<
@@ -190,58 +210,7 @@ export class SubscriptionsService {
     const pendingCount = countMap['pending'] ?? 0;
     const currentActiveJobs = publishedCount + pendingCount;
 
-    // ── Chính sách Free: mutual exclusion (1 slot tại một thời điểm) ──
-    if (pkg.name === 'free') {
-      // Case 1: Đang có tin published → không thể gửi pending
-      if (publishedCount > 0) {
-        return {
-          canPost: false,
-          unlocksAt: null,
-          blockReason: 'has_published',
-          currentActiveJobs,
-          maxActiveJobs: pkg.maxActiveJobs,
-        };
-      }
-
-      // Case 2: Đang có tin pending chờ admin duyệt → không thể gửi thêm
-      if (pendingCount > 0) {
-        return {
-          canPost: false,
-          unlocksAt: null,
-          blockReason: 'has_pending',
-          currentActiveJobs,
-          maxActiveJobs: pkg.maxActiveJobs,
-        };
-      }
-
-      // Case 3: Slot trống nhưng vẫn trong thời gian lock (7 ngày) → chặn
-      if (subscription.lastJobPublishedAt) {
-        const lockMs = pkg.jobDurationDays * 24 * 60 * 60 * 1000;
-        const unlocksAt = new Date(
-          subscription.lastJobPublishedAt.getTime() + lockMs,
-        );
-        if (new Date() < unlocksAt) {
-          return {
-            canPost: false,
-            unlocksAt,
-            blockReason: 'time_lock',
-            currentActiveJobs,
-            maxActiveJobs: pkg.maxActiveJobs,
-          };
-        }
-      }
-
-      // Slot trống và hết thời gian lock → cho phép
-      return {
-        canPost: true,
-        unlocksAt: null,
-        blockReason: null,
-        currentActiveJobs,
-        maxActiveJobs: pkg.maxActiveJobs,
-      };
-    }
-
-    // ── Chính sách VIP: kiểm tra maxActiveJobs + extra slots ──
+    // ── Unified Slot Logic (Per-Slot Time Lock) ──
     const extraSlots = await this.purchaseLogRepo
       .createQueryBuilder('pl')
       .innerJoin('pl.product', 'p')
@@ -253,12 +222,56 @@ export class SubscriptionsService {
     const effectiveMaxJobs =
       pkg.maxActiveJobs === -1 ? -1 : pkg.maxActiveJobs + extraSlots;
 
-    // -1 = unlimited (VIP không giới hạn)
-    if (effectiveMaxJobs !== -1 && currentActiveJobs >= effectiveMaxJobs) {
+    // A slot is "Unavailable" if it's occupied by an active job (pending/published)
+    // OR if it's recently vacated but still within the anti-churn lock period (7 days).
+    const lockMs = pkg.jobDurationDays * 24 * 60 * 60 * 1000;
+
+    // Query for slots that are currently occupied OR locked by recent activity
+    const unavailableSlots = await this.jobRepo
+      .createQueryBuilder('j')
+      .where('j.company_id = :companyId', { companyId })
+      .andWhere(
+        `(j.status IN ('pending', 'published') OR (j.published_at + (INTERVAL '1 day' * :days) > NOW()))`,
+        { days: pkg.jobDurationDays },
+      )
+      .getCount();
+
+    if (effectiveMaxJobs !== -1 && unavailableSlots >= effectiveMaxJobs) {
+      // If blocked, find when the next slot will unlock
+      const nextUnlockJob = await this.jobRepo
+        .createQueryBuilder('j')
+        .where('j.company_id = :companyId', { companyId })
+        .andWhere("j.status NOT IN ('pending', 'published')")
+        .andWhere(`j.published_at + (INTERVAL '1 day' * :days) > NOW()`, {
+          days: pkg.jobDurationDays,
+        })
+        .orderBy('j.published_at', 'ASC') // Earliest lock to expire
+        .getOne();
+
+      let unlocksAt: Date | null = null;
+      if (nextUnlockJob && nextUnlockJob.publishedAt) {
+        unlocksAt = new Date(nextUnlockJob.publishedAt.getTime() + lockMs);
+      }
+
+      // Determine block reason for UX
+      let blockReason:
+        | 'has_published'
+        | 'has_pending'
+        | 'quota_full'
+        | 'time_lock' = 'quota_full';
+
+      if (pkg.name === 'free') {
+        if (publishedCount > 0 && effectiveMaxJobs === 1)
+          blockReason = 'has_published';
+        else if (pendingCount > 0 && effectiveMaxJobs === 1)
+          blockReason = 'has_pending';
+        else if (unlocksAt) blockReason = 'time_lock';
+      }
+
       return {
         canPost: false,
-        unlocksAt: null,
-        blockReason: 'quota_full',
+        unlocksAt,
+        blockReason,
         currentActiveJobs,
         maxActiveJobs: effectiveMaxJobs,
       };
@@ -277,8 +290,18 @@ export class SubscriptionsService {
    * Ghi nhận đã submit tin (cập nhật last_job_published_at).
    * Gọi khi tin chuyển sang PUBLISHED hoặc PENDING để lock thời gian cho Free.
    */
-  async recordJobPublished(companyId: number): Promise<void> {
-    await this.subscriptionRepo.update(
+  async recordJobPublished(
+    jobId: number,
+    companyId: number,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const jobRepo = manager ? manager.getRepository(JobEntity) : this.jobRepo;
+    const subRepo = manager
+      ? manager.getRepository(CompanySubscriptionEntity)
+      : this.subscriptionRepo;
+
+    await jobRepo.update(jobId, { publishedAt: new Date() });
+    await subRepo.update(
       { companyId, status: SubscriptionStatus.ACTIVE },
       { lastJobPublishedAt: new Date() },
     );
@@ -437,7 +460,12 @@ export class SubscriptionsService {
       }),
     );
     newSub.package = freePkg;
-    return { subscription: newSub, package: freePkg };
+    return {
+      subscription: newSub,
+      package: freePkg,
+      extraSlots: 0,
+      effectiveMaxJobs: freePkg.maxActiveJobs,
+    };
   }
 
   private async expireAndFallbackToFree(

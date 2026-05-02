@@ -56,7 +56,7 @@ export class AdminJobsService {
 
     // Ghi nhận thời điểm publish để tính Free lock 7 ngày.
     // Cần chạy ngoài transaction vì subscriptionsService dùng repo riêng.
-    await this.subscriptionsService.recordJobPublished(job.companyId);
+    await this.subscriptionsService.recordJobPublished(job.id, job.companyId);
 
     // --- REAL-TIME NOTIFICATION ---
     await this.notificationsService.createNotification({

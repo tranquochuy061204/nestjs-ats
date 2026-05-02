@@ -237,7 +237,9 @@ export class EmployerJobsService {
             finalStatus === JobStatus.PENDING
           ) {
             await this.subscriptionsService.recordJobPublished(
+              jobId,
               employer.companyId!,
+              manager,
             );
           }
         }
