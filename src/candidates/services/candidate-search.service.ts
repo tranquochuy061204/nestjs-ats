@@ -59,13 +59,6 @@ export class CandidateSearchService {
       (dto.scoring as Partial<ScoringWeights>) || {},
     );
 
-    this.logger.log(
-      `🔍 [Search] Incoming weights: ${JSON.stringify(dto.scoring)}`,
-    );
-    this.logger.log(
-      `🔍 [Search] Normalized weights: ${JSON.stringify(weights)}`,
-    );
-
     this.applyTextSearch(qb, dto);
 
     // Nếu có jobId (tính năng gợi ý), ta nới lỏng các filter cứng để chuyển sang chấm điểm (Scoring)
