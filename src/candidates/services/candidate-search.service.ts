@@ -84,7 +84,28 @@ export class CandidateSearchService {
       this.applySort(qb, dto);
     }
 
-    const result = await getPaginatedResult(qb, page, limit);
+    const result = await getPaginatedResult<CandidateEntity>(qb, page, limit);
+    const entities = result.data;
+    const entityIds = entities.map((c: CandidateEntity) => c.id);
+
+    // Tính toán matchScore riêng cho danh sách ứng viên này (tránh lỗi join/pagination)
+    const scoreMap = new Map<number, string>();
+    if (
+      entityIds.length > 0 &&
+      (dto.sortBy === CandidateSortBy.RELEVANCE || isSuggestion)
+    ) {
+      const scoreQb = this.candidateRepo
+        .createQueryBuilder('candidate')
+        .select('candidate.id', 'id')
+        .where('candidate.id IN (:...entityIds)', { entityIds });
+
+      this.applyRelevanceScoring(scoreQb, dto, weights, job);
+
+      const rawScores = await scoreQb.getRawMany();
+      rawScores.forEach((r: { id: number; match_score: string }) => {
+        scoreMap.set(r.id, r.match_score);
+      });
+    }
 
     let unlockedCandidateIds = new Set<number>();
     if (employerUserId) {
@@ -108,13 +129,21 @@ export class CandidateSearchService {
     // Ẩn fields nhạy cảm khỏi response và thêm status đã unlock
     return {
       ...result,
-      data: result.data.map((c) => {
+      data: entities.map((c: CandidateEntity) => {
         const sanitized = this.sanitizeForPublic(c);
+        // Lấy matchScore từ Map đã chuẩn bị
+        const matchScoreRaw = scoreMap.get(c.id);
+        const matchScore = matchScoreRaw
+          ? parseFloat(matchScoreRaw).toFixed(2)
+          : null;
+
         return {
           ...sanitized,
           contactUnlocked: unlockedCandidateIds.has(c.id),
+          matchScore: matchScore ? parseFloat(matchScore) : null,
         };
       }),
+      appliedWeights: weights,
     };
   }
 
