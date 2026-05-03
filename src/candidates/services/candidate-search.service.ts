@@ -59,11 +59,26 @@ export class CandidateSearchService {
       (dto.scoring as Partial<ScoringWeights>) || {},
     );
 
+    this.logger.log(
+      `🔍 [Search] Incoming weights: ${JSON.stringify(dto.scoring)}`,
+    );
+    this.logger.log(
+      `🔍 [Search] Normalized weights: ${JSON.stringify(weights)}`,
+    );
+
     this.applyTextSearch(qb, dto);
 
     // Nếu có jobId (tính năng gợi ý), ta nới lỏng các filter cứng để chuyển sang chấm điểm (Scoring)
     // Chỉ dùng filter cứng khi user chủ động lọc trên UI (không có jobId)
     const isSuggestion = !!jobId;
+
+    // Xác định danh sách skill để so khớp (dùng cho cả scoring và trả về metadata)
+    const effectiveSkillIds =
+      dto.skillIds && dto.skillIds.length > 0
+        ? dto.skillIds
+        : (job?.skills
+            ?.map((s) => s.skillId)
+            .filter((id) => !!id) as number[]) || [];
 
     if (!isSuggestion) {
       this.applyBasicFilters(qb, dto, job);
@@ -89,7 +104,7 @@ export class CandidateSearchService {
     const entityIds = entities.map((c: CandidateEntity) => c.id);
 
     // Tính toán matchScore riêng cho danh sách ứng viên này (tránh lỗi join/pagination)
-    const scoreMap = new Map<number, string>();
+    const scoreMap = new Map<number, { score: string; matchedCount: number }>();
     if (
       entityIds.length > 0 &&
       (dto.sortBy === CandidateSortBy.RELEVANCE || isSuggestion)
@@ -99,12 +114,27 @@ export class CandidateSearchService {
         .select('candidate.id', 'id')
         .where('candidate.id IN (:...entityIds)', { entityIds });
 
+      // Tính số lượng kỹ năng khớp (chỉ tính nếu có danh sách kỹ năng để so khớp)
+      if (effectiveSkillIds.length > 0) {
+        scoreQb.addSelect(
+          `(SELECT COUNT(*) FROM candidate_skill_tag WHERE candidate_id = candidate.id AND skill_metadata_id IN (${effectiveSkillIds.join(',')}))`,
+          'matched_count',
+        );
+      } else {
+        scoreQb.addSelect('0', 'matched_count');
+      }
+
       this.applyRelevanceScoring(scoreQb, dto, weights, job);
 
       const rawScores = await scoreQb.getRawMany();
-      rawScores.forEach((r: { id: number; match_score: string }) => {
-        scoreMap.set(r.id, r.match_score);
-      });
+      rawScores.forEach(
+        (r: { id: number; match_score: string; matched_count: string }) => {
+          scoreMap.set(r.id, {
+            score: r.match_score,
+            matchedCount: parseInt(r.matched_count || '0', 10),
+          });
+        },
+      );
     }
 
     let unlockedCandidateIds = new Set<number>();
@@ -131,8 +161,9 @@ export class CandidateSearchService {
       ...result,
       data: entities.map((c: CandidateEntity) => {
         const sanitized = this.sanitizeForPublic(c);
-        // Lấy matchScore từ Map đã chuẩn bị
-        const matchScoreRaw = scoreMap.get(c.id);
+        // Lấy dữ liệu từ Map đã chuẩn bị
+        const matchData = scoreMap.get(c.id);
+        const matchScoreRaw = matchData?.score;
         const matchScore = matchScoreRaw
           ? parseFloat(matchScoreRaw).toFixed(2)
           : null;
@@ -141,9 +172,11 @@ export class CandidateSearchService {
           ...sanitized,
           contactUnlocked: unlockedCandidateIds.has(c.id),
           matchScore: matchScore ? parseFloat(matchScore) : null,
+          matchedSkillsCount: matchData?.matchedCount || 0,
         };
       }),
       appliedWeights: weights,
+      totalSkillsCount: effectiveSkillIds.length,
     };
   }
 

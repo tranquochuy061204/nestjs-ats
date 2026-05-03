@@ -76,7 +76,16 @@ const CandidateFilterSchema = z.object({
 
   /** Tùy chỉnh trọng số điểm (normalize về 100) */
   scoring: z
-    .object({
+    .preprocess((val) => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return val;
+        }
+      }
+      return val;
+    }, z.object({
       skillWeight: z.coerce.number().nonnegative().optional(),
       levelWeight: z.coerce.number().nonnegative().optional(),
       experienceWeight: z.coerce.number().nonnegative().optional(),
@@ -84,7 +93,7 @@ const CandidateFilterSchema = z.object({
       degreeWeight: z.coerce.number().nonnegative().optional(),
       locationWeight: z.coerce.number().nonnegative().optional(),
       profileWeight: z.coerce.number().nonnegative().optional(),
-    })
+    }))
     .optional(),
 
   // ─── Sorting ─────────────────────────────────────────────────────────────
