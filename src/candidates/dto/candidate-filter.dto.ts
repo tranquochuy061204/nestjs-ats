@@ -74,7 +74,16 @@ const CandidateFilterSchema = z.object({
   /** Bằng cấp tối thiểu yêu cầu */
   requiredDegree: z.nativeEnum(Degree).optional(),
 
-  /** Tùy chỉnh trọng số điểm (normalize về 100) */
+  // ─── Scoring Weights (Flat) ──────────────────────────────────────────────
+  skillWeight: z.coerce.number().nonnegative().optional(),
+  levelWeight: z.coerce.number().nonnegative().optional(),
+  experienceWeight: z.coerce.number().nonnegative().optional(),
+  salaryWeight: z.coerce.number().nonnegative().optional(),
+  degreeWeight: z.coerce.number().nonnegative().optional(),
+  locationWeight: z.coerce.number().nonnegative().optional(),
+  profileWeight: z.coerce.number().nonnegative().optional(),
+
+  /** Tùy chỉnh trọng số điểm (normalize về 100) - hỗ trợ cả JSON string */
   scoring: z
     .preprocess((val) => {
       if (typeof val === 'string') {
@@ -105,6 +114,30 @@ const CandidateFilterSchema = z.object({
   sortOrder: z
     .enum(Object.values(SortOrder) as [SortOrder, ...SortOrder[]])
     .default(SortOrder.DESC),
+}).transform((data) => {
+  // Consolidate flat weights into scoring object
+  const hasFlatWeights = 
+    data.skillWeight !== undefined ||
+    data.levelWeight !== undefined ||
+    data.experienceWeight !== undefined ||
+    data.salaryWeight !== undefined ||
+    data.degreeWeight !== undefined ||
+    data.locationWeight !== undefined ||
+    data.profileWeight !== undefined;
+
+  if (hasFlatWeights) {
+    data.scoring = {
+      ...data.scoring,
+      skillWeight: data.skillWeight ?? data.scoring?.skillWeight,
+      levelWeight: data.levelWeight ?? data.scoring?.levelWeight,
+      experienceWeight: data.experienceWeight ?? data.scoring?.experienceWeight,
+      salaryWeight: data.salaryWeight ?? data.scoring?.salaryWeight,
+      degreeWeight: data.degreeWeight ?? data.scoring?.degreeWeight,
+      locationWeight: data.locationWeight ?? data.scoring?.locationWeight,
+      profileWeight: data.profileWeight ?? data.scoring?.profileWeight,
+    };
+  }
+  return data;
 });
 
 export class CandidateFilterDto extends createZodDto(CandidateFilterSchema) {
@@ -183,6 +216,27 @@ export class CandidateFilterDto extends createZodDto(CandidateFilterSchema) {
     },
   })
   scoring: any;
+
+  @ApiPropertyOptional({ description: 'Trọng số kỹ năng', type: Number })
+  skillWeight?: number;
+
+  @ApiPropertyOptional({ description: 'Trọng số trình độ', type: Number })
+  levelWeight?: number;
+
+  @ApiPropertyOptional({ description: 'Trọng số kinh nghiệm', type: Number })
+  experienceWeight?: number;
+
+  @ApiPropertyOptional({ description: 'Trọng số lương', type: Number })
+  salaryWeight?: number;
+
+  @ApiPropertyOptional({ description: 'Trọng số bằng cấp', type: Number })
+  degreeWeight?: number;
+
+  @ApiPropertyOptional({ description: 'Trọng số địa điểm', type: Number })
+  locationWeight?: number;
+
+  @ApiPropertyOptional({ description: 'Trọng số độ đầy đủ hồ sơ', type: Number })
+  profileWeight?: number;
 
   @ApiPropertyOptional({
     description: 'Trường sắp xếp',

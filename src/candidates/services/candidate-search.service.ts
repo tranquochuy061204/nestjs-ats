@@ -464,8 +464,8 @@ export class CandidateSearchService {
 
     return `(
       CASE 
-        WHEN candidate.fullName ILIKE '${kw}' OR candidate.position ILIKE '${kw}' THEN ${mult.NAME_POSITION}
-        WHEN EXISTS (SELECT 1 FROM candidate_skill_tag cst JOIN skill_metadata sm ON sm.id = cst.skill_metadata_id WHERE cst.candidate_id = candidate.id AND sm.canonicalName ILIKE '${kw}') THEN ${mult.SKILL}
+        WHEN candidate.full_name ILIKE '${kw}' OR candidate.position ILIKE '${kw}' THEN ${mult.NAME_POSITION}
+        WHEN EXISTS (SELECT 1 FROM candidate_skill_tag cst JOIN skill_metadata sm ON sm.id = cst.skill_metadata_id WHERE cst.candidate_id = candidate.id AND sm.canonical_name ILIKE '${kw}') THEN ${mult.SKILL}
         WHEN candidate.bio ILIKE '${kw}' THEN ${mult.BIO}
         ELSE ${mult.OTHER}
       END
@@ -514,10 +514,10 @@ export class CandidateSearchService {
 
     // 4. Salary Match Score (More lenient)
     const salaryExpr = `(CASE 
-      WHEN candidate.salaryMin IS NULL AND candidate.salaryMax IS NULL THEN 0.5
-      WHEN candidate.salaryMin <= ${sMax} AND candidate.salaryMax >= ${sMin} THEN 1.0
-      WHEN candidate.salaryMin <= ${sMax} * 1.2 AND candidate.salaryMax >= ${sMin} * 0.8 THEN 0.7
-      WHEN candidate.salaryMin <= ${sMax} * 1.5 AND candidate.salaryMax >= ${sMin} * 0.5 THEN 0.3
+      WHEN candidate.salary_min IS NULL AND candidate.salary_max IS NULL THEN 0.5
+      WHEN candidate.salary_min <= ${sMax} AND candidate.salary_max >= ${sMin} THEN 1.0
+      WHEN candidate.salary_min <= ${sMax} * 1.2 AND candidate.salary_max >= ${sMin} * 0.8 THEN 0.7
+      WHEN candidate.salary_min <= ${sMax} * 1.5 AND candidate.salary_max >= ${sMin} * 0.5 THEN 0.3
       ELSE 0.1
     END)`;
 
