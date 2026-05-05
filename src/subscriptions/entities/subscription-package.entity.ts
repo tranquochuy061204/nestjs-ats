@@ -97,6 +97,6 @@ export class SubscriptionPackageEntity {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany('CompanySubscriptionEntity', (sub: any) => sub.package)
+  @OneToMany(() => CompanySubscriptionEntity, (sub) => sub.package)
   subscriptions: CompanySubscriptionEntity[];
 }

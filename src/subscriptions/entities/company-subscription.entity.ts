@@ -11,7 +11,11 @@ import {
 import { CompanyEntity } from '../../companies/entities/company.entity';
 import { SubscriptionPackageEntity } from './subscription-package.entity';
 
-import { SubscriptionStatus } from '../enums/subscription-status.enum';
+export enum SubscriptionStatus {
+  ACTIVE = 'active',
+  EXPIRED = 'expired',
+  CANCELLED = 'cancelled',
+}
 
 @Entity('company_subscription')
 export class CompanySubscriptionEntity {
@@ -83,11 +87,11 @@ export class CompanySubscriptionEntity {
 
   // ── Relations ─────────────────────────────────────────────
 
-  @ManyToOne('CompanyEntity')
+  @ManyToOne(() => CompanyEntity)
   @JoinColumn({ name: 'company_id' })
   company: CompanyEntity;
 
-  @ManyToOne('SubscriptionPackageEntity', (pkg: any) => pkg.subscriptions)
+  @ManyToOne(() => SubscriptionPackageEntity, (pkg) => pkg.subscriptions)
   @JoinColumn({ name: 'package_id' })
   package: SubscriptionPackageEntity;
 }

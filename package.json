@@ -42,6 +42,7 @@
     "@nestjs/websockets": "^11.1.18",
     "@supabase/supabase-js": "^2.99.3",
     "bcrypt": "^6.0.0",
+    "class-transformer": "^0.5.1",
     "cookie-parser": "^1.4.7",
     "handlebars": "^4.7.9",
     "multer": "^2.1.1",

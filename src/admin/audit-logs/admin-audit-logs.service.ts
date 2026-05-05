@@ -4,8 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
 
 // Entities
-import { AuditLogEntity } from './entities/audit-log.entity';
-import { AuditLogAction } from './enums/audit-log-action.enum';
+import { AuditLogEntity, AuditLogAction } from './entities/audit-log.entity';
 
 // DTOs
 import { AdminAuditLogFilterDto } from './dto/admin-audit-log-filter.dto';
@@ -41,14 +40,15 @@ export class AdminAuditLogsService {
       ...params,
       resourceId: String(params.resourceId),
     });
-    
+
     return repo.save(newLog);
   }
 
   async getLogs(filter: AdminAuditLogFilterDto) {
     const { page, limit, action, adminId, resource, resourceId } = filter;
-    
-    const qb = this.auditLogRepo.createQueryBuilder('a')
+
+    const qb = this.auditLogRepo
+      .createQueryBuilder('a')
       .leftJoin('a.admin', 'admin')
       .addSelect(['admin.id', 'admin.email'])
       .orderBy('a.createdAt', 'DESC')
@@ -63,8 +63,8 @@ export class AdminAuditLogsService {
     const [items, total] = await qb.getManyAndCount();
 
     return {
-      items,
-      meta: buildPaginationMeta(total, page, limit),
+      data: items,
+      pagination: buildPaginationMeta(total, page, limit),
     };
   }
 }

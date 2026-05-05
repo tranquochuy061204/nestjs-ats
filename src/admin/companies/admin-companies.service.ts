@@ -7,8 +7,8 @@ import { DataSource, Repository } from 'typeorm';
 import { CompanyEntity } from '../../companies/entities/company.entity';
 import {
   CompanySubscriptionEntity,
+  SubscriptionStatus,
 } from '../../subscriptions/entities/company-subscription.entity';
-import { SubscriptionStatus } from '../../subscriptions/enums/subscription-status.enum';
 import {
   PaymentOrderEntity,
   PaymentOrderStatus,
@@ -27,7 +27,7 @@ import { buildPaginationMeta } from '../dto/admin-pagination.dto';
 
 // Services
 import { AdminAuditLogsService } from '../audit-logs/admin-audit-logs.service';
-import { AuditLogAction } from '../audit-logs/enums/audit-log-action.enum';
+import { AuditLogAction } from '../audit-logs/entities/audit-log.entity';
 
 @Injectable()
 export class AdminCompaniesService {
@@ -120,11 +120,7 @@ export class AdminCompaniesService {
       where: { id },
       relations: ['employers', 'images'],
     });
-
-    if (!company) {
-      throw new NotFoundException('Company not found');
-    }
-
+    if (!company) throw new NotFoundException('Company not found');
     return company;
   }
 
@@ -154,7 +150,8 @@ export class AdminCompaniesService {
 
   async getCreditWallet(companyId: number) {
     const wallet = await this.walletRepo.findOne({ where: { companyId } });
-    if (!wallet) return { companyId, balance: 0, totalEarned: 0, totalSpent: 0 };
+    if (!wallet)
+      return { companyId, balance: 0, totalEarned: 0, totalSpent: 0 };
 
     const recentTx = await this.txRepo.find({
       where: { walletId: wallet.id },

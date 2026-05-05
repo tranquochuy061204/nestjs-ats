@@ -12,8 +12,8 @@ import type { Request } from 'express';
 import { SubscriptionPackageEntity } from '../../subscriptions/entities/subscription-package.entity';
 import {
   CompanySubscriptionEntity,
+  SubscriptionStatus,
 } from '../../subscriptions/entities/company-subscription.entity';
-import { SubscriptionStatus } from '../../subscriptions/enums/subscription-status.enum';
 
 // DTOs
 import { UpdateSubscriptionPackageDto } from './dto/update-subscription-package.dto';
@@ -21,7 +21,7 @@ import { buildPaginationMeta } from '../dto/admin-pagination.dto';
 
 // Services
 import { AdminAuditLogsService } from '../audit-logs/admin-audit-logs.service';
-import { AuditLogAction } from '../audit-logs/enums/audit-log-action.enum';
+import { AuditLogAction } from '../audit-logs/entities/audit-log.entity';
 
 @Injectable()
 export class AdminVipService {
@@ -188,7 +188,7 @@ export class AdminVipService {
   ) {
     const pkg = await this.getPackageById(id);
     const oldValues = { ...pkg };
-    
+
     Object.assign(pkg, dto);
     const savedPkg = await this.packageRepo.save(pkg);
 

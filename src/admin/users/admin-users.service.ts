@@ -20,7 +20,7 @@ import { buildPaginationMeta } from '../dto/admin-pagination.dto';
 
 // Services
 import { AdminAuditLogsService } from '../audit-logs/admin-audit-logs.service';
-import { AuditLogAction } from '../audit-logs/enums/audit-log-action.enum';
+import { AuditLogAction } from '../audit-logs/entities/audit-log.entity';
 
 @Injectable()
 export class AdminUsersService {

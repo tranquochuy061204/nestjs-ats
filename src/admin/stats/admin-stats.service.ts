@@ -2,14 +2,26 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../../users/entities/user.entity';
-import { CompanyEntity, CompanyStatus } from '../../companies/entities/company.entity';
+import {
+  CompanyEntity,
+  CompanyStatus,
+} from '../../companies/entities/company.entity';
 import { JobEntity, JobStatus } from '../../jobs/entities/job.entity';
 import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
-import { PaymentOrderEntity, PaymentOrderStatus, PaymentOrderType } from '../../payments/entities/payment-order.entity';
-import { CreditTransactionEntity, CreditTransactionType } from '../../credits/entities/credit-transaction.entity';
+import {
+  PaymentOrderEntity,
+  PaymentOrderStatus,
+  PaymentOrderType,
+} from '../../payments/entities/payment-order.entity';
+import {
+  CreditTransactionEntity,
+  CreditTransactionType,
+} from '../../credits/entities/credit-transaction.entity';
 import { CreditWalletEntity } from '../../credits/entities/credit-wallet.entity';
-import { CompanySubscriptionEntity } from '../../subscriptions/entities/company-subscription.entity';
-import { SubscriptionStatus } from '../../subscriptions/enums/subscription-status.enum';
+import {
+  CompanySubscriptionEntity,
+  SubscriptionStatus,
+} from '../../subscriptions/entities/company-subscription.entity';
 
 @Injectable()
 export class AdminStatsService {
@@ -33,18 +45,33 @@ export class AdminStatsService {
   ) {}
 
   async getOverview() {
-    const [users, companies, jobs, revenue, applications, credits, headhunting] =
-      await Promise.all([
-        this.getUserStats(),
-        this.getCompanyStats(),
-        this.getJobStats(),
-        this.getRevenueStats(),
-        this.getApplicationStats(),
-        this.getCreditStats(),
-        this.getHeadhuntingStats(),
-      ]);
+    const [
+      users,
+      companies,
+      jobs,
+      revenue,
+      applications,
+      credits,
+      headhunting,
+    ] = await Promise.all([
+      this.getUserStats(),
+      this.getCompanyStats(),
+      this.getJobStats(),
+      this.getRevenueStats(),
+      this.getApplicationStats(),
+      this.getCreditStats(),
+      this.getHeadhuntingStats(),
+    ]);
 
-    return { users, companies, jobs, revenue, applications, credits, headhunting };
+    return {
+      users,
+      companies,
+      jobs,
+      revenue,
+      applications,
+      credits,
+      headhunting,
+    };
   }
 
   // ─── User Stats ───────────────────────────────────────────────────────────
@@ -201,7 +228,10 @@ export class AdminStatsService {
     ]);
 
     const typeMap = Object.fromEntries(
-      byType.map((t) => [t.orderType, { total: Number(t.total), count: Number(t.count) }]),
+      byType.map((t) => [
+        t.orderType,
+        { total: Number(t.total), count: Number(t.count) },
+      ]),
     );
 
     return {
@@ -225,7 +255,7 @@ export class AdminStatsService {
       this.applicationRepo.count(),
       this.applicationRepo
         .createQueryBuilder('a')
-        .where('a.created_at >= :startOfWeek', { startOfWeek })
+        .where('a.applied_at >= :startOfWeek', { startOfWeek })
         .getCount(),
     ]);
 
@@ -240,7 +270,11 @@ export class AdminStatsService {
       .select('SUM(w.balance)', 'totalInCirculation')
       .addSelect('SUM(w.total_earned)', 'totalEverEarned')
       .addSelect('SUM(w.total_spent)', 'totalEverSpent')
-      .getRawOne<{ totalInCirculation: string; totalEverEarned: string; totalEverSpent: string }>();
+      .getRawOne<{
+        totalInCirculation: string;
+        totalEverEarned: string;
+        totalEverSpent: string;
+      }>();
 
     return {
       totalInCirculation: Number(result?.totalInCirculation ?? 0),
@@ -274,7 +308,9 @@ export class AdminStatsService {
     from?: string,
     to?: string,
   ) {
-    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const fromDate = from
+      ? new Date(from)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const toDate = to ? new Date(to) : new Date();
 
     const trunc =
@@ -286,7 +322,10 @@ export class AdminStatsService {
       .addSelect('SUM(p.amount)', 'revenue')
       .addSelect('COUNT(*)', 'orders')
       .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
-      .andWhere('p.paid_at BETWEEN :from AND :to', { from: fromDate, to: toDate })
+      .andWhere('p.paid_at BETWEEN :from AND :to', {
+        from: fromDate,
+        to: toDate,
+      })
       .groupBy(`DATE_TRUNC('${trunc}', p.paid_at)`)
       .orderBy(`DATE_TRUNC('${trunc}', p.paid_at)`, 'ASC')
       .getRawMany<{ period: string; revenue: string; orders: string }>();

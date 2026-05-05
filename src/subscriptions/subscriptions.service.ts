@@ -8,8 +8,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   CompanySubscriptionEntity,
+  SubscriptionStatus,
 } from './entities/company-subscription.entity';
-import { SubscriptionStatus } from './enums/subscription-status.enum';
 import { SubscriptionPackageEntity } from './entities/subscription-package.entity';
 import { CreditPurchaseLogEntity } from '../credits/entities/credit-purchase-log.entity';
 import { ActiveSubscription } from './interfaces/subscriptions.interface';

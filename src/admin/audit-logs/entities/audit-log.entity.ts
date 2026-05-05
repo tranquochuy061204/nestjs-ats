@@ -9,7 +9,18 @@ import {
 } from 'typeorm';
 import { UserEntity } from '../../../users/entities/user.entity';
 
-import { AuditLogAction } from '../enums/audit-log-action.enum';
+export enum AuditLogAction {
+  UPDATE_CREDIT = 'UPDATE_CREDIT',
+  LOCK_USER = 'LOCK_USER',
+  UNLOCK_USER = 'UNLOCK_USER',
+  VERIFY_EMAIL = 'VERIFY_EMAIL',
+  APPROVE_JOB = 'APPROVE_JOB',
+  REJECT_JOB = 'REJECT_JOB',
+  CLOSE_JOB = 'CLOSE_JOB',
+  UPDATE_VIP_CONFIG = 'UPDATE_VIP_CONFIG',
+  UPDATE_CREDIT_CONFIG = 'UPDATE_CREDIT_CONFIG',
+  CANCEL_VIP = 'CANCEL_VIP',
+}
 
 @Entity('audit_log')
 @Index('IDX_audit_log_admin_id', ['adminId'])

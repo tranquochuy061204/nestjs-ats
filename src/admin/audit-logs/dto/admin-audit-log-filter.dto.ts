@@ -1,8 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { AuditLogEntity } from '../entities/audit-log.entity';
-import { AuditLogAction } from '../enums/audit-log-action.enum';
+import { AuditLogAction } from '../entities/audit-log.entity';
 
 const AdminAuditLogFilterSchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),

@@ -1,11 +1,13 @@
 import 'dotenv/config';
 import cookieParser from 'cookie-parser';
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { ClassSerializerInterceptor } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -31,6 +33,12 @@ async function bootstrap() {
 
   // Áp dụng Global Exception Filter
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Chuẩn hóa toàn bộ response thành { data, pagination?, ... }
+  app.useGlobalInterceptors(new TransformInterceptor());
+
+  // Áp dụng ClassSerializerInterceptor để @Exclude() hoạt động (bỏ password, v.v.)
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   // Cấu hình Swagger (Chỉ bật trên môi trường dev, sẽ ẩn hoàn toàn trên production)
   if (process.env.NODE_ENV !== 'production') {
