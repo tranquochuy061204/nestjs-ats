@@ -121,7 +121,7 @@ export class CompanyEntity {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany(() => EmployerEntity, (employer) => employer.company)
+  @OneToMany('EmployerEntity', (employer: any) => employer.company)
   employers: EmployerEntity[];
 
   @OneToMany(

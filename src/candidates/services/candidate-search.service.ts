@@ -1,21 +1,31 @@
+// Core & Config
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
+
+// Entities
 import { CandidateEntity } from '../entities/candidate.entity';
 import { JobEntity, JobStatus } from '../../jobs/entities/job.entity';
-import { CandidateFilterDto } from '../dto/candidate-filter.dto';
-import { getPaginatedResult } from '../../common/utils/pagination.util';
-import { CandidateSortBy, SortOrder } from '../../common/enums/sort-order.enum';
 import { ContactUnlockLogEntity } from '../../subscriptions/entities/contact-unlock-log.entity';
-import { EmployersService } from '../../employers/employers.service';
-import { HEADHUNTING_CONFIG } from '../../common/constants/headhunting.constant';
-import { Degree } from '../../common/enums/degree.enum';
 
+// Services
+import { EmployersService } from '../../employers/employers.service';
+
+// DTOs & Interfaces
+import { CandidateFilterDto } from '../dto/candidate-filter.dto';
+import { ScoringWeights } from '../interfaces/candidate-search.interface';
+
+// Enums & Constants
+import { CandidateSortBy, SortOrder } from '../../common/enums/sort-order.enum';
+import { Degree } from '../../common/enums/degree.enum';
+import { HEADHUNTING_CONFIG } from '../../common/constants/headhunting.constant';
 import {
   HIDDEN_FIELDS,
   USER_SENSITIVE_FIELDS,
 } from '../constants/candidate-search.constant';
-import { ScoringWeights } from '../interfaces/candidate-search.interface';
+
+// Utils
+import { getPaginatedResult } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class CandidateSearchService {

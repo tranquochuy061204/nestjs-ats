@@ -1,3 +1,4 @@
+// Core & Config
 import {
   Injectable,
   UnauthorizedException,
@@ -6,8 +7,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+
+// Entities
 import { UserEntity, UserRole } from '../users/entities/user.entity';
+
+// DTOs
 import { LoginDto } from './dto/login.dto';
+
+// Services
 import { AuthTokenService } from './services/auth-token.service';
 
 @Injectable()

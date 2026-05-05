@@ -1,19 +1,30 @@
+// Core & Config
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+
+// Controllers
 import { AuthController } from './auth.controller';
+
+// Services
 import { AuthService } from './auth.service';
 import { AuthTokenService } from './services/auth-token.service';
 import { AuthRegistrationService } from './services/auth-registration.service';
 import { AuthVerificationService } from './services/auth-verification.service';
 import { AuthPasswordService } from './services/auth-password.service';
-import { UserEntity } from '../users/entities/user.entity';
-import { RefreshTokenEntity } from './entities/refresh-token.entity';
-import { CandidatesModule } from '../candidates/candidates.module';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+
+// Strategies
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
+
+// Entities
+import { UserEntity } from '../users/entities/user.entity';
+import { RefreshTokenEntity } from './entities/refresh-token.entity';
+
+// Modules
+import { CandidatesModule } from '../candidates/candidates.module';
 import { MailModule } from '../mail/mail.module';
 
 @Module({

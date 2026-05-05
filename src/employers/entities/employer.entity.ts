@@ -55,11 +55,11 @@ export class EmployerEntity {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToOne(() => UserEntity, { onDelete: 'CASCADE' })
+  @OneToOne('UserEntity', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: UserEntity;
 
-  @ManyToOne(() => CompanyEntity, (company) => company.employers, {
+  @ManyToOne('CompanyEntity', (company: any) => company.employers, {
     nullable: true,
     onDelete: 'SET NULL',
   })

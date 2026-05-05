@@ -153,4 +153,46 @@ export class AdminJobsService {
       order: { createdAt: 'DESC' },
     });
   }
+
+  async closeJob(jobId: number, reason: string) {
+    const job = await this.jobRepository.findOne({
+      where: { id: jobId },
+      relations: ['employer'],
+    });
+    if (!job) throw new NotFoundException('Không tìm thấy tin');
+
+    if (job.status === JobStatus.CLOSED) {
+      throw new BadRequestException('Tin đã bị đóng trước đó');
+    }
+
+    const oldStatus = job.status;
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(JobEntity, jobId, {
+        status: JobStatus.CLOSED,
+        rejectionReason: reason,
+      });
+
+      await manager.save(
+        JobStatusHistoryEntity,
+        manager.create(JobStatusHistoryEntity, {
+          jobId,
+          oldStatus,
+          newStatus: JobStatus.CLOSED,
+          reason,
+        }),
+      );
+    });
+
+    // Notify employer
+    await this.notificationsService.createNotification({
+      userId: job.employer.userId,
+      type: NotificationType.JOB_REJECTION,
+      title: 'Tin tuyển dụng đã bị đóng',
+      content: `Tin tuyển dụng "${job.title}" đã bị quản trị viên đóng. Lý do: ${reason}`,
+      metadata: { jobId: job.id, status: JobStatus.CLOSED, reason },
+    });
+
+    return { message: 'Đã đóng tin tuyển dụng' };
+  }
 }

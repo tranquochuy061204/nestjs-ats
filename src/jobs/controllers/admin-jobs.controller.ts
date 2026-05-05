@@ -49,4 +49,14 @@ export class AdminJobsController {
   ) {
     return this.adminJobsService.rejectJob(id, rejectJobDto.reason);
   }
+
+  @Patch(':id/close')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Đóng / ẩn tin vi phạm (Admin)' })
+  closeJob(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() rejectJobDto: RejectJobDto,
+  ) {
+    return this.adminJobsService.closeJob(id, rejectJobDto.reason);
+  }
 }

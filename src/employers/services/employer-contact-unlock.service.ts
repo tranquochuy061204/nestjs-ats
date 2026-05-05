@@ -1,3 +1,4 @@
+// Core & Config
 import {
   Injectable,
   NotFoundException,
@@ -6,13 +7,17 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
+
+// Entities
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
 import { EmployerEntity } from '../entities/employer.entity';
 import { ContactUnlockLogEntity } from '../../subscriptions/entities/contact-unlock-log.entity';
-import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
-import { CreditsService } from '../../credits/credits.service';
 import { CreditTransactionType } from '../../credits/entities/credit-transaction.entity';
 import { UserEntity } from '../../users/entities/user.entity';
+
+// Services
+import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
+import { CreditsService } from '../../credits/credits.service';
 
 @Injectable()
 export class EmployerContactUnlockService {
