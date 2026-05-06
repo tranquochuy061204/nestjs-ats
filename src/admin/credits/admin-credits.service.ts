@@ -34,4 +34,9 @@ export class AdminCreditsService {
     const pkg = this.packageRepo.create(dto);
     return this.packageRepo.save(pkg);
   }
+
+  async deletePackage(id: number) {
+    const pkg = await this.getPackageById(id);
+    return this.packageRepo.remove(pkg);
+  }
 }

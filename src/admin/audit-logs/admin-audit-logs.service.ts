@@ -63,8 +63,8 @@ export class AdminAuditLogsService {
     const [items, total] = await qb.getManyAndCount();
 
     return {
-      data: items,
-      pagination: buildPaginationMeta(total, page, limit),
+      items,
+      meta: buildPaginationMeta(total, page, limit),
     };
   }
 }

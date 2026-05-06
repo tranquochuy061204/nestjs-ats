@@ -87,10 +87,6 @@ export class SubscriptionPackageEntity {
   @Column({ name: 'free_ai_scoring', type: 'boolean', default: false })
   freeAiScoring: boolean;
 
-  /** VIP: Sử dụng bộ lọc nâng cao khi tìm kiếm ứng viên (Headhunting) */
-  @Column({ name: 'can_use_premium_filters', type: 'boolean', default: false })
-  canUsePremiumFilters: boolean;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

@@ -208,4 +208,12 @@ export class AdminVipService {
     const pkg = this.packageRepo.create(dto);
     return this.packageRepo.save(pkg);
   }
+
+  async deletePackage(id: number) {
+    const pkg = await this.getPackageById(id);
+    if (pkg.name === 'free' || pkg.name === 'vip') {
+      throw new BadRequestException('Không thể xóa các gói hệ thống mặc định');
+    }
+    return this.packageRepo.remove(pkg);
+  }
 }

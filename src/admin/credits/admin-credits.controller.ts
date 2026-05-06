@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   ParseIntPipe,
+  Delete,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AdminCreditsService } from './admin-credits.service';
@@ -50,5 +51,12 @@ export class AdminCreditsController {
     @Body() dto: UpdateCreditPackageDto,
   ) {
     return this.adminCreditsService.updatePackage(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Xóa gói nạp credit' })
+  deletePackage(@Param('id', ParseIntPipe) id: number) {
+    return this.adminCreditsService.deletePackage(id);
   }
 }

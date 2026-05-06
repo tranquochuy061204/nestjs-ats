@@ -9,6 +9,8 @@ import {
   Query,
   ParseIntPipe,
   Req,
+  Delete,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
@@ -70,7 +72,8 @@ export class AdminVipController {
     @Param('id', ParseIntPipe) id: number,
     @Req() req: Request,
   ) {
-    const adminId = (req.user as any).id;
+    const adminId = (req.user as any)?.id;
+    if (!adminId) throw new BadRequestException('Admin session invalid');
     return this.adminVipService.cancelSubscription(id, adminId);
   }
 
@@ -90,6 +93,13 @@ export class AdminVipController {
     return this.adminVipService.getPackageById(id);
   }
 
+  @Post('packages')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Tạo gói VIP mới' })
+  createPackage(@Body() dto: UpdateSubscriptionPackageDto & { name: string }) {
+    return this.adminVipService.createPackage(dto);
+  }
+
   @Patch('packages/:id')
   @ApiAuth(UserRole.ADMIN)
   @ApiOperation({
@@ -100,7 +110,15 @@ export class AdminVipController {
     @Body() dto: UpdateSubscriptionPackageDto,
     @Req() req: Request,
   ) {
-    const adminId = (req.user as any).id;
+    const adminId = (req.user as any)?.id;
+    if (!adminId) throw new BadRequestException('Admin session invalid');
     return this.adminVipService.updatePackage(id, dto, adminId);
+  }
+
+  @Delete('packages/:id')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Xóa gói VIP' })
+  deletePackage(@Param('id', ParseIntPipe) id: number) {
+    return this.adminVipService.deletePackage(id);
   }
 }

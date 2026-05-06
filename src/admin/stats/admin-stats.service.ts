@@ -331,8 +331,8 @@ export class AdminStatsService {
       .getRawMany<{ period: string; revenue: string; orders: string }>();
 
     return rows.map((r) => ({
-      period: r.period,
-      revenue: Number(r.revenue),
+      date: r.period,
+      amount: Number(r.revenue),
       orders: Number(r.orders),
     }));
   }
@@ -354,10 +354,26 @@ export class AdminStatsService {
       .orderBy(`DATE_TRUNC('${trunc}', u.created_at)`, 'ASC')
       .getRawMany<{ period: string; newUsers: string; role: string }>();
 
-    return rows.map((r) => ({
-      period: r.period,
-      newUsers: Number(r.newUsers),
-      role: r.role,
-    }));
+    const results: Record<string, any> = {};
+
+    rows.forEach((r) => {
+      const dateStr = r.period;
+      if (!results[dateStr]) {
+        results[dateStr] = {
+          date: dateStr,
+          count: 0,
+          candidates: 0,
+          employers: 0,
+          admins: 0,
+        };
+      }
+      const count = Number(r.newUsers);
+      results[dateStr].count += count;
+      if (r.role === 'candidate') results[dateStr].candidates += count;
+      if (r.role === 'employer') results[dateStr].employers += count;
+      if (r.role === 'admin') results[dateStr].admins += count;
+    });
+
+    return Object.values(results);
   }
 }

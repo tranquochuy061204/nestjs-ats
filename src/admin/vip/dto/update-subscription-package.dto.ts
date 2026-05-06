@@ -22,7 +22,6 @@ const UpdateSubscriptionPackageSchema = z.object({
   hasVipBadge: z.coerce.boolean().optional(),
   freeContactUnlock: z.coerce.boolean().optional(),
   freeAiScoring: z.coerce.boolean().optional(),
-  canUsePremiumFilters: z.coerce.boolean().optional(),
 });
 
 export class UpdateSubscriptionPackageDto extends createZodDto(UpdateSubscriptionPackageSchema) {
@@ -80,7 +79,4 @@ export class UpdateSubscriptionPackageDto extends createZodDto(UpdateSubscriptio
 
   @ApiPropertyOptional()
   freeAiScoring?: boolean;
-
-  @ApiPropertyOptional()
-  canUsePremiumFilters?: boolean;
 }

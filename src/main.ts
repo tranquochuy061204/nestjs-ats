@@ -7,7 +7,6 @@ import { AppModule } from './app.module';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -33,9 +32,6 @@ async function bootstrap() {
 
   // Áp dụng Global Exception Filter
   app.useGlobalFilters(new AllExceptionsFilter());
-
-  // Chuẩn hóa toàn bộ response thành { data, pagination?, ... }
-  app.useGlobalInterceptors(new TransformInterceptor());
 
   // Áp dụng ClassSerializerInterceptor để @Exclude() hoạt động (bỏ password, v.v.)
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
