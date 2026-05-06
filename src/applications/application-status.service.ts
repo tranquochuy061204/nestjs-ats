@@ -180,10 +180,12 @@ export class ApplicationStatusService {
         importantStatuses.includes(dto.status) &&
         application.candidate?.user?.email
       ) {
-        const appUrl =
-          this.configService.get<string>('FRONTEND_URL') ||
-          'http://localhost:5173';
-        const actionUrl = `${appUrl}/candidate/applications/${applicationId}`;
+        const appUrl = this.configService.get<string>('FRONTEND_URL');
+        if (!appUrl) {
+          this.logger.warn('FRONTEND_URL is not configured');
+        }
+        const finalAppUrl = appUrl || 'http://localhost:5173';
+        const actionUrl = `${finalAppUrl}/candidate/applications/${applicationId}`;
 
         void this.mailService.sendApplicationStatusEmail(
           application.candidate.user.email,

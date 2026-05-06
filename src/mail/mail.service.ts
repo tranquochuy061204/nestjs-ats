@@ -15,9 +15,12 @@ export class MailService {
    * Gửi email xác thực tài khoản sau khi đăng ký
    */
   async sendVerificationEmail(email: string, fullName: string, token: string) {
-    const backendUrl =
-      this.configService.get<string>('BACKEND_URL') || 'http://localhost:3000';
-    const verifyUrl = `${backendUrl}/api/auth/verify-email?token=${token}`;
+    const backendUrl = this.configService.get<string>('BACKEND_URL');
+    if (!backendUrl) {
+      this.logger.warn('BACKEND_URL is not configured');
+    }
+    const finalBackendUrl = backendUrl || 'http://localhost:3000';
+    const verifyUrl = `${finalBackendUrl}/api/auth/verify-email?token=${token}`;
 
     try {
       await this.mailerService.sendMail({

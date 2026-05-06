@@ -224,17 +224,20 @@ export class AuthController {
   @ApiOperation({ summary: 'Xác thực email qua token (click link từ email)' })
   @ApiResponse({ status: 302, description: 'Chuyển hướng về Frontend' })
   async verifyEmail(@Query('token') token: string, @Res() res: Response) {
-    const frontendUrl =
-      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    if (!frontendUrl) {
+      console.warn('FRONTEND_URL is not configured');
+    }
+    const finalFrontendUrl = frontendUrl || 'http://localhost:5173';
 
     try {
       if (!token || !/^[a-f0-9]{64}$/.test(token)) {
         throw new BadRequestException('Mã xác thực không đúng định dạng');
       }
       await this.authVerificationService.verifyEmail(token);
-      return res.redirect(`${frontendUrl}/verify-email?status=success`);
+      return res.redirect(`${finalFrontendUrl}/verify-email?status=success`);
     } catch {
-      return res.redirect(`${frontendUrl}/verify-email?status=error`);
+      return res.redirect(`${finalFrontendUrl}/verify-email?status=error`);
     }
   }
 

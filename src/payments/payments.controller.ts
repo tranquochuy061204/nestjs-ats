@@ -10,6 +10,7 @@ import {
   Res,
   ForbiddenException,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as express from 'express';
@@ -36,6 +37,8 @@ class CreateCreditTopupDto {
 @ApiTags('Payments')
 @Controller('payments')
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name);
+
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly configService: ConfigService,
@@ -83,13 +86,14 @@ export class PaymentsController {
     @Res() res: express.Response,
   ) {
     const result = await this.paymentsService.processReturnUrl(query);
-    const frontendUrl = this.configService.get<string>(
-      'FRONTEND_URL',
-      'http://localhost:5173',
-    );
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    if (!frontendUrl) {
+      this.logger.warn('FRONTEND_URL is not configured');
+    }
+    const finalFrontendUrl = frontendUrl || 'http://localhost:5173';
 
     // Redirect về trang kết quả thanh toán của FE (React/Next.js)
-    const redirectUrl = new URL(`${frontendUrl}/payment/result`);
+    const redirectUrl = new URL(`${finalFrontendUrl}/payment/result`);
     redirectUrl.searchParams.set('success', result.success.toString());
     redirectUrl.searchParams.set('orderId', result.orderId || '');
     redirectUrl.searchParams.set('message', result.message);
