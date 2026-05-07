@@ -88,7 +88,11 @@ export class AuthController {
       req.headers['user-agent'],
       req.ip,
     );
-    this.authTokenService.setRefreshTokenCookie(res, result.refresh_token);
+    this.authTokenService.setRefreshTokenCookie(
+      res,
+      result.refresh_token,
+      user.role,
+    );
 
     return {
       access_token: result.access_token,
@@ -119,7 +123,11 @@ export class AuthController {
       req.headers['user-agent'],
       req.ip,
     );
-    this.authTokenService.setRefreshTokenCookie(res, result.refresh_token);
+    this.authTokenService.setRefreshTokenCookie(
+      res,
+      result.refresh_token,
+      result.user.role,
+    );
 
     return {
       access_token: result.access_token,
@@ -133,7 +141,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Làm mới Access Token (Silent Refresh)' })
   async refresh(
     @Req() req: Request,
-    @CurrentUser() user: { id: number; refreshToken?: string; jti: string },
+    @CurrentUser()
+    user: { id: number; refreshToken?: string; jti: string; role: string },
     @Res({ passthrough: true }) res: Response,
   ) {
     const { id, refreshToken } = user;
@@ -149,7 +158,11 @@ export class AuthController {
       req.ip,
     );
 
-    this.authTokenService.setRefreshTokenCookie(res, tokens.refresh_token);
+    this.authTokenService.setRefreshTokenCookie(
+      res,
+      tokens.refresh_token,
+      user.role,
+    );
     return { access_token: tokens.access_token };
   }
 
@@ -158,12 +171,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đăng xuất' })
   async logout(
-    @CurrentUser() user: { id: number; refreshToken?: string; jti?: string },
+    @CurrentUser()
+    user: { id: number; refreshToken?: string; jti?: string; role: string },
     @Res({ passthrough: true }) res: Response,
   ) {
     const { id, jti } = user;
     await this.authTokenService.logout(id, jti);
-    this.authTokenService.clearRefreshTokenCookie(res);
+    this.authTokenService.clearRefreshTokenCookie(res, user.role);
     return { message: 'Logged out successfully' };
   }
 

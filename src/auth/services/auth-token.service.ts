@@ -26,6 +26,7 @@ export class AuthTokenService {
       email: user.email,
       role: user.role,
       ...(user.candidate ? { candidateId: user.candidate.id } : {}),
+      ...(jti ? { jti } : {}),
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -35,15 +36,12 @@ export class AuthTokenService {
           'JWT_EXPIRES_TIME',
         ) as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
       }),
-      this.jwtService.signAsync(
-        { ...payload, jti },
-        {
-          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-          expiresIn: this.configService.get<string>(
-            'JWT_REFRESH_EXPIRES_TIME',
-          ) as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
-        },
-      ),
+      this.jwtService.signAsync(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.get<string>(
+          'JWT_REFRESH_EXPIRES_TIME',
+        ) as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
+      }),
     ]);
 
     return {
@@ -134,8 +132,22 @@ export class AuthTokenService {
     return { message: 'Đã đăng xuất khỏi tất cả thiết bị.' };
   }
 
-  setRefreshTokenCookie(res: Response, token: string) {
-    res.cookie(AUTH_CONFIG.COOKIE.REFRESH_TOKEN, token, {
+  getCookieName(role?: string): string {
+    switch (role) {
+      case 'admin':
+        return AUTH_CONFIG.COOKIE.ADMIN_REFRESH_TOKEN;
+      case 'employer':
+        return AUTH_CONFIG.COOKIE.EMPLOYER_REFRESH_TOKEN;
+      case 'candidate':
+        return AUTH_CONFIG.COOKIE.CANDIDATE_REFRESH_TOKEN;
+      default:
+        return AUTH_CONFIG.COOKIE.REFRESH_TOKEN;
+    }
+  }
+
+  setRefreshTokenCookie(res: Response, token: string, role?: string) {
+    const cookieName = this.getCookieName(role);
+    res.cookie(cookieName, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -143,7 +155,8 @@ export class AuthTokenService {
     });
   }
 
-  clearRefreshTokenCookie(res: Response) {
-    res.clearCookie(AUTH_CONFIG.COOKIE.REFRESH_TOKEN);
+  clearRefreshTokenCookie(res: Response, role?: string) {
+    const cookieName = this.getCookieName(role);
+    res.clearCookie(cookieName);
   }
 }

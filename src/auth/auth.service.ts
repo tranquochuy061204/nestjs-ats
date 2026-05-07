@@ -8,8 +8,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
-// Entities
-import { UserEntity, UserRole } from '../users/entities/user.entity';
+import {
+  UserEntity,
+  UserRole,
+  UserStatus,
+} from '../users/entities/user.entity';
 
 // DTOs
 import { LoginDto } from './dto/login.dto';
@@ -31,6 +34,10 @@ export class AuthService {
       relations: ['candidate'],
     });
     if (!user) return null;
+
+    if (user.status === UserStatus.LOCKED) {
+      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa');
+    }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) return null;
@@ -61,6 +68,10 @@ export class AuthService {
 
     if (!user || user.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Tài khoản không có quyền quản trị');
+    }
+
+    if (user.status === UserStatus.LOCKED) {
+      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);

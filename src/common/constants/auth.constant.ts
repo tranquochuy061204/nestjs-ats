@@ -4,7 +4,10 @@ export const AUTH_CONFIG = {
   RESET_PASSWORD_EXPIRES_MIN: 15,
   REFRESH_TOKEN_DEFAULT_EXPIRY_DAYS: 7,
   COOKIE: {
-    REFRESH_TOKEN: 'refresh_token',
+    REFRESH_TOKEN: 'refresh_token', // Legacy/Fallback
+    ADMIN_REFRESH_TOKEN: 'admin_refresh_token',
+    EMPLOYER_REFRESH_TOKEN: 'employer_refresh_token',
+    CANDIDATE_REFRESH_TOKEN: 'candidate_refresh_token',
     MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 };
