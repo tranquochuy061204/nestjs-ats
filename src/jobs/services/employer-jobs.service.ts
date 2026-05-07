@@ -267,9 +267,50 @@ export class EmployerJobsService {
     const employer = await this.employersService.getProfile(employerUserId);
 
     if (employer.companyId === null || employer.companyId === undefined)
-      return { data: [], total: 0 };
+      return { data: [], total: 0, statusCounts: {} };
 
     const { page = 1, limit = 10, keyword, status } = filterDto;
+
+    const baseWhere = { companyId: employer.companyId };
+
+    // ── Count theo từng status (không bị ảnh hưởng bởi filter status/keyword) ──
+    const [
+      draftCount,
+      pendingCount,
+      publishedCount,
+      rejectedCount,
+      closedCount,
+    ] = await Promise.all([
+      this.jobRepository.count({
+        where: { ...baseWhere, status: JobStatus.DRAFT },
+      }),
+      this.jobRepository.count({
+        where: { ...baseWhere, status: JobStatus.PENDING },
+      }),
+      this.jobRepository.count({
+        where: { ...baseWhere, status: JobStatus.PUBLISHED },
+      }),
+      this.jobRepository.count({
+        where: { ...baseWhere, status: JobStatus.REJECTED },
+      }),
+      this.jobRepository.count({
+        where: { ...baseWhere, status: JobStatus.CLOSED },
+      }),
+    ]);
+
+    const statusCounts = {
+      all:
+        draftCount +
+        pendingCount +
+        publishedCount +
+        rejectedCount +
+        closedCount,
+      draft: draftCount,
+      pending: pendingCount,
+      published: publishedCount,
+      rejected: rejectedCount,
+      closed: closedCount,
+    };
 
     const qb = this.jobRepository
       .createQueryBuilder('job')
@@ -291,7 +332,8 @@ export class EmployerJobsService {
 
     qb.orderBy('job.createdAt', 'DESC');
 
-    return getPaginatedResult(qb, page, limit);
+    const paginated = await getPaginatedResult(qb, page, limit);
+    return { ...paginated, statusCounts };
   }
 
   async getEmployerJobHistory(employerUserId: number, jobId: number) {
