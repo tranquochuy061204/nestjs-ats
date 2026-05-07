@@ -17,6 +17,10 @@ import { JobEntity, JobStatus } from '../jobs/entities/job.entity';
 import { ApplyJobDto } from './dto/apply-job.dto';
 import { ApplicationFilterDto } from './dto/application-filter.dto';
 import { ApplicationScoringService } from './application-scoring.service';
+import {
+  JobInvitationEntity,
+  InvitationStatus,
+} from '../jobs/entities/job-invitation.entity';
 
 @Injectable()
 export class CandidateApplicationsService {
@@ -29,6 +33,8 @@ export class CandidateApplicationsService {
     private readonly candidateRepo: Repository<CandidateEntity>,
     @InjectRepository(JobEntity)
     private readonly jobRepo: Repository<JobEntity>,
+    @InjectRepository(JobInvitationEntity)
+    private readonly invitationRepo: Repository<JobInvitationEntity>,
     private readonly dataSource: DataSource,
     private readonly applicationScoringService: ApplicationScoringService,
   ) {}
@@ -85,6 +91,20 @@ export class CandidateApplicationsService {
             changedById: userId,
           });
           await manager.save(ApplicationStatusHistoryEntity, history);
+
+          // --- AUTO-ACCEPT PENDING INVITATION (RE-APPLY CASE) ---
+          const pendingInvitation = await manager.findOne(JobInvitationEntity, {
+            where: {
+              jobId,
+              candidateId: candidate.id,
+              status: InvitationStatus.PENDING,
+            },
+          });
+
+          if (pendingInvitation) {
+            pendingInvitation.status = InvitationStatus.ACCEPTED;
+            await manager.save(JobInvitationEntity, pendingInvitation);
+          }
         });
 
         void this.applicationScoringService.triggerAiScoringIfVip(
@@ -117,6 +137,20 @@ export class CandidateApplicationsService {
       });
       const saved = await manager.save(JobApplicationEntity, application);
       applicationId = saved.id;
+
+      // --- AUTO-ACCEPT PENDING INVITATION ---
+      const pendingInvitation = await manager.findOne(JobInvitationEntity, {
+        where: {
+          jobId,
+          candidateId: candidate.id,
+          status: InvitationStatus.PENDING,
+        },
+      });
+
+      if (pendingInvitation) {
+        pendingInvitation.status = InvitationStatus.ACCEPTED;
+        await manager.save(JobInvitationEntity, pendingInvitation);
+      }
 
       const history = manager.create(ApplicationStatusHistoryEntity, {
         applicationId: saved.id,

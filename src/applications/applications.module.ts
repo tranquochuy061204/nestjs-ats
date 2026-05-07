@@ -23,6 +23,7 @@ import { MailModule } from '../mail/mail.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { CreditsModule } from '../credits/credits.module';
 import { JobProfileViewEntity } from '../subscriptions/entities/job-profile-view.entity';
+import { JobInvitationEntity } from '../jobs/entities/job-invitation.entity';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { JobProfileViewEntity } from '../subscriptions/entities/job-profile-view
       EmployerEntity,
       UserEntity,
       JobProfileViewEntity,
+      JobInvitationEntity,
     ]),
     NotificationsModule,
     CommonGuardsModule,

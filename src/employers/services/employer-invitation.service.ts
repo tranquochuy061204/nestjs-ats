@@ -5,10 +5,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
 import { EmployerEntity } from '../entities/employer.entity';
 import { JobEntity, JobStatus } from '../../jobs/entities/job.entity';
+import {
+  JobApplicationEntity,
+  ApplicationStatus,
+} from '../../applications/entities/job-application.entity';
 import {
   JobInvitationEntity,
   InvitationStatus,
@@ -30,6 +34,8 @@ export class EmployerInvitationService {
     private readonly jobRepo: Repository<JobEntity>,
     @InjectRepository(JobInvitationEntity)
     private readonly invitationRepo: Repository<JobInvitationEntity>,
+    @InjectRepository(JobApplicationEntity)
+    private readonly applicationRepo: Repository<JobApplicationEntity>,
     private readonly notificationsService: NotificationsService,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
@@ -66,6 +72,20 @@ export class EmployerInvitationService {
     if (existing) {
       throw new BadRequestException(
         'Bạn đã gửi thư mời cho ứng viên này vào vị trí này rồi',
+      );
+    }
+
+    // --- CHECK IF CANDIDATE ALREADY APPLIED ---
+    const existingApp = await this.applicationRepo.findOne({
+      where: {
+        jobId: dto.jobId,
+        candidateId: dto.candidateId,
+        status: Not(ApplicationStatus.WITHDRAWN),
+      },
+    });
+    if (existingApp) {
+      throw new BadRequestException(
+        'Ứng viên này đã nộp đơn ứng tuyển vào vị trí này rồi',
       );
     }
 

@@ -28,6 +28,7 @@ import { JobInvitationEntity } from '../jobs/entities/job-invitation.entity';
 import { CertificateEntity } from '../candidates/entities/certificate.entity';
 import { UserEntity } from '../users/entities/user.entity';
 import { ContactUnlockLogEntity } from '../subscriptions/entities/contact-unlock-log.entity';
+import { JobApplicationEntity } from '../applications/entities/job-application.entity';
 
 // Modules
 import { StorageModule } from '../storage/storage.module';
@@ -49,6 +50,7 @@ import { CreditsModule } from '../credits/credits.module';
       CertificateEntity,
       UserEntity,
       ContactUnlockLogEntity,
+      JobApplicationEntity,
     ]),
     StorageModule,
     NotificationsModule,
