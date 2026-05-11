@@ -39,49 +39,23 @@ export class CandidateProfileService {
 
     const candidate = await this.candidateRepository.findOne({
       where,
-      relations: ['jobType'],
+      relations: [
+        'jobType',
+        'level',
+        'workExperiences',
+        'educations',
+        'projects',
+        'certificates',
+        'skills',
+        'skills.skillMetadata',
+        'jobCategories',
+        'jobCategories.jobCategory',
+      ],
     });
 
     if (!candidate) {
       throw new NotFoundException('Candidate profile not found');
     }
-
-    const [
-      workExperiences,
-      educations,
-      projects,
-      certificates,
-      skills,
-      jobCategories,
-    ] = await Promise.all([
-      this.workExperienceRepository.find({
-        where: { candidateId: candidate.id },
-      }),
-      this.educationRepository.find({
-        where: { candidateId: candidate.id },
-      }),
-      this.projectRepository.find({
-        where: { candidateId: candidate.id },
-      }),
-      this.certificateRepository.find({
-        where: { candidateId: candidate.id },
-      }),
-      this.skillTagRepository.find({
-        where: { candidateId: candidate.id },
-        relations: ['skillMetadata'],
-      }),
-      this.candidateJobCategoryRepository.find({
-        where: { candidateId: candidate.id },
-        relations: ['jobCategory'],
-      }),
-    ]);
-
-    candidate.workExperiences = workExperiences;
-    candidate.educations = educations;
-    candidate.projects = projects;
-    candidate.certificates = certificates;
-    candidate.skills = skills;
-    candidate.jobCategories = jobCategories;
 
     return candidate;
   }

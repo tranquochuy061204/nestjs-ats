@@ -4,6 +4,7 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Index,
 } from 'typeorm';
 import { CandidateEntity } from './candidate.entity';
 
@@ -12,6 +13,7 @@ export class CertificateEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column({ name: 'candidate_id' })
   candidateId: number;
 

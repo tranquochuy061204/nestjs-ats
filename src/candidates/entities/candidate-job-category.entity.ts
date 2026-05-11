@@ -14,6 +14,7 @@ export class CandidateJobCategoryEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column({ name: 'candidate_id' })
   candidateId: number;
 

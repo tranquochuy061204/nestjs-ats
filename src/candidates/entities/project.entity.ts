@@ -4,6 +4,7 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { CandidateEntity } from './candidate.entity';
 
@@ -12,6 +13,7 @@ export class ProjectEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column({ name: 'candidate_id' })
   candidateId: number;
 
