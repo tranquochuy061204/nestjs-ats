@@ -27,5 +27,5 @@ COPY --from=builder /usr/src/app/dist ./dist
 
 EXPOSE 3000
 
-# Chạy main.js trong dist/src
-CMD ["node", "dist/src/main.js"]
+# Chạy main.js trong dist
+CMD ["node", "dist/main.js"]
