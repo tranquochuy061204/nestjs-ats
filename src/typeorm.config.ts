@@ -5,8 +5,8 @@ import * as path from 'path';
 const config: DataSourceOptions = {
   type: 'postgres',
   url: process.env.DATABASE_URL,
-  entities: [path.join(__dirname, 'src', '**', '*.entity.{js,ts}')],
-  migrations: [path.join(__dirname, 'src', 'migrations', '*.{js,ts}')],
+  entities: [path.join(__dirname, '**', '*.entity.{js,ts}')],
+  migrations: [path.join(__dirname, 'migrations', '*.{js,ts}')],
   synchronize: false,
   migrationsRun: true,
   migrationsTableName: 'migrations',

@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
-import config from '../typeorm.config';
+import config from './typeorm.config';
 
 // App Base
 import { AppController } from './app.controller';

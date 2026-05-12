@@ -1,4 +1,4 @@
-import { dataSource } from '../../../typeorm.config';
+import { dataSource } from '../../typeorm.config';
 import { JobLevelMetadataEntity } from '../../metadata/job-levels/job-level.entity';
 
 async function seed() {

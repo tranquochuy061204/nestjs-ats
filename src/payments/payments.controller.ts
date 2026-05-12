@@ -93,7 +93,7 @@ export class PaymentsController {
     const finalFrontendUrl = frontendUrl || 'http://localhost:5173';
 
     // Redirect về trang kết quả thanh toán của FE (React/Next.js)
-    const redirectUrl = new URL(`${finalFrontendUrl}/payment/result`);
+    const redirectUrl = new URL(`${finalFrontendUrl}/recruiter/payment/result`);
     redirectUrl.searchParams.set('success', result.success.toString());
     redirectUrl.searchParams.set('orderId', result.orderId || '');
     redirectUrl.searchParams.set('message', result.message);

@@ -82,7 +82,21 @@ export class AdminStatsService {
       users,
       companies,
       jobs,
-      revenue,
+      revenue: {
+        ...revenue,
+        breakdown: [
+          {
+            label: 'Doanh thu từ VIP',
+            value: revenue.fromSubscriptions,
+            orders: revenue.subscriptionOrders,
+          },
+          {
+            label: 'Doanh thu từ Credit',
+            value: revenue.fromCreditTopups,
+            orders: revenue.creditOrders,
+          },
+        ],
+      },
       applications,
       credits,
       headhunting,
@@ -97,7 +111,6 @@ export class AdminStatsService {
     const qb = this.userRepo.createQueryBuilder('u');
 
     const [byRole, byStatus, newUsers] = await Promise.all([
-      // GROUP BY role (filtered by date range)
       qb
         .clone()
         .select('u.role', 'role')
@@ -109,7 +122,6 @@ export class AdminStatsService {
         .groupBy('u.role')
         .getRawMany<{ role: string; count: string }>(),
 
-      // GROUP BY status (filtered by date range)
       qb
         .clone()
         .select('u.status', 'status')
@@ -121,7 +133,6 @@ export class AdminStatsService {
         .groupBy('u.status')
         .getRawMany<{ status: string; count: string }>(),
 
-      // New users in date range
       qb
         .clone()
         .where('u.created_at BETWEEN :start AND :end', {
@@ -161,12 +172,12 @@ export class AdminStatsService {
         .groupBy('c.status')
         .getRawMany<{ status: string; count: string }>(),
 
-      // Công ty có gói trả phí overlap với khoảng thời gian filter
       this.subscriptionRepo
         .createQueryBuilder('cs')
         .innerJoin('cs.package', 'p')
         .select('COUNT(DISTINCT cs.company_id)', 'count')
         .where("p.name != 'free'")
+        .andWhere('cs.status = :status', { status: SubscriptionStatus.ACTIVE })
         .andWhere('cs.start_date <= :end', { end: endDate })
         .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
           start: startDate,
@@ -442,41 +453,61 @@ export class AdminStatsService {
   private async getPhase1Metrics(startDate: Date, endDate: Date) {
     const [mrr, arpu, conversionRate, timeToFill, funnelConversion] =
       await Promise.all([
-        this.getMRR(startDate, endDate),
-        this.getARPU(startDate, endDate),
-        this.getConversionRate(startDate, endDate),
-        this.getTimeToFill(startDate, endDate),
+        this.getMRRWithBreakdown(startDate, endDate),
+        this.getARPUWithBreakdown(startDate, endDate),
+        this.getConversionRateWithBreakdown(startDate, endDate),
+        this.getTimeToFillWithBreakdown(startDate, endDate),
         this.getApplicationFunnelConversion(startDate, endDate),
       ]);
 
-    return {
-      mrr,
-      arpu,
-      conversionRate,
-      timeToFill,
-      funnelConversion,
-    };
+    return { mrr, arpu, conversionRate, timeToFill, funnelConversion };
   }
 
   /** MRR - Monthly Recurring Revenue từ VIP subscriptions */
-  private async getMRR(startDate: Date, endDate: Date): Promise<number> {
-    const result = await this.subscriptionRepo
-      .createQueryBuilder('cs')
-      .innerJoin('cs.package', 'p')
-      .select('SUM(p.price / (p.duration_days / 30.0))', 'mrr')
-      .where("p.name != 'free'")
-      .andWhere('cs.start_date <= :end', { end: endDate })
-      .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
-        start: startDate,
-      })
-      .getRawOne<{ mrr: string }>();
+  private async getMRRWithBreakdown(startDate: Date, endDate: Date) {
+    const [totalMrr, byPackage] = await Promise.all([
+      this.subscriptionRepo
+        .createQueryBuilder('cs')
+        .innerJoin('cs.package', 'p')
+        .select('SUM(p.price / (p.duration_days / 30.0))', 'mrr')
+        .where("p.name != 'free'")
+        .andWhere('cs.start_date <= :end', { end: endDate })
+        .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
+          start: startDate,
+        })
+        .getRawOne<{ mrr: string }>(),
 
-    return Number(result?.mrr ?? 0);
+      this.subscriptionRepo
+        .createQueryBuilder('cs')
+        .innerJoin('cs.package', 'p')
+        .select('p.display_name', 'packageName')
+        .addSelect('SUM(p.price / (p.duration_days / 30.0))', 'mrr')
+        .addSelect('COUNT(cs.id)', 'count')
+        .where("p.name != 'free'")
+        .andWhere('cs.start_date <= :end', { end: endDate })
+        .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
+          start: startDate,
+        })
+        .groupBy('p.display_name')
+        .getRawMany<{ packageName: string; mrr: string; count: string }>(),
+    ]);
+
+    const total = Number(totalMrr?.mrr ?? 0);
+
+    return {
+      value: total,
+      breakdown: byPackage.map((p) => ({
+        label: p.packageName,
+        value: Number(p.mrr),
+        count: Number(p.count),
+        percentage: total > 0 ? Math.round((Number(p.mrr) / total) * 100) : 0,
+      })),
+    };
   }
 
   /** ARPU - Average Revenue Per User (paying companies) */
-  private async getARPU(startDate: Date, endDate: Date): Promise<number> {
-    const [totalRevenue, payingCompanies] = await Promise.all([
+  private async getARPUWithBreakdown(startDate: Date, endDate: Date) {
+    const [totalRevenue, payingCompanies, byType] = await Promise.all([
       this.paymentRepo
         .createQueryBuilder('p')
         .select('SUM(p.amount)', 'total')
@@ -496,68 +527,158 @@ export class AdminStatsService {
           end: endDate,
         })
         .getRawOne<{ count: string }>(),
+
+      this.paymentRepo
+        .createQueryBuilder('p')
+        .select('p.order_type', 'type')
+        .addSelect('SUM(p.amount)', 'revenue')
+        .addSelect('COUNT(DISTINCT p.company_id)', 'companies')
+        .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
+        .andWhere('p.paid_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .groupBy('p.order_type')
+        .getRawMany<{ type: string; revenue: string; companies: string }>(),
     ]);
 
     const revenue = Number(totalRevenue?.total ?? 0);
     const companies = Number(payingCompanies?.count ?? 0);
+    const arpu = companies > 0 ? Math.round(revenue / companies) : 0;
 
-    return companies > 0 ? Math.round(revenue / companies) : 0;
+    return {
+      value: arpu,
+      totalRevenue: revenue,
+      payingCompanies: companies,
+      breakdown: byType.map((t) => ({
+        label:
+          t.type === PaymentOrderType.SUBSCRIPTION
+            ? 'VIP Subscription'
+            : 'Credit Topup',
+        value: Number(t.revenue),
+        companies: Number(t.companies),
+        avgPerCompany:
+          Number(t.companies) > 0
+            ? Math.round(Number(t.revenue) / Number(t.companies))
+            : 0,
+      })),
+    };
   }
 
   /** Conversion Rate: Free → Paid */
-  private async getConversionRate(
+  private async getConversionRateWithBreakdown(
     startDate: Date,
     endDate: Date,
-  ): Promise<number> {
-    const [totalCompanies, paidCompanies] = await Promise.all([
+  ) {
+    const [totalCompanies, paidCompanies, byPackage] = await Promise.all([
       this.companyRepo
         .createQueryBuilder('c')
-        .where('c.created_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
+        .where('c.created_at <= :end', { end: endDate })
         .getCount(),
 
       this.subscriptionRepo
         .createQueryBuilder('cs')
         .innerJoin('cs.package', 'p')
-        .innerJoin('cs.company', 'c')
         .select('COUNT(DISTINCT cs.company_id)', 'count')
         .where("p.name != 'free'")
-        .andWhere('c.created_at BETWEEN :start AND :end', {
+        .andWhere('cs.start_date BETWEEN :start AND :end', {
           start: startDate,
           end: endDate,
         })
         .getRawOne<{ count: string }>(),
+
+      this.subscriptionRepo
+        .createQueryBuilder('cs')
+        .innerJoin('cs.package', 'p')
+        .select('p.display_name', 'packageName')
+        .addSelect('COUNT(DISTINCT cs.company_id)', 'count')
+        .where("p.name != 'free'")
+        .andWhere('cs.start_date BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .groupBy('p.display_name')
+        .getRawMany<{ packageName: string; count: string }>(),
     ]);
 
     const total = totalCompanies;
     const paid = Number(paidCompanies?.count ?? 0);
+    const rate = total > 0 ? Math.round((paid / total) * 1000) / 10 : 0;
 
-    return total > 0 ? Math.round((paid / total) * 1000) / 10 : 0;
+    return {
+      value: rate,
+      totalCompanies: total,
+      paidCompanies: paid,
+      freeCompanies: total - paid,
+      breakdown: byPackage.map((p) => ({
+        label: p.packageName,
+        count: Number(p.count),
+        percentage: paid > 0 ? Math.round((Number(p.count) / paid) * 100) : 0,
+      })),
+    };
   }
 
   /** Time to Fill - Thời gian TB từ đăng tin → tuyển được người (days) */
-  private async getTimeToFill(
-    startDate: Date,
-    endDate: Date,
-  ): Promise<number> {
-    const result = await this.applicationRepo
-      .createQueryBuilder('ja')
-      .innerJoin('ja.job', 'j')
-      .select(
-        'AVG(EXTRACT(EPOCH FROM (ja.updated_at - j.published_at)) / 86400)',
-        'avgDays',
-      )
-      .where("ja.status = 'hired'")
-      .andWhere('ja.updated_at BETWEEN :start AND :end', {
-        start: startDate,
-        end: endDate,
-      })
-      .andWhere('j.published_at IS NOT NULL')
-      .getRawOne<{ avgDays: string }>();
+  private async getTimeToFillWithBreakdown(startDate: Date, endDate: Date) {
+    const dayExpr =
+      'EXTRACT(EPOCH FROM (ja.updated_at - j.published_at)) / 86400';
 
-    return Math.round(Number(result?.avgDays ?? 0) * 10) / 10;
+    const rangeExpr = `CASE WHEN ${dayExpr} <= 7 THEN '0-7 ngày' WHEN ${dayExpr} <= 14 THEN '8-14 ngày' WHEN ${dayExpr} <= 30 THEN '15-30 ngày' ELSE '30+ ngày' END`;
+
+    const [avgDays, byRange] = await Promise.all([
+      this.applicationRepo
+        .createQueryBuilder('ja')
+        .innerJoin('ja.job', 'j')
+        .select(`AVG(${dayExpr})`, 'avgDays')
+        .where("ja.status = 'hired'")
+        .andWhere('ja.updated_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .andWhere('j.published_at IS NOT NULL')
+        .getRawOne<{ avgDays: string }>(),
+
+      this.applicationRepo
+        .createQueryBuilder('ja')
+        .innerJoin('ja.job', 'j')
+        .select(rangeExpr, 'range')
+        .addSelect('COUNT(*)', 'count')
+        .where("ja.status = 'hired'")
+        .andWhere('ja.updated_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .andWhere('j.published_at IS NOT NULL')
+        .groupBy(rangeExpr)
+        .getRawMany<{ range: string; count: string }>(),
+    ]);
+
+    // Sort in JS — TypeORM does not support raw CASE expressions in orderBy()
+    const RANGE_ORDER: Record<string, number> = {
+      '0-7 ngày': 1,
+      '8-14 ngày': 2,
+      '15-30 ngày': 3,
+      '30+ ngày': 4,
+    };
+    byRange.sort(
+      (a, b) => (RANGE_ORDER[a.range] ?? 99) - (RANGE_ORDER[b.range] ?? 99),
+    );
+
+    const avg = Math.round(Number(avgDays?.avgDays ?? 0) * 10) / 10;
+    const totalHired = byRange.reduce((sum, r) => sum + Number(r.count), 0);
+
+    return {
+      value: avg,
+      totalHired,
+      breakdown: byRange.map((r) => ({
+        label: r.range,
+        count: Number(r.count),
+        percentage:
+          totalHired > 0
+            ? Math.round((Number(r.count) / totalHired) * 100)
+            : 0,
+      })),
+    };
   }
 
   /** Application Funnel Conversion Rates */

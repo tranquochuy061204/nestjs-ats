@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "docker:rebuild": "docker-compose down && docker-compose build --no-cache && docker-compose up -d --force-recreate",
+    "kill-port": "npx kill-port 3000",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
