@@ -52,7 +52,13 @@ export class EmployerJobDashboardService {
 
     // Get date range from filter or default to current month
     const dateRange =
-      dto?.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+      dto?.year && dto?.granularity
+        ? DateRangeBuilder.buildRange(
+            dto.year,
+            dto.granularity,
+            dto.date ?? dto.month ?? dto.quarter,
+          )
+        : DateRangeBuilder.getCurrentMonthRange();
 
     const [appStats, funnelStats, trendRows, invStats] = await Promise.all([
       this.queryAppStatsByJob(jobId, dateRange),

@@ -49,7 +49,13 @@ export class AdminStatsService {
 
   async getOverview(timeFilter?: TimeFilterDto) {
     const dateRange =
-      timeFilter?.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+      timeFilter?.year && timeFilter?.granularity
+        ? DateRangeBuilder.buildRange(
+            timeFilter.year,
+            timeFilter.granularity,
+            timeFilter.date ?? timeFilter.month ?? timeFilter.quarter,
+          )
+        : DateRangeBuilder.getCurrentMonthRange();
     const { startDate, endDate } = dateRange;
 
     const [
@@ -60,6 +66,7 @@ export class AdminStatsService {
       applications,
       credits,
       headhunting,
+      phase1Metrics,
     ] = await Promise.all([
       this.getUserStats(startDate, endDate),
       this.getCompanyStats(startDate, endDate),
@@ -68,6 +75,7 @@ export class AdminStatsService {
       this.getApplicationStats(startDate, endDate),
       this.getCreditStats(),
       this.getHeadhuntingStats(),
+      this.getPhase1Metrics(startDate, endDate),
     ]);
 
     return {
@@ -78,6 +86,7 @@ export class AdminStatsService {
       applications,
       credits,
       headhunting,
+      phase1Metrics,
       period: { startDate, endDate },
     };
   }
@@ -152,14 +161,17 @@ export class AdminStatsService {
         .groupBy('c.status')
         .getRawMany<{ status: string; count: string }>(),
 
-      // Công ty có VIP active
+      // Công ty có gói trả phí overlap với khoảng thời gian filter
       this.subscriptionRepo
         .createQueryBuilder('cs')
         .innerJoin('cs.package', 'p')
-        .where('cs.status = :status', { status: SubscriptionStatus.ACTIVE })
-        .andWhere("p.name != 'free'")
-        .andWhere('(cs.end_date IS NULL OR cs.end_date > NOW())')
-        .getCount(),
+        .select('COUNT(DISTINCT cs.company_id)', 'count')
+        .where("p.name != 'free'")
+        .andWhere('cs.start_date <= :end', { end: endDate })
+        .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
+          start: startDate,
+        })
+        .getRawOne<{ count: string }>(),
     ]);
 
     const statusCounts = Object.fromEntries(
@@ -173,7 +185,7 @@ export class AdminStatsService {
       pending: statusCounts[CompanyStatus.PENDING] ?? 0,
       approved: statusCounts[CompanyStatus.APPROVED] ?? 0,
       rejected: statusCounts[CompanyStatus.REJECTED] ?? 0,
-      withActiveVip: withVip,
+      withActiveVip: Number(withVip?.count ?? 0),
     };
   }
 
@@ -221,15 +233,7 @@ export class AdminStatsService {
   // ─── Revenue Stats ────────────────────────────────────────────────────────
 
   private async getRevenueStats(startDate: Date, endDate: Date) {
-    const [overall, periodRevenue, byType] = await Promise.all([
-      // Tổng doanh thu
-      this.paymentRepo
-        .createQueryBuilder('p')
-        .select('SUM(p.amount)', 'total')
-        .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
-        .getRawOne<{ total: string }>(),
-
-      // Doanh thu trong khoảng thời gian
+    const [periodRevenue, byType] = await Promise.all([
       this.paymentRepo
         .createQueryBuilder('p')
         .select('SUM(p.amount)', 'total')
@@ -240,13 +244,16 @@ export class AdminStatsService {
         })
         .getRawOne<{ total: string }>(),
 
-      // Breakdown theo loại
       this.paymentRepo
         .createQueryBuilder('p')
         .select('p.order_type', 'orderType')
         .addSelect('SUM(p.amount)', 'total')
         .addSelect('COUNT(*)', 'count')
         .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
+        .andWhere('p.paid_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
         .groupBy('p.order_type')
         .getRawMany<{ orderType: string; total: string; count: string }>(),
     ]);
@@ -258,9 +265,11 @@ export class AdminStatsService {
       ]),
     );
 
+    const totalInPeriod = Number(periodRevenue?.total ?? 0);
+
     return {
-      totalRevenue: Number(overall?.total ?? 0),
-      revenueInPeriod: Number(periodRevenue?.total ?? 0),
+      totalRevenue: totalInPeriod,
+      revenueInPeriod: totalInPeriod,
       fromSubscriptions: typeMap[PaymentOrderType.SUBSCRIPTION]?.total ?? 0,
       fromCreditTopups: typeMap[PaymentOrderType.CREDIT_TOPUP]?.total ?? 0,
       subscriptionOrders: typeMap[PaymentOrderType.SUBSCRIPTION]?.count ?? 0,
@@ -328,7 +337,13 @@ export class AdminStatsService {
 
   async getRevenueChart(timeFilter?: TimeFilterDto) {
     const dateRange =
-      timeFilter?.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+      timeFilter?.year && timeFilter?.granularity
+        ? DateRangeBuilder.buildRange(
+            timeFilter.year,
+            timeFilter.granularity,
+            timeFilter.date ?? timeFilter.month ?? timeFilter.quarter,
+          )
+        : DateRangeBuilder.getCurrentMonthRange();
     const { startDate, endDate } = dateRange;
 
     const trunc = timeFilter?.granularity
@@ -360,7 +375,13 @@ export class AdminStatsService {
 
   async getUserGrowthChart(timeFilter?: TimeFilterDto) {
     const dateRange =
-      timeFilter?.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+      timeFilter?.year && timeFilter?.granularity
+        ? DateRangeBuilder.buildRange(
+            timeFilter.year,
+            timeFilter.granularity,
+            timeFilter.date ?? timeFilter.month ?? timeFilter.quarter,
+          )
+        : DateRangeBuilder.getCurrentMonthRange();
     const { startDate, endDate } = dateRange;
 
     const trunc = timeFilter?.granularity
@@ -414,5 +435,173 @@ export class AdminStatsService {
       default:
         return 'day';
     }
+  }
+
+  // ─── Phase 1 Metrics ──────────────────────────────────────────────────────
+
+  private async getPhase1Metrics(startDate: Date, endDate: Date) {
+    const [mrr, arpu, conversionRate, timeToFill, funnelConversion] =
+      await Promise.all([
+        this.getMRR(startDate, endDate),
+        this.getARPU(startDate, endDate),
+        this.getConversionRate(startDate, endDate),
+        this.getTimeToFill(startDate, endDate),
+        this.getApplicationFunnelConversion(startDate, endDate),
+      ]);
+
+    return {
+      mrr,
+      arpu,
+      conversionRate,
+      timeToFill,
+      funnelConversion,
+    };
+  }
+
+  /** MRR - Monthly Recurring Revenue từ VIP subscriptions */
+  private async getMRR(startDate: Date, endDate: Date): Promise<number> {
+    const result = await this.subscriptionRepo
+      .createQueryBuilder('cs')
+      .innerJoin('cs.package', 'p')
+      .select('SUM(p.price / (p.duration_days / 30.0))', 'mrr')
+      .where("p.name != 'free'")
+      .andWhere('cs.start_date <= :end', { end: endDate })
+      .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
+        start: startDate,
+      })
+      .getRawOne<{ mrr: string }>();
+
+    return Number(result?.mrr ?? 0);
+  }
+
+  /** ARPU - Average Revenue Per User (paying companies) */
+  private async getARPU(startDate: Date, endDate: Date): Promise<number> {
+    const [totalRevenue, payingCompanies] = await Promise.all([
+      this.paymentRepo
+        .createQueryBuilder('p')
+        .select('SUM(p.amount)', 'total')
+        .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
+        .andWhere('p.paid_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .getRawOne<{ total: string }>(),
+
+      this.paymentRepo
+        .createQueryBuilder('p')
+        .select('COUNT(DISTINCT p.company_id)', 'count')
+        .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
+        .andWhere('p.paid_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .getRawOne<{ count: string }>(),
+    ]);
+
+    const revenue = Number(totalRevenue?.total ?? 0);
+    const companies = Number(payingCompanies?.count ?? 0);
+
+    return companies > 0 ? Math.round(revenue / companies) : 0;
+  }
+
+  /** Conversion Rate: Free → Paid */
+  private async getConversionRate(
+    startDate: Date,
+    endDate: Date,
+  ): Promise<number> {
+    const [totalCompanies, paidCompanies] = await Promise.all([
+      this.companyRepo
+        .createQueryBuilder('c')
+        .where('c.created_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .getCount(),
+
+      this.subscriptionRepo
+        .createQueryBuilder('cs')
+        .innerJoin('cs.package', 'p')
+        .innerJoin('cs.company', 'c')
+        .select('COUNT(DISTINCT cs.company_id)', 'count')
+        .where("p.name != 'free'")
+        .andWhere('c.created_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .getRawOne<{ count: string }>(),
+    ]);
+
+    const total = totalCompanies;
+    const paid = Number(paidCompanies?.count ?? 0);
+
+    return total > 0 ? Math.round((paid / total) * 1000) / 10 : 0;
+  }
+
+  /** Time to Fill - Thời gian TB từ đăng tin → tuyển được người (days) */
+  private async getTimeToFill(
+    startDate: Date,
+    endDate: Date,
+  ): Promise<number> {
+    const result = await this.applicationRepo
+      .createQueryBuilder('ja')
+      .innerJoin('ja.job', 'j')
+      .select(
+        'AVG(EXTRACT(EPOCH FROM (ja.updated_at - j.published_at)) / 86400)',
+        'avgDays',
+      )
+      .where("ja.status = 'hired'")
+      .andWhere('ja.updated_at BETWEEN :start AND :end', {
+        start: startDate,
+        end: endDate,
+      })
+      .andWhere('j.published_at IS NOT NULL')
+      .getRawOne<{ avgDays: string }>();
+
+    return Math.round(Number(result?.avgDays ?? 0) * 10) / 10;
+  }
+
+  /** Application Funnel Conversion Rates */
+  private async getApplicationFunnelConversion(
+    startDate: Date,
+    endDate: Date,
+  ) {
+    const result = await this.applicationRepo
+      .createQueryBuilder('ja')
+      .select('COUNT(*)', 'total')
+      .addSelect(
+        "COUNT(*) FILTER (WHERE ja.status IN ('shortlisted', 'skill_test', 'interview', 'offer', 'hired'))",
+        'shortlisted',
+      )
+      .addSelect(
+        "COUNT(*) FILTER (WHERE ja.status IN ('interview', 'offer', 'hired'))",
+        'interview',
+      )
+      .addSelect("COUNT(*) FILTER (WHERE ja.status = 'hired')", 'hired')
+      .where('ja.applied_at BETWEEN :start AND :end', {
+        start: startDate,
+        end: endDate,
+      })
+      .getRawOne<{
+        total: string;
+        shortlisted: string;
+        interview: string;
+        hired: string;
+      }>();
+
+    const total = Number(result?.total ?? 0);
+    const shortlisted = Number(result?.shortlisted ?? 0);
+    const interview = Number(result?.interview ?? 0);
+    const hired = Number(result?.hired ?? 0);
+
+    return {
+      appliedToShortlisted:
+        total > 0 ? Math.round((shortlisted / total) * 1000) / 10 : 0,
+      shortlistedToInterview:
+        shortlisted > 0
+          ? Math.round((interview / shortlisted) * 1000) / 10
+          : 0,
+      interviewToHired:
+        interview > 0 ? Math.round((hired / interview) * 1000) / 10 : 0,
+    };
   }
 }
