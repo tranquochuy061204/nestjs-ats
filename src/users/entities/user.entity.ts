@@ -12,8 +12,7 @@ import { Exclude } from 'class-transformer';
 
 import { CandidateEntity } from '../../candidates/entities/candidate.entity';
 import { EmployerEntity } from '../../employers/entities/employer.entity';
-
-export const BCRYPT_SALT_ROUNDS = 10;
+import { AUTH_CONFIG } from '../../common/constants/auth.constant';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -83,6 +82,6 @@ export class UserEntity {
 
   @BeforeInsert()
   async hashPassword() {
-    this.password = await bcrypt.hash(this.password, BCRYPT_SALT_ROUNDS);
+    this.password = await bcrypt.hash(this.password, AUTH_CONFIG.SALT_ROUNDS);
   }
 }

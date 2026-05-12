@@ -9,10 +9,11 @@ const { PDFParse } = require('pdf-parse') as {
   };
 };
 
+import { AI_CONFIG } from '../constants/ai.constant';
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const PDF_TEXT_MIN_LENGTH = 50; // ký tự tối thiểu để coi là extract thành công
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -169,7 +170,7 @@ export class AiProviderService {
       );
     }
 
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = AI_CONFIG.OPENROUTER_MAX_RETRIES;
     let attempt = 1;
 
     while (attempt <= MAX_RETRIES) {
@@ -200,7 +201,7 @@ export class AiProviderService {
           (response.status === 429 || response.status >= 500) &&
           attempt < MAX_RETRIES
         ) {
-          const delay = attempt * 2000;
+          const delay = attempt * AI_CONFIG.OPENROUTER_BASE_RETRY_DELAY_MS;
           this.logger.warn(
             `OpenRouter rate limited or temp error (${response.status}). Retrying in ${delay}ms...`,
           );
@@ -223,7 +224,9 @@ export class AiProviderService {
         // Có thể retry nếu trả về rỗng không hợp lệ
         if (attempt < MAX_RETRIES) {
           this.logger.warn(`OpenRouter empty response. Retrying...`);
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await new Promise((resolve) =>
+            setTimeout(resolve, AI_CONFIG.OPENROUTER_BASE_RETRY_DELAY_MS),
+          );
           attempt++;
           continue;
         }
@@ -250,7 +253,7 @@ export class AiProviderService {
       const parsed = await parser.getText();
       const text = (parsed.text ?? '').trim();
 
-      if (text.length < PDF_TEXT_MIN_LENGTH) {
+      if (text.length < AI_CONFIG.PDF_TEXT_MIN_LENGTH) {
         this.logger.warn(
           `PDF text extraction yielded too little text (${text.length} chars) — likely a scanned image`,
         );

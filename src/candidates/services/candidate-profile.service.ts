@@ -35,23 +35,28 @@ export class CandidateProfileService {
   ) {}
 
   async getProfile(userId: number, reqCandidateId?: number) {
-    const where = reqCandidateId ? { id: reqCandidateId } : { userId };
+    const qb = this.candidateRepository
+      .createQueryBuilder('candidate')
+      // Scalar relations (ManyToOne → single row join — very cheap)
+      .leftJoinAndSelect('candidate.jobType', 'jobType')
+      .leftJoinAndSelect('candidate.level', 'level')
+      // Collection relations (OneToMany — each adds one extra join, NOT N+1)
+      .leftJoinAndSelect('candidate.workExperiences', 'workExperiences')
+      .leftJoinAndSelect('candidate.educations', 'educations')
+      .leftJoinAndSelect('candidate.projects', 'projects')
+      .leftJoinAndSelect('candidate.certificates', 'certificates')
+      .leftJoinAndSelect('candidate.skills', 'skills')
+      .leftJoinAndSelect('skills.skillMetadata', 'skillMetadata')
+      .leftJoinAndSelect('candidate.jobCategories', 'jobCategories')
+      .leftJoinAndSelect('jobCategories.jobCategory', 'jobCategory');
 
-    const candidate = await this.candidateRepository.findOne({
-      where,
-      relations: [
-        'jobType',
-        'level',
-        'workExperiences',
-        'educations',
-        'projects',
-        'certificates',
-        'skills',
-        'skills.skillMetadata',
-        'jobCategories',
-        'jobCategories.jobCategory',
-      ],
-    });
+    if (reqCandidateId) {
+      qb.where('candidate.id = :id', { id: reqCandidateId });
+    } else {
+      qb.where('candidate.userId = :userId', { userId });
+    }
+
+    const candidate = await qb.getOne();
 
     if (!candidate) {
       throw new NotFoundException('Candidate profile not found');

@@ -1,4 +1,12 @@
 export const AUTH_CONFIG = {
+  /**
+   * Number of bcrypt salt rounds used when hashing passwords.
+   *
+   * Rationale: 10 rounds is the bcrypt library default, providing a good
+   * balance between security (brute-force resistance) and CPU cost
+   * (~100 ms per hash on modern hardware). Increase to 12 for stricter
+   * security requirements at the cost of higher latency.
+   */
   SALT_ROUNDS: 10,
   VERIFICATION_TOKEN_BYTES: 32,
   RESET_PASSWORD_EXPIRES_MIN: 15,
