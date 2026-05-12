@@ -1,20 +1,11 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { DASHBOARD_CONFIG } from '../../common/constants/dashboard.constant';
-import { TimeGranularity, Quarter } from '../../common/enums/time-period.enum';
-import { DateRange, DateRangeBuilder } from '../../common/utils/date-range.util';
+import { TimeGranularity, Quarter } from '../enums/time-period.enum';
+import { DateRange, DateRangeBuilder } from '../utils/date-range.util';
 
-const DashboardFilterSchema = z
+const TimeFilterSchema = z
   .object({
-    expiringSoonDays: z.coerce
-      .number()
-      .int()
-      .min(DASHBOARD_CONFIG.EXPIRING_SOON_DAYS.MIN)
-      .max(DASHBOARD_CONFIG.EXPIRING_SOON_DAYS.MAX)
-      .default(DASHBOARD_CONFIG.EXPIRING_SOON_DAYS.DEFAULT),
-
-    // Time filter fields (optional - default to current month)
     year: z.coerce.number().int().min(2020).max(2030).optional(),
     granularity: z.nativeEnum(TimeGranularity).optional(),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -24,7 +15,11 @@ const DashboardFilterSchema = z
   .refine(
     (data) => {
       const hasFilter =
-        data.year || data.granularity || data.date || data.month || data.quarter;
+        data.year ||
+        data.granularity ||
+        data.date ||
+        data.month ||
+        data.quarter;
       if (!hasFilter) return true;
 
       if (!data.year || !data.granularity) return false;
@@ -36,18 +31,13 @@ const DashboardFilterSchema = z
         return false;
       return true;
     },
-    { message: 'Invalid time filter' },
+    {
+      message:
+        'Invalid time filter: missing required fields for selected granularity',
+    },
   );
 
-export class DashboardFilterDto extends createZodDto(DashboardFilterSchema) {
-  @ApiPropertyOptional({
-    description: 'Số ngày tới để xác định job "sắp hết hạn" (1–30, mặc định 7)',
-    default: DASHBOARD_CONFIG.EXPIRING_SOON_DAYS.DEFAULT,
-    minimum: DASHBOARD_CONFIG.EXPIRING_SOON_DAYS.MIN,
-    maximum: DASHBOARD_CONFIG.EXPIRING_SOON_DAYS.MAX,
-  })
-  expiringSoonDays: number;
-
+export class TimeFilterDto extends createZodDto(TimeFilterSchema) {
   @ApiPropertyOptional({ description: 'Năm (2020-2030)' })
   year?: number;
 

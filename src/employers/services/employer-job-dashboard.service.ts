@@ -16,6 +16,8 @@ import {
   RawFunnelStats,
   RawInvitationStats,
 } from '../interfaces/employer-dashboard.interface';
+import { DateRangeBuilder, DateRange } from '../../common/utils/date-range.util';
+import { DashboardFilterDto } from '../dto/dashboard-filter.dto';
 
 @Injectable()
 export class EmployerJobDashboardService {
@@ -33,6 +35,7 @@ export class EmployerJobDashboardService {
   async getJobDashboard(
     employerUserId: number,
     jobId: number,
+    dto?: DashboardFilterDto,
   ): Promise<unknown> {
     const { companyId } = await this.findEmployerWithCompany(employerUserId);
 
@@ -47,11 +50,15 @@ export class EmployerJobDashboardService {
       );
     }
 
+    // Get date range from filter or default to current month
+    const dateRange =
+      dto?.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+
     const [appStats, funnelStats, trendRows, invStats] = await Promise.all([
-      this.queryAppStatsByJob(jobId),
-      this.queryFunnelStatsByJob(jobId),
-      this.queryTrendByJob(jobId, DASHBOARD_CONFIG.TREND_DAYS),
-      this.queryInvitationsByJob(jobId),
+      this.queryAppStatsByJob(jobId, dateRange),
+      this.queryFunnelStatsByJob(jobId, dateRange),
+      this.queryTrendByJob(jobId, dateRange),
+      this.queryInvitationsByJob(jobId, dateRange),
     ]);
 
     const byStatus = {
@@ -95,7 +102,7 @@ export class EmployerJobDashboardService {
           ),
         },
         trend: {
-          last7Days: fillTrendDays(trendRows, DASHBOARD_CONFIG.TREND_DAYS),
+          data: fillTrendDays(trendRows, dateRange),
         },
       },
       invitations: {
@@ -110,7 +117,10 @@ export class EmployerJobDashboardService {
   // ─── Raw Queries ──────────────────────────────────────────────────────────
 
   /** [Per-Job Q1] Application counts for a specific job */
-  private async queryAppStatsByJob(jobId: number): Promise<RawAppStats> {
+  private async queryAppStatsByJob(
+    jobId: number,
+    dateRange: DateRange,
+  ): Promise<RawAppStats> {
     const rows = await this.dataSource.query<RawAppStats[]>(
       `SELECT
         COUNT(*)                                                          AS total,
@@ -123,8 +133,9 @@ export class EmployerJobDashboardService {
         COUNT(*) FILTER (WHERE status = 'rejected')                      AS rejected,
         COUNT(*) FILTER (WHERE status = 'withdrawn')                     AS withdrawn
       FROM job_application
-      WHERE job_id = $1`,
-      [jobId],
+      WHERE job_id = $1
+        AND applied_at BETWEEN $2 AND $3`,
+      [jobId, dateRange.startDate, dateRange.endDate],
     );
     return (
       rows[0] ?? {
@@ -142,7 +153,10 @@ export class EmployerJobDashboardService {
   }
 
   /** [Per-Job Q2] Funnel Stats Cumulative via history */
-  private async queryFunnelStatsByJob(jobId: number): Promise<RawFunnelStats> {
+  private async queryFunnelStatsByJob(
+    jobId: number,
+    dateRange: DateRange,
+  ): Promise<RawFunnelStats> {
     const rows = await this.dataSource.query<RawFunnelStats[]>(
       `SELECT
         COUNT(DISTINCT ja.id) AS total_applied,
@@ -152,8 +166,9 @@ export class EmployerJobDashboardService {
         COUNT(DISTINCT CASE WHEN ja.status = 'rejected' OR ah.new_status = 'rejected' THEN ja.id END) AS total_rejected
       FROM job_application ja
       LEFT JOIN application_status_history ah ON ah.application_id = ja.id
-      WHERE ja.job_id = $1`,
-      [jobId],
+      WHERE ja.job_id = $1
+        AND ja.applied_at BETWEEN $2 AND $3`,
+      [jobId, dateRange.startDate, dateRange.endDate],
     );
     return (
       rows[0] ?? {
@@ -169,7 +184,7 @@ export class EmployerJobDashboardService {
   /** [Per-Job Q3] Trend for a specific job */
   private async queryTrendByJob(
     jobId: number,
-    days: number,
+    dateRange: DateRange,
   ): Promise<RawTrendRow[]> {
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
@@ -177,16 +192,17 @@ export class EmployerJobDashboardService {
         COUNT(*)::text                                       AS count
       FROM job_application
       WHERE job_id = $1
-        AND applied_at >= NOW() - ($2 * INTERVAL '1 day')
+        AND applied_at BETWEEN $2 AND $3
       GROUP BY TO_CHAR(applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
       ORDER BY date ASC`,
-      [jobId, days],
+      [jobId, dateRange.startDate, dateRange.endDate],
     );
   }
 
   /** [Per-Job Q4] Invitation stats for a specific job */
   private async queryInvitationsByJob(
     jobId: number,
+    dateRange: DateRange,
   ): Promise<RawInvitationStats> {
     const rows = await this.dataSource.query<RawInvitationStats[]>(
       `SELECT
@@ -195,8 +211,9 @@ export class EmployerJobDashboardService {
         COUNT(*) FILTER (WHERE status = 'declined')                  AS declined,
         COUNT(*) FILTER (WHERE status = 'pending')                   AS pending
       FROM job_invitation
-      WHERE job_id = $1`,
-      [jobId],
+      WHERE job_id = $1
+        AND created_at BETWEEN $2 AND $3`,
+      [jobId, dateRange.startDate, dateRange.endDate],
     );
     return rows[0] ?? { sent: '0', accepted: '0', declined: '0', pending: '0' };
   }

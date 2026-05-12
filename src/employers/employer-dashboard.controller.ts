@@ -38,7 +38,7 @@ export class EmployerDashboardController {
   @ApiOperation({
     summary: 'Thống kê chi tiết cho 1 tin tuyển dụng (Per-Job Drill-down)',
     description:
-      'Trả về application pipeline, conversion rate, trend 7 ngày và invitation stats cho 1 job cụ thể.',
+      'Trả về application pipeline, conversion rate, trend và invitation stats cho 1 job cụ thể. Mặc định hiển thị stats tháng hiện tại.',
   })
   @ApiParam({ name: 'jobId', description: 'ID tin tuyển dụng' })
   @ApiResponse({ status: 200, description: 'Job stats thành công' })
@@ -49,8 +49,9 @@ export class EmployerDashboardController {
   getJobStats(
     @Req() req: Request,
     @Param('jobId', ParseIntPipe) jobId: number,
+    @Query() dto: DashboardFilterDto,
   ) {
     const user = req.user as { id: number };
-    return this.jobDashboardService.getJobDashboard(user.id, jobId);
+    return this.jobDashboardService.getJobDashboard(user.id, jobId, dto);
   }
 }

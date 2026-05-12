@@ -22,6 +22,9 @@ import {
   CompanySubscriptionEntity,
   SubscriptionStatus,
 } from '../../subscriptions/entities/company-subscription.entity';
+import { TimeFilterDto } from '../../common/dto/time-filter.dto';
+import { DateRangeBuilder } from '../../common/utils/date-range.util';
+import { TimeGranularity } from '../../common/enums/time-period.enum';
 
 @Injectable()
 export class AdminStatsService {
@@ -44,7 +47,11 @@ export class AdminStatsService {
     private readonly subscriptionRepo: Repository<CompanySubscriptionEntity>,
   ) {}
 
-  async getOverview() {
+  async getOverview(timeFilter?: TimeFilterDto) {
+    const dateRange =
+      timeFilter?.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+    const { startDate, endDate } = dateRange;
+
     const [
       users,
       companies,
@@ -54,11 +61,11 @@ export class AdminStatsService {
       credits,
       headhunting,
     ] = await Promise.all([
-      this.getUserStats(),
-      this.getCompanyStats(),
-      this.getJobStats(),
-      this.getRevenueStats(),
-      this.getApplicationStats(),
+      this.getUserStats(startDate, endDate),
+      this.getCompanyStats(startDate, endDate),
+      this.getJobStats(startDate, endDate),
+      this.getRevenueStats(startDate, endDate),
+      this.getApplicationStats(startDate, endDate),
       this.getCreditStats(),
       this.getHeadhuntingStats(),
     ]);
@@ -71,35 +78,47 @@ export class AdminStatsService {
       applications,
       credits,
       headhunting,
+      period: { startDate, endDate },
     };
   }
 
   // ─── User Stats ───────────────────────────────────────────────────────────
 
-  private async getUserStats() {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  private async getUserStats(startDate: Date, endDate: Date) {
+    const qb = this.userRepo.createQueryBuilder('u');
 
     const [byRole, byStatus, newUsers] = await Promise.all([
-      // GROUP BY role
-      this.userRepo
-        .createQueryBuilder('u')
+      // GROUP BY role (filtered by date range)
+      qb
+        .clone()
         .select('u.role', 'role')
         .addSelect('COUNT(*)', 'count')
+        .where('u.created_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
         .groupBy('u.role')
         .getRawMany<{ role: string; count: string }>(),
 
-      // GROUP BY status
-      this.userRepo
-        .createQueryBuilder('u')
+      // GROUP BY status (filtered by date range)
+      qb
+        .clone()
         .select('u.status', 'status')
         .addSelect('COUNT(*)', 'count')
+        .where('u.created_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
         .groupBy('u.status')
         .getRawMany<{ status: string; count: string }>(),
 
-      // New in last 30 days
-      this.userRepo
-        .createQueryBuilder('u')
-        .where('u.created_at >= :date', { date: thirtyDaysAgo })
+      // New users in date range
+      qb
+        .clone()
+        .where('u.created_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
         .getCount(),
     ]);
 
@@ -118,13 +137,13 @@ export class AdminStatsService {
       admins: roleCounts['admin'] ?? 0,
       active: statusCounts['active'] ?? 0,
       locked: statusCounts['locked'] ?? 0,
-      newLast30Days: newUsers,
+      newInPeriod: newUsers,
     };
   }
 
   // ─── Company Stats ────────────────────────────────────────────────────────
 
-  private async getCompanyStats() {
+  private async getCompanyStats(startDate: Date, endDate: Date) {
     const [byStatus, withVip] = await Promise.all([
       this.companyRepo
         .createQueryBuilder('c')
@@ -160,20 +179,25 @@ export class AdminStatsService {
 
   // ─── Job Stats ────────────────────────────────────────────────────────────
 
-  private async getJobStats() {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
+  private async getJobStats(startDate: Date, endDate: Date) {
     const [byStatus, newPublished] = await Promise.all([
       this.jobRepo
         .createQueryBuilder('j')
         .select('j.status', 'status')
         .addSelect('COUNT(*)', 'count')
+        .where('j.created_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
         .groupBy('j.status')
         .getRawMany<{ status: string; count: string }>(),
 
       this.jobRepo
         .createQueryBuilder('j')
-        .where('j.published_at >= :date', { date: sevenDaysAgo })
+        .where('j.published_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
         .andWhere('j.status = :status', { status: JobStatus.PUBLISHED })
         .getCount(),
     ]);
@@ -190,17 +214,14 @@ export class AdminStatsService {
       published: statusCounts[JobStatus.PUBLISHED] ?? 0,
       rejected: statusCounts[JobStatus.REJECTED] ?? 0,
       closed: statusCounts[JobStatus.CLOSED] ?? 0,
-      newPublishedLast7Days: newPublished,
+      newPublishedInPeriod: newPublished,
     };
   }
 
   // ─── Revenue Stats ────────────────────────────────────────────────────────
 
-  private async getRevenueStats() {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const [overall, monthly, byType] = await Promise.all([
+  private async getRevenueStats(startDate: Date, endDate: Date) {
+    const [overall, periodRevenue, byType] = await Promise.all([
       // Tổng doanh thu
       this.paymentRepo
         .createQueryBuilder('p')
@@ -208,12 +229,15 @@ export class AdminStatsService {
         .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
         .getRawOne<{ total: string }>(),
 
-      // Doanh thu tháng này
+      // Doanh thu trong khoảng thời gian
       this.paymentRepo
         .createQueryBuilder('p')
         .select('SUM(p.amount)', 'total')
         .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
-        .andWhere('p.paid_at >= :startOfMonth', { startOfMonth })
+        .andWhere('p.paid_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
         .getRawOne<{ total: string }>(),
 
       // Breakdown theo loại
@@ -236,7 +260,7 @@ export class AdminStatsService {
 
     return {
       totalRevenue: Number(overall?.total ?? 0),
-      revenueThisMonth: Number(monthly?.total ?? 0),
+      revenueInPeriod: Number(periodRevenue?.total ?? 0),
       fromSubscriptions: typeMap[PaymentOrderType.SUBSCRIPTION]?.total ?? 0,
       fromCreditTopups: typeMap[PaymentOrderType.CREDIT_TOPUP]?.total ?? 0,
       subscriptionOrders: typeMap[PaymentOrderType.SUBSCRIPTION]?.count ?? 0,
@@ -246,20 +270,19 @@ export class AdminStatsService {
 
   // ─── Application Stats ────────────────────────────────────────────────────
 
-  private async getApplicationStats() {
-    const startOfWeek = new Date();
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const [total, thisWeek] = await Promise.all([
+  private async getApplicationStats(startDate: Date, endDate: Date) {
+    const [total, inPeriod] = await Promise.all([
       this.applicationRepo.count(),
       this.applicationRepo
         .createQueryBuilder('a')
-        .where('a.applied_at >= :startOfWeek', { startOfWeek })
+        .where('a.applied_at BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
         .getCount(),
     ]);
 
-    return { total, thisWeek };
+    return { total, inPeriod };
   }
 
   // ─── Credit Stats ─────────────────────────────────────────────────────────
@@ -303,18 +326,14 @@ export class AdminStatsService {
 
   // ─── Revenue Chart ────────────────────────────────────────────────────────
 
-  async getRevenueChart(
-    period: 'daily' | 'weekly' | 'monthly',
-    from?: string,
-    to?: string,
-  ) {
-    const fromDate = from
-      ? new Date(from)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const toDate = to ? new Date(to) : new Date();
+  async getRevenueChart(timeFilter?: TimeFilterDto) {
+    const dateRange =
+      timeFilter?.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+    const { startDate, endDate } = dateRange;
 
-    const trunc =
-      period === 'daily' ? 'day' : period === 'weekly' ? 'week' : 'month';
+    const trunc = timeFilter?.granularity
+      ? this.getTruncForGranularity(timeFilter.granularity)
+      : 'day';
 
     const rows = await this.paymentRepo
       .createQueryBuilder('p')
@@ -323,8 +342,8 @@ export class AdminStatsService {
       .addSelect('COUNT(*)', 'orders')
       .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
       .andWhere('p.paid_at BETWEEN :from AND :to', {
-        from: fromDate,
-        to: toDate,
+        from: startDate,
+        to: endDate,
       })
       .groupBy(`DATE_TRUNC('${trunc}', p.paid_at)`)
       .orderBy(`DATE_TRUNC('${trunc}', p.paid_at)`, 'ASC')
@@ -339,17 +358,24 @@ export class AdminStatsService {
 
   // ─── User Growth Chart ────────────────────────────────────────────────────
 
-  async getUserGrowthChart(period: 'daily' | 'weekly' | 'monthly') {
-    const fromDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    const trunc =
-      period === 'daily' ? 'day' : period === 'weekly' ? 'week' : 'month';
+  async getUserGrowthChart(timeFilter?: TimeFilterDto) {
+    const dateRange =
+      timeFilter?.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+    const { startDate, endDate } = dateRange;
+
+    const trunc = timeFilter?.granularity
+      ? this.getTruncForGranularity(timeFilter.granularity)
+      : 'day';
 
     const rows = await this.userRepo
       .createQueryBuilder('u')
       .select(`DATE_TRUNC('${trunc}', u.created_at)`, 'period')
       .addSelect('COUNT(*)', 'newUsers')
       .addSelect('u.role', 'role')
-      .where('u.created_at >= :from', { from: fromDate })
+      .where('u.created_at BETWEEN :from AND :to', {
+        from: startDate,
+        to: endDate,
+      })
       .groupBy(`DATE_TRUNC('${trunc}', u.created_at), u.role`)
       .orderBy(`DATE_TRUNC('${trunc}', u.created_at)`, 'ASC')
       .getRawMany<{ period: string; newUsers: string; role: string }>();
@@ -375,5 +401,18 @@ export class AdminStatsService {
     });
 
     return Object.values(results);
+  }
+
+  private getTruncForGranularity(granularity: TimeGranularity): string {
+    switch (granularity) {
+      case TimeGranularity.DAY:
+        return 'day';
+      case TimeGranularity.MONTH:
+        return 'month';
+      case TimeGranularity.QUARTER:
+        return 'quarter';
+      default:
+        return 'day';
+    }
   }
 }

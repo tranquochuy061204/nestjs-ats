@@ -1,0 +1,12 @@
+export enum TimeGranularity {
+  DAY = 'day',
+  MONTH = 'month',
+  QUARTER = 'quarter',
+}
+
+export enum Quarter {
+  Q1 = 'Q1',
+  Q2 = 'Q2',
+  Q3 = 'Q3',
+  Q4 = 'Q4',
+}

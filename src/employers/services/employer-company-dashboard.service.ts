@@ -13,6 +13,7 @@ import {
   RawHeadhuntingStats,
   RawTopJob,
 } from '../interfaces/employer-dashboard.interface';
+import { DateRangeBuilder, DateRange } from '../../common/utils/date-range.util';
 
 @Injectable()
 export class EmployerCompanyDashboardService {
@@ -32,14 +33,18 @@ export class EmployerCompanyDashboardService {
     const { companyId, employerId } =
       await this.findEmployerWithCompany(employerUserId);
 
+    // Get date range from filter or default to current month
+    const dateRange =
+      dto.getDateRange() || DateRangeBuilder.getCurrentMonthRange();
+
     const [jobStats, appStats, funnelStats, trendRows, headhunting, topJobs] =
       await Promise.all([
         this.queryJobStats(companyId, dto.expiringSoonDays),
-        this.queryAppStats(companyId),
-        this.queryFunnelStats(companyId),
-        this.queryTrend(companyId, DASHBOARD_CONFIG.TREND_DAYS),
-        this.queryHeadhuntingStats(employerId),
-        this.queryTopJobs(companyId),
+        this.queryAppStats(companyId, dateRange),
+        this.queryFunnelStats(companyId, dateRange),
+        this.queryTrend(companyId, dateRange),
+        this.queryHeadhuntingStats(employerId, dateRange),
+        this.queryTopJobs(companyId, dateRange),
       ]);
 
     const byStatus = {
@@ -90,7 +95,7 @@ export class EmployerCompanyDashboardService {
           ),
         },
         trend: {
-          last7Days: fillTrendDays(trendRows, DASHBOARD_CONFIG.TREND_DAYS),
+          data: fillTrendDays(trendRows, dateRange),
         },
       },
       headhunting: {
@@ -147,7 +152,10 @@ export class EmployerCompanyDashboardService {
   }
 
   /** [Q2] Application counts by status (scoped to company) — 1 scan via JOIN */
-  private async queryAppStats(companyId: number): Promise<RawAppStats> {
+  private async queryAppStats(
+    companyId: number,
+    dateRange: DateRange,
+  ): Promise<RawAppStats> {
     const rows = await this.dataSource.query<RawAppStats[]>(
       `SELECT
         COUNT(*)                                                          AS total,
@@ -161,8 +169,9 @@ export class EmployerCompanyDashboardService {
         COUNT(*) FILTER (WHERE ja.status = 'withdrawn')                  AS withdrawn
       FROM job_application ja
       INNER JOIN job j ON j.id = ja.job_id
-      WHERE j.company_id = $1`,
-      [companyId],
+      WHERE j.company_id = $1
+        AND ja.applied_at BETWEEN $2 AND $3`,
+      [companyId, dateRange.startDate, dateRange.endDate],
     );
     return (
       rows[0] ?? {
@@ -180,7 +189,10 @@ export class EmployerCompanyDashboardService {
   }
 
   /** [Q3] Funnel Stats Cumulative via history */
-  private async queryFunnelStats(companyId: number): Promise<RawFunnelStats> {
+  private async queryFunnelStats(
+    companyId: number,
+    dateRange: DateRange,
+  ): Promise<RawFunnelStats> {
     const rows = await this.dataSource.query<RawFunnelStats[]>(
       `SELECT
         COUNT(DISTINCT ja.id) AS total_applied,
@@ -191,8 +203,9 @@ export class EmployerCompanyDashboardService {
       FROM job_application ja
       INNER JOIN job j ON j.id = ja.job_id
       LEFT JOIN application_status_history ah ON ah.application_id = ja.id
-      WHERE j.company_id = $1`,
-      [companyId],
+      WHERE j.company_id = $1
+        AND ja.applied_at BETWEEN $2 AND $3`,
+      [companyId, dateRange.startDate, dateRange.endDate],
     );
     return (
       rows[0] ?? {
@@ -205,10 +218,10 @@ export class EmployerCompanyDashboardService {
     );
   }
 
-  /** [Q4] 7-day application trend — GROUP BY DATE */
+  /** [Q4] Application trend — GROUP BY DATE */
   private async queryTrend(
     companyId: number,
-    days: number,
+    dateRange: DateRange,
   ): Promise<RawTrendRow[]> {
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
@@ -217,16 +230,17 @@ export class EmployerCompanyDashboardService {
       FROM job_application ja
       INNER JOIN job j ON j.id = ja.job_id
       WHERE j.company_id = $1
-        AND ja.applied_at >= NOW() - ($2 * INTERVAL '1 day')
+        AND ja.applied_at BETWEEN $2 AND $3
       GROUP BY TO_CHAR(ja.applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
       ORDER BY date ASC`,
-      [companyId, days],
+      [companyId, dateRange.startDate, dateRange.endDate],
     );
   }
 
   /** [Q5] Headhunting stats (scoped to personal employer_id) — 1 scan */
   private async queryHeadhuntingStats(
     employerId: number,
+    dateRange: DateRange,
   ): Promise<RawHeadhuntingStats> {
     const rows = await this.dataSource.query<RawHeadhuntingStats[]>(
       `SELECT
@@ -236,8 +250,9 @@ export class EmployerCompanyDashboardService {
         COUNT(*) FILTER (WHERE status = 'pending')                       AS pending,
         (SELECT COUNT(*) FROM saved_candidate WHERE employer_id = $1)    AS saved_candidates
       FROM job_invitation
-      WHERE employer_id = $1`,
-      [employerId],
+      WHERE employer_id = $1
+        AND created_at BETWEEN $2 AND $3`,
+      [employerId, dateRange.startDate, dateRange.endDate],
     );
     return (
       rows[0] ?? {
@@ -251,7 +266,10 @@ export class EmployerCompanyDashboardService {
   }
 
   /** [Q6] Top 5 jobs by application count */
-  private async queryTopJobs(companyId: number): Promise<RawTopJob[]> {
+  private async queryTopJobs(
+    companyId: number,
+    dateRange: DateRange,
+  ): Promise<RawTopJob[]> {
     return this.dataSource.query<RawTopJob[]>(
       `SELECT
         j.id           AS job_id,
@@ -259,12 +277,17 @@ export class EmployerCompanyDashboardService {
         j.status,
         COUNT(ja.id)   AS application_count
       FROM job j
-      LEFT JOIN job_application ja ON ja.job_id = j.id
+      LEFT JOIN job_application ja ON ja.job_id = j.id AND ja.applied_at BETWEEN $2 AND $3
       WHERE j.company_id = $1
       GROUP BY j.id, j.title, j.status
       ORDER BY application_count DESC
-      LIMIT $2`,
-      [companyId, DASHBOARD_CONFIG.TOP_JOBS_LIMIT],
+      LIMIT $4`,
+      [
+        companyId,
+        dateRange.startDate,
+        dateRange.endDate,
+        DASHBOARD_CONFIG.TOP_JOBS_LIMIT,
+      ],
     );
   }
 
