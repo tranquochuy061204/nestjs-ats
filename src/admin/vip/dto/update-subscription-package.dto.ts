@@ -6,13 +6,12 @@ const UpdateSubscriptionPackageSchema = z.object({
   displayName: z.string().optional(),
   price: z.coerce.number().min(0).optional(),
   durationDays: z.coerce.number().int().optional(),
-  
   maxActiveJobs: z.coerce.number().int().optional(),
   jobDurationDays: z.coerce.number().int().optional(),
   maxProfileViewsPerJob: z.coerce.number().int().optional(),
   dailyApplicationProcessLimit: z.coerce.number().int().optional(),
   bumpPostQuota: z.coerce.number().int().min(0).optional(),
-  maxScreeningQuestions: z.coerce.number().int().min(0).optional(),
+
   monthlyHeadhuntProfileViews: z.coerce.number().int().optional(),
   monthlyFreeProceeds: z.coerce.number().int().min(0).optional(),
 
@@ -50,9 +49,6 @@ export class UpdateSubscriptionPackageDto extends createZodDto(UpdateSubscriptio
 
   @ApiPropertyOptional()
   bumpPostQuota?: number;
-
-  @ApiPropertyOptional()
-  maxScreeningQuestions?: number;
 
   @ApiPropertyOptional({ description: '-1 = unlimited' })
   monthlyHeadhuntProfileViews?: number;

@@ -21,7 +21,6 @@ import { CompaniesModule } from './companies/companies.module';
 // Job & Application
 import { JobsModule } from './jobs/jobs.module';
 import { ApplicationsModule } from './applications/applications.module';
-import { ScreeningModule } from './screening/screening.module';
 
 // Monetization
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
@@ -64,7 +63,6 @@ import { AiProviderModule } from './common/ai/ai-provider.module';
     // Job & Application
     JobsModule,
     ApplicationsModule,
-    ScreeningModule,
 
     // Monetization
     SubscriptionsModule,

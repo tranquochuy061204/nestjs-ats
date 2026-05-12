@@ -49,10 +49,6 @@ export class SubscriptionPackageEntity {
   @Column({ name: 'bump_post_quota', type: 'int', default: 0 })
   bumpPostQuota: number;
 
-  /** Số câu hỏi sàng lọc tối đa / tin */
-  @Column({ name: 'max_screening_questions', type: 'int', default: 0 })
-  maxScreeningQuestions: number;
-
   /** Số hồ sơ headhunting được xem / tháng. -1 = unlimited */
   @Column({ name: 'monthly_headhunt_profile_views', type: 'int' })
   monthlyHeadhuntProfileViews: number;
