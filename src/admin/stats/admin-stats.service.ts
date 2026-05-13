@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
+import {
+  UserEntity,
+  UserRole,
+  UserStatus,
+} from '../../users/entities/user.entity';
 import {
   CompanyEntity,
   CompanyStatus,
@@ -89,11 +93,19 @@ export class AdminStatsService {
             label: 'Doanh thu từ VIP',
             value: revenue.fromSubscriptions,
             orders: revenue.subscriptionOrders,
+            details:
+              phase1Metrics.arpu.breakdown.find(
+                (b) => b.label === 'VIP Subscription',
+              )?.details || [],
           },
           {
             label: 'Doanh thu từ Credit',
             value: revenue.fromCreditTopups,
             orders: revenue.creditOrders,
+            details:
+              phase1Metrics.arpu.breakdown.find(
+                (b) => b.label === 'Credit Topup',
+              )?.details || [],
           },
         ],
       },
@@ -150,14 +162,59 @@ export class AdminStatsService {
     );
     const total = Object.values(roleCounts).reduce((a, b) => a + b, 0);
 
+    const latestUsers = await qb
+      .clone()
+      .where('u.created_at BETWEEN :start AND :end', {
+        start: startDate,
+        end: endDate,
+      })
+      .orderBy('u.created_at', 'DESC')
+      .limit(100)
+      .getMany();
+
+    const mapToDetail = (users: UserEntity[]) =>
+      users.map((u) => ({
+        type: 'users' as const,
+        title: u.email,
+        subtitle: `Tham gia: ${u.created_at ? new Date(u.created_at).toLocaleDateString('vi-VN') : 'N/A'}`,
+        valueNode: u.status === UserStatus.ACTIVE ? 'Hoạt động' : 'Bị khóa',
+        subItems: [
+          {
+            label: 'Vai trò',
+            value:
+              u.role === UserRole.CANDIDATE
+                ? 'Ứng viên'
+                : u.role === UserRole.EMPLOYER
+                  ? 'Nhà tuyển dụng'
+                  : 'Admin',
+          },
+        ],
+      }));
+
     return {
       total,
-      candidates: roleCounts['candidate'] ?? 0,
-      employers: roleCounts['employer'] ?? 0,
-      admins: roleCounts['admin'] ?? 0,
-      active: statusCounts['active'] ?? 0,
-      locked: statusCounts['locked'] ?? 0,
+      candidates: roleCounts[UserRole.CANDIDATE] ?? 0,
+      employers: roleCounts[UserRole.EMPLOYER] ?? 0,
+      admins: roleCounts[UserRole.ADMIN] ?? 0,
+      active: statusCounts[UserStatus.ACTIVE] ?? 0,
+      locked: statusCounts[UserStatus.LOCKED] ?? 0,
       newInPeriod: newUsers,
+      candidateDetails: mapToDetail(
+        latestUsers.filter((u) => u.role === UserRole.CANDIDATE),
+      ),
+      employerDetails: mapToDetail(
+        latestUsers.filter((u) => u.role === UserRole.EMPLOYER),
+      ),
+      adminDetails: mapToDetail(
+        latestUsers.filter((u) => u.role === UserRole.ADMIN),
+      ),
+      activeDetails: mapToDetail(
+        latestUsers.filter((u) => u.status === UserStatus.ACTIVE),
+      ),
+      lockedDetails: mapToDetail(
+        latestUsers.filter((u) => u.status === UserStatus.LOCKED),
+      ),
+      newDetails: mapToDetail(latestUsers),
     };
   }
 
@@ -357,9 +414,7 @@ export class AdminStatsService {
         : DateRangeBuilder.getCurrentMonthRange();
     const { startDate, endDate } = dateRange;
 
-    const trunc = timeFilter?.granularity
-      ? this.getTruncForGranularity(timeFilter.granularity)
-      : 'day';
+    const trunc = this.getChartTruncForGranularity(timeFilter?.granularity);
 
     const rows = await this.paymentRepo
       .createQueryBuilder('p')
@@ -375,10 +430,28 @@ export class AdminStatsService {
       .orderBy(`DATE_TRUNC('${trunc}', p.paid_at)`, 'ASC')
       .getRawMany<{ period: string; revenue: string; orders: string }>();
 
-    return rows.map((r) => ({
-      date: r.period,
-      amount: Number(r.revenue),
-      orders: Number(r.orders),
+    const getMapKey = (date: Date | string) => {
+      const d = new Date(date);
+      if (trunc === 'hour') {
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()} ${d.getHours()}`;
+      }
+      if (trunc === 'day') {
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      }
+      return `${d.getFullYear()}-${d.getMonth()}`;
+    };
+
+    const dataMap = new Map<string, { amount: number; orders: number }>(
+      rows.map((r) => [
+        getMapKey(r.period),
+        { amount: Number(r.revenue), orders: Number(r.orders) },
+      ]),
+    );
+
+    return this.fillDateRange(startDate, endDate, trunc).map((d) => ({
+      date: d.toISOString(),
+      amount: dataMap.get(getMapKey(d))?.amount ?? 0,
+      orders: dataMap.get(getMapKey(d))?.orders ?? 0,
     }));
   }
 
@@ -395,9 +468,7 @@ export class AdminStatsService {
         : DateRangeBuilder.getCurrentMonthRange();
     const { startDate, endDate } = dateRange;
 
-    const trunc = timeFilter?.granularity
-      ? this.getTruncForGranularity(timeFilter.granularity)
-      : 'day';
+    const trunc = this.getChartTruncForGranularity(timeFilter?.granularity);
 
     const rows = await this.userRepo
       .createQueryBuilder('u')
@@ -412,27 +483,109 @@ export class AdminStatsService {
       .orderBy(`DATE_TRUNC('${trunc}', u.created_at)`, 'ASC')
       .getRawMany<{ period: string; newUsers: string; role: string }>();
 
-    const results: Record<string, any> = {};
+    type GrowthPoint = {
+      date: string;
+      count: number;
+      candidates: number;
+      employers: number;
+      admins: number;
+    };
+    const getMapKey = (date: Date | string) => {
+      const d = new Date(date);
+      if (trunc === 'hour') {
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()} ${d.getHours()}`;
+      }
+      if (trunc === 'day') {
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      }
+      return `${d.getFullYear()}-${d.getMonth()}`;
+    };
 
+    const dataMap = new Map<string, GrowthPoint>();
     rows.forEach((r) => {
-      const dateStr = r.period;
-      if (!results[dateStr]) {
-        results[dateStr] = {
-          date: dateStr,
+      const key = getMapKey(r.period);
+      if (!dataMap.has(key)) {
+        dataMap.set(key, {
+          date: new Date(r.period).toISOString(),
           count: 0,
           candidates: 0,
           employers: 0,
           admins: 0,
-        };
+        });
       }
+      const point = dataMap.get(key) as GrowthPoint;
       const count = Number(r.newUsers);
-      results[dateStr].count += count;
-      if (r.role === 'candidate') results[dateStr].candidates += count;
-      if (r.role === 'employer') results[dateStr].employers += count;
-      if (r.role === 'admin') results[dateStr].admins += count;
+      point.count += count;
+      if (r.role === 'candidate') point.candidates += count;
+      if (r.role === 'employer') point.employers += count;
+      if (r.role === 'admin') point.admins += count;
     });
 
-    return Object.values(results);
+    return this.fillDateRange(startDate, endDate, trunc).map(
+      (d) =>
+        dataMap.get(getMapKey(d)) ?? {
+          date: d.toISOString(),
+          count: 0,
+          candidates: 0,
+          employers: 0,
+          admins: 0,
+        },
+    );
+  }
+
+  /**
+   * Sinh danh sách tất cả các điểm thời gian trong khoảng [start, end]
+   * theo độ phân giải trục X của chart.
+   * Key trả về khớp chính xác với DATE_TRUNC PostgreSQL format.
+   */
+  private fillDateRange(start: Date, end: Date, trunc: string): Date[] {
+    const dates: Date[] = [];
+    const cur = new Date(start);
+
+    if (trunc === 'hour') {
+      cur.setMinutes(0, 0, 0);
+      while (cur <= end) {
+        dates.push(new Date(cur));
+        cur.setHours(cur.getHours() + 1);
+      }
+    } else if (trunc === 'day') {
+      cur.setHours(0, 0, 0, 0);
+      while (cur <= end) {
+        dates.push(new Date(cur));
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else {
+      // month
+      cur.setDate(1);
+      cur.setHours(0, 0, 0, 0);
+      while (cur <= end) {
+        dates.push(new Date(cur));
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+
+    return dates;
+  }
+
+  /**
+   * Granularity cho chart — luôn nhỏ hơn 1 bậc so với filter
+   * để hiển thị đủ điểm dữ liệu bên trong kỳ được chọn:
+   *   day     → hour  (24 cột giờ trong ngày)
+   *   month   → day   (N ngày trong tháng)
+   *   quarter → month (3 tháng trong quý)
+   *   (default / năm) → month
+   */
+  private getChartTruncForGranularity(granularity?: TimeGranularity): string {
+    switch (granularity) {
+      case TimeGranularity.DAY:
+        return 'hour';
+      case TimeGranularity.MONTH:
+        return 'day';
+      case TimeGranularity.QUARTER:
+        return 'month';
+      default:
+        return 'month';
+    }
   }
 
   private getTruncForGranularity(granularity: TimeGranularity): string {
@@ -451,96 +604,164 @@ export class AdminStatsService {
   // ─── Phase 1 Metrics ──────────────────────────────────────────────────────
 
   private async getPhase1Metrics(startDate: Date, endDate: Date) {
-    const [mrr, arpu, conversionRate, timeToFill, funnelConversion] =
-      await Promise.all([
-        this.getMRRWithBreakdown(startDate, endDate),
-        this.getARPUWithBreakdown(startDate, endDate),
-        this.getConversionRateWithBreakdown(startDate, endDate),
-        this.getTimeToFillWithBreakdown(startDate, endDate),
-        this.getApplicationFunnelConversion(startDate, endDate),
-      ]);
+    const [mrr, arpu, conversionRate, funnelConversion] = await Promise.all([
+      this.getMRRWithBreakdown(startDate, endDate),
+      this.getARPUWithBreakdown(startDate, endDate),
+      this.getConversionRateWithBreakdown(startDate, endDate),
+      this.getApplicationFunnelConversion(startDate, endDate),
+    ]);
 
-    return { mrr, arpu, conversionRate, timeToFill, funnelConversion };
+    return { mrr, arpu, conversionRate, funnelConversion };
   }
 
-  /** MRR - Monthly Recurring Revenue từ VIP subscriptions */
+  /** Doanh thu từ VIP subscriptions phát sinh trong kỳ (cash-basis: tính theo ngày bắt đầu/thanh toán) */
   private async getMRRWithBreakdown(startDate: Date, endDate: Date) {
-    const [totalMrr, byPackage] = await Promise.all([
+    const [totalMrr, byPackage, subscriptions] = await Promise.all([
+      // Tổng tiền nhận được từ VIP trong kỳ
       this.subscriptionRepo
         .createQueryBuilder('cs')
         .innerJoin('cs.package', 'p')
-        .select('SUM(p.price / (p.duration_days / 30.0))', 'mrr')
+        .select('SUM(p.price)', 'mrr')
         .where("p.name != 'free'")
-        .andWhere('cs.start_date <= :end', { end: endDate })
-        .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
+        .andWhere('cs.start_date BETWEEN :start AND :end', {
           start: startDate,
+          end: endDate,
         })
         .getRawOne<{ mrr: string }>(),
 
+      // Tổng theo từng gói
       this.subscriptionRepo
         .createQueryBuilder('cs')
         .innerJoin('cs.package', 'p')
         .select('p.display_name', 'packageName')
-        .addSelect('SUM(p.price / (p.duration_days / 30.0))', 'mrr')
+        .addSelect('p.name', 'packageCode')
+        .addSelect('SUM(p.price)', 'mrr')
         .addSelect('COUNT(cs.id)', 'count')
         .where("p.name != 'free'")
-        .andWhere('cs.start_date <= :end', { end: endDate })
-        .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
+        .andWhere('cs.start_date BETWEEN :start AND :end', {
           start: startDate,
+          end: endDate,
         })
         .groupBy('p.display_name')
-        .getRawMany<{ packageName: string; mrr: string; count: string }>(),
+        .addGroupBy('p.name')
+        .getRawMany<{
+          packageName: string;
+          packageCode: string;
+          mrr: string;
+          count: string;
+        }>(),
+
+      this.subscriptionRepo
+        .createQueryBuilder('cs')
+        .leftJoinAndSelect('cs.package', 'p')
+        .leftJoinAndSelect('cs.company', 'c')
+        .where("p.name != 'free'")
+        .andWhere('cs.start_date BETWEEN :start AND :end', {
+          start: startDate,
+          end: endDate,
+        })
+        .orderBy('cs.start_date', 'DESC')
+        .getMany(),
     ]);
 
     const total = Number(totalMrr?.mrr ?? 0);
 
     return {
       value: total,
-      breakdown: byPackage.map((p) => ({
-        label: p.packageName,
-        value: Number(p.mrr),
-        count: Number(p.count),
-        percentage: total > 0 ? Math.round((Number(p.mrr) / total) * 100) : 0,
-      })),
+      breakdown: byPackage.map((p) => {
+        const packageSubs = subscriptions.filter(
+          (s) => s.package?.name === p.packageCode,
+        );
+        return {
+          label: p.packageName,
+          value: Number(p.mrr),
+          count: Number(p.count),
+          percentage: total > 0 ? Math.round((Number(p.mrr) / total) * 100) : 0,
+          details: packageSubs.map((s) => ({
+            type: 'revenue' as const,
+            title: s.company?.name || `Công ty ID: ${s.companyId}`,
+            subtitle: `Gói: ${s.package?.displayName || 'Unknown'}`,
+            valueNode: Number(s.package?.price ?? 0),
+            subItems: [
+              {
+                label: 'Ngày mua',
+                value: s.startDate
+                  ? new Date(s.startDate).toLocaleDateString('vi-VN')
+                  : 'N/A',
+              },
+              {
+                label: 'Hết hạn',
+                value: s.endDate
+                  ? new Date(s.endDate).toLocaleDateString('vi-VN')
+                  : 'Vô thời hạn',
+              },
+              {
+                label: 'Tiền nhận',
+                value: `${new Intl.NumberFormat('vi-VN').format(Number(s.package?.price ?? 0))} ₫`,
+              },
+            ],
+          })),
+        };
+      }),
     };
   }
 
   /** ARPU - Average Revenue Per User (paying companies) */
   private async getARPUWithBreakdown(startDate: Date, endDate: Date) {
-    const [totalRevenue, payingCompanies, byType] = await Promise.all([
-      this.paymentRepo
-        .createQueryBuilder('p')
-        .select('SUM(p.amount)', 'total')
-        .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
-        .andWhere('p.paid_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
-        .getRawOne<{ total: string }>(),
+    const [totalRevenue, payingCompanies, byType, transactions] =
+      await Promise.all([
+        this.paymentRepo
+          .createQueryBuilder('p')
+          .select('SUM(p.amount)', 'total')
+          .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
+          .andWhere('p.paid_at BETWEEN :start AND :end', {
+            start: startDate,
+            end: endDate,
+          })
+          .getRawOne<{ total: string }>(),
 
-      this.paymentRepo
-        .createQueryBuilder('p')
-        .select('COUNT(DISTINCT p.company_id)', 'count')
-        .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
-        .andWhere('p.paid_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
-        .getRawOne<{ count: string }>(),
+        this.paymentRepo
+          .createQueryBuilder('p')
+          .select('COUNT(DISTINCT p.company_id)', 'count')
+          .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
+          .andWhere('p.paid_at BETWEEN :start AND :end', {
+            start: startDate,
+            end: endDate,
+          })
+          .getRawOne<{ count: string }>(),
 
-      this.paymentRepo
-        .createQueryBuilder('p')
-        .select('p.order_type', 'type')
-        .addSelect('SUM(p.amount)', 'revenue')
-        .addSelect('COUNT(DISTINCT p.company_id)', 'companies')
-        .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
-        .andWhere('p.paid_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
-        .groupBy('p.order_type')
-        .getRawMany<{ type: string; revenue: string; companies: string }>(),
-    ]);
+        this.paymentRepo
+          .createQueryBuilder('p')
+          .select('p.order_type', 'type')
+          .addSelect('SUM(p.amount)', 'revenue')
+          .addSelect('COUNT(DISTINCT p.company_id)', 'companies')
+          .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
+          .andWhere('p.paid_at BETWEEN :start AND :end', {
+            start: startDate,
+            end: endDate,
+          })
+          .groupBy('p.order_type')
+          .getRawMany<{ type: string; revenue: string; companies: string }>(),
+
+        this.paymentRepo
+          .createQueryBuilder('p')
+          .innerJoin('p.company', 'c')
+          .select([
+            'p.id',
+            'p.amount',
+            'p.paidAt',
+            'p.orderType',
+            'c.id',
+            'c.name',
+          ])
+          .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
+          .andWhere('p.paid_at BETWEEN :start AND :end', {
+            start: startDate,
+            end: endDate,
+          })
+          .orderBy('p.paid_at', 'DESC')
+          .getMany(),
+      ]);
 
     const revenue = Number(totalRevenue?.total ?? 0);
     const companies = Number(payingCompanies?.count ?? 0);
@@ -550,26 +771,77 @@ export class AdminStatsService {
       value: arpu,
       totalRevenue: revenue,
       payingCompanies: companies,
-      breakdown: byType.map((t) => ({
-        label:
-          t.type === PaymentOrderType.SUBSCRIPTION
-            ? 'VIP Subscription'
-            : 'Credit Topup',
-        value: Number(t.revenue),
-        companies: Number(t.companies),
-        avgPerCompany:
-          Number(t.companies) > 0
-            ? Math.round(Number(t.revenue) / Number(t.companies))
-            : 0,
-      })),
+      breakdown: byType.map((t) => {
+        // Group transactions for this type by company
+        const typeTxs = transactions.filter((tx) => tx.orderType === t.type);
+        const companyMap = new Map<
+          number,
+          {
+            companyName: string;
+            orderCount: number;
+            totalAmount: number;
+            txs: { id: number; amount: number; paidAt: Date | null }[];
+          }
+        >();
+
+        for (const tx of typeTxs) {
+          if (!tx.company) continue;
+          const cid = tx.company.id;
+          if (!companyMap.has(cid)) {
+            companyMap.set(cid, {
+              companyName: tx.company.name,
+              orderCount: 0,
+              totalAmount: 0,
+              txs: [],
+            });
+          }
+          const cData = companyMap.get(cid)!;
+          cData.orderCount++;
+          cData.totalAmount += Number(tx.amount);
+          cData.txs.push({
+            id: Number(tx.id),
+            amount: Number(tx.amount),
+            paidAt: tx.paidAt,
+          });
+        }
+
+        return {
+          label:
+            (t.type as PaymentOrderType) === PaymentOrderType.SUBSCRIPTION
+              ? 'VIP Subscription'
+              : 'Credit Topup',
+          value: Number(t.revenue),
+          companies: Number(t.companies),
+          avgPerCompany:
+            Number(t.companies) > 0
+              ? Math.round(Number(t.revenue) / Number(t.companies))
+              : 0,
+          details: Array.from(companyMap.values())
+            .sort((a, b) => b.totalAmount - a.totalAmount)
+            .map((c) => ({
+              type: 'revenue' as const,
+              title: c.companyName,
+              valueNode: c.totalAmount,
+              subItems: c.txs.map((tx) => ({
+                label: tx.paidAt
+                  ? new Date(tx.paidAt).toLocaleString('vi-VN', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : '',
+                value: tx.amount,
+              })),
+            })),
+        };
+      }),
     };
   }
 
   /** Conversion Rate: Free → Paid */
-  private async getConversionRateWithBreakdown(
-    startDate: Date,
-    endDate: Date,
-  ) {
+  private async getConversionRateWithBreakdown(startDate: Date, endDate: Date) {
     const [totalCompanies, paidCompanies, byPackage] = await Promise.all([
       this.companyRepo
         .createQueryBuilder('c')
@@ -581,9 +853,9 @@ export class AdminStatsService {
         .innerJoin('cs.package', 'p')
         .select('COUNT(DISTINCT cs.company_id)', 'count')
         .where("p.name != 'free'")
-        .andWhere('cs.start_date BETWEEN :start AND :end', {
+        .andWhere('cs.start_date <= :end', { end: endDate })
+        .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
           start: startDate,
-          end: endDate,
         })
         .getRawOne<{ count: string }>(),
 
@@ -593,9 +865,9 @@ export class AdminStatsService {
         .select('p.display_name', 'packageName')
         .addSelect('COUNT(DISTINCT cs.company_id)', 'count')
         .where("p.name != 'free'")
-        .andWhere('cs.start_date BETWEEN :start AND :end', {
+        .andWhere('cs.start_date <= :end', { end: endDate })
+        .andWhere('(cs.end_date IS NULL OR cs.end_date >= :start)', {
           start: startDate,
-          end: endDate,
         })
         .groupBy('p.display_name')
         .getRawMany<{ packageName: string; count: string }>(),
@@ -618,74 +890,8 @@ export class AdminStatsService {
     };
   }
 
-  /** Time to Fill - Thời gian TB từ đăng tin → tuyển được người (days) */
-  private async getTimeToFillWithBreakdown(startDate: Date, endDate: Date) {
-    const dayExpr =
-      'EXTRACT(EPOCH FROM (ja.updated_at - j.published_at)) / 86400';
-
-    const rangeExpr = `CASE WHEN ${dayExpr} <= 7 THEN '0-7 ngày' WHEN ${dayExpr} <= 14 THEN '8-14 ngày' WHEN ${dayExpr} <= 30 THEN '15-30 ngày' ELSE '30+ ngày' END`;
-
-    const [avgDays, byRange] = await Promise.all([
-      this.applicationRepo
-        .createQueryBuilder('ja')
-        .innerJoin('ja.job', 'j')
-        .select(`AVG(${dayExpr})`, 'avgDays')
-        .where("ja.status = 'hired'")
-        .andWhere('ja.updated_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
-        .andWhere('j.published_at IS NOT NULL')
-        .getRawOne<{ avgDays: string }>(),
-
-      this.applicationRepo
-        .createQueryBuilder('ja')
-        .innerJoin('ja.job', 'j')
-        .select(rangeExpr, 'range')
-        .addSelect('COUNT(*)', 'count')
-        .where("ja.status = 'hired'")
-        .andWhere('ja.updated_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
-        .andWhere('j.published_at IS NOT NULL')
-        .groupBy(rangeExpr)
-        .getRawMany<{ range: string; count: string }>(),
-    ]);
-
-    // Sort in JS — TypeORM does not support raw CASE expressions in orderBy()
-    const RANGE_ORDER: Record<string, number> = {
-      '0-7 ngày': 1,
-      '8-14 ngày': 2,
-      '15-30 ngày': 3,
-      '30+ ngày': 4,
-    };
-    byRange.sort(
-      (a, b) => (RANGE_ORDER[a.range] ?? 99) - (RANGE_ORDER[b.range] ?? 99),
-    );
-
-    const avg = Math.round(Number(avgDays?.avgDays ?? 0) * 10) / 10;
-    const totalHired = byRange.reduce((sum, r) => sum + Number(r.count), 0);
-
-    return {
-      value: avg,
-      totalHired,
-      breakdown: byRange.map((r) => ({
-        label: r.range,
-        count: Number(r.count),
-        percentage:
-          totalHired > 0
-            ? Math.round((Number(r.count) / totalHired) * 100)
-            : 0,
-      })),
-    };
-  }
-
   /** Application Funnel Conversion Rates */
-  private async getApplicationFunnelConversion(
-    startDate: Date,
-    endDate: Date,
-  ) {
+  private async getApplicationFunnelConversion(startDate: Date, endDate: Date) {
     const result = await this.applicationRepo
       .createQueryBuilder('ja')
       .select('COUNT(*)', 'total')
@@ -718,9 +924,7 @@ export class AdminStatsService {
       appliedToShortlisted:
         total > 0 ? Math.round((shortlisted / total) * 1000) / 10 : 0,
       shortlistedToInterview:
-        shortlisted > 0
-          ? Math.round((interview / shortlisted) * 1000) / 10
-          : 0,
+        shortlisted > 0 ? Math.round((interview / shortlisted) * 1000) / 10 : 0,
       interviewToHired:
         interview > 0 ? Math.round((hired / interview) * 1000) / 10 : 0,
     };

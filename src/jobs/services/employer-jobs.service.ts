@@ -167,43 +167,51 @@ export class EmployerJobsService {
     const isCompanyVerified = job.company?.status === CompanyStatus.APPROVED;
     let finalStatus: JobStatus = status ?? job.status;
 
-    // [Feature #1] max_active_jobs — enforce khi recruiter submit (PUBLISHED HOẶC PENDING intent)
-    if (status === JobStatus.PUBLISHED || status === JobStatus.PENDING) {
-      const {
-        canPost,
-        currentActiveJobs,
-        maxActiveJobs,
-        unlocksAt,
-        blockReason,
-      } = await this.subscriptionsService.checkJobSlotLock(employer.companyId);
-
-      if (!canPost) {
-        let reason: string;
-        if (blockReason === 'has_published') {
-          reason =
-            'Bạn đang có 1 tin tuyển dụng đang hiển thị. Vui lòng đóng tin hiện tại trước khi đăng tin mới.';
-        } else if (blockReason === 'has_pending') {
-          reason =
-            'Bạn đang có 1 tin đang chờ Admin duyệt. Vui lòng chờ kết quả duyệt trước khi gửi tin mới.';
-        } else if (blockReason === 'time_lock') {
-          reason = `Gói Free chỉ cho phép đăng 1 tin mỗi ${pkg.jobDurationDays} ngày. Mở khoá lúc ${unlocksAt!.toLocaleString('vi-VN')}.`;
-        } else {
-          reason = `Bạn đã đạt tối đa ${maxActiveJobs} tin đang tuyển hoặc chờ duyệt (hiện có: ${currentActiveJobs}).`;
-        }
-        throw new ForbiddenException(reason);
-      }
-
-      // Sau khi pass quota check: quyết định PUBLISHED hay PENDING
-      // Nếu tin đang PUBLISHED (đã được admin duyệt) thì cho phép giữ PUBLISHED
-      // kể cả khi công ty chưa verified. Chỉ bắt PENDING với tin mới hoặc đang chờ duyệt.
-      if (!isCompanyVerified && job.status !== JobStatus.PUBLISHED) {
-        finalStatus = JobStatus.PENDING;
-      }
-      // (else: giữ finalStatus = PUBLISHED — đã set ở trên)
-    }
-
     try {
       await this.dataSource.transaction(async (manager) => {
+        // [Feature #1] max_active_jobs — enforce khi recruiter submit (PUBLISHED HOẶC PENDING intent)
+        if (status === JobStatus.PUBLISHED || status === JobStatus.PENDING) {
+          const {
+            canPost,
+            currentActiveJobs,
+            currentLockedJobs,
+            maxActiveJobs,
+            unlocksAt,
+            blockReason,
+          } = await this.subscriptionsService.checkJobSlotLock(
+            employer.companyId!,
+            jobId,
+            manager,
+          );
+
+          if (!canPost) {
+            let reason: string;
+            if (blockReason === 'has_published') {
+              reason =
+                'Bạn đang có 1 tin tuyển dụng đang hiển thị. Vui lòng đóng tin hiện tại trước khi đăng tin mới.';
+            } else if (blockReason === 'has_pending') {
+              reason =
+                'Bạn đang có 1 tin đang chờ Admin duyệt. Vui lòng chờ kết quả duyệt trước khi gửi tin mới.';
+            } else if (blockReason === 'time_lock') {
+              reason = `Gói Free chỉ cho phép đăng 1 tin mỗi ${pkg.jobDurationDays} ngày. Mở khoá lúc ${unlocksAt!.toLocaleString('vi-VN')}.`;
+            } else {
+              reason = `Bạn đã đạt tối đa ${maxActiveJobs} tin đang tuyển hoặc chờ duyệt (Đang dùng: ${currentActiveJobs}, Đang khóa: ${currentLockedJobs}).`;
+            }
+            throw new ForbiddenException(reason);
+          }
+        }
+
+        // Sau khi pass quota check: quyết định PUBLISHED hay PENDING
+        // Nếu tin đang PUBLISHED (đã được admin duyệt) thì cho phép giữ PUBLISHED
+        // kể cả khi công ty chưa verified. Chỉ bắt PENDING với tin mới hoặc đang chờ duyệt.
+        if (
+          (status === JobStatus.PUBLISHED || status === JobStatus.PENDING) &&
+          !isCompanyVerified &&
+          job.status !== JobStatus.PUBLISHED
+        ) {
+          finalStatus = JobStatus.PENDING;
+        }
+
         const { skills, ...jobDataUpdates } = updateJobDto;
         delete jobDataUpdates.status; // handled above
 

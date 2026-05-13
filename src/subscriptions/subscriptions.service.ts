@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   CompanySubscriptionEntity,
   SubscriptionStatus,
@@ -38,11 +38,19 @@ export class SubscriptionsService {
   /**
    * Lấy subscription active của company. Tự động tạo Free nếu chưa có.
    */
-  async getActiveSubscription(companyId: number): Promise<ActiveSubscription> {
-    const subscription = await this.subscriptionRepo.findOne({
+  async getActiveSubscription(
+    companyId: number,
+    manager?: EntityManager,
+  ): Promise<ActiveSubscription> {
+    const subRepo = manager
+      ? manager.getRepository(CompanySubscriptionEntity)
+      : this.subscriptionRepo;
+
+    const subscription = await subRepo.findOne({
       where: { companyId, status: SubscriptionStatus.ACTIVE },
       relations: ['package'],
       order: { createdAt: 'DESC' },
+      lock: manager ? { mode: 'pessimistic_write' } : undefined,
     });
 
     if (!subscription) {
@@ -56,12 +64,14 @@ export class SubscriptionsService {
       new Date() > subscription.endDate
     ) {
       await this.expireAndFallbackToFree(subscription);
-      return this.getActiveSubscription(companyId);
+      return this.getActiveSubscription(companyId, manager);
     }
 
-    const updatedSub = await this.checkAndResetMonthlyProceeds(subscription);
+    const purchaseLogRepo = manager
+      ? manager.getRepository(CreditPurchaseLogEntity)
+      : this.purchaseLogRepo;
 
-    const extraSlots = await this.purchaseLogRepo
+    const extraSlots = await purchaseLogRepo
       .createQueryBuilder('pl')
       .innerJoin('pl.product', 'p')
       .where('pl.company_id = :companyId', { companyId })
@@ -73,6 +83,11 @@ export class SubscriptionsService {
       subscription.package.maxActiveJobs === -1
         ? -1
         : subscription.package.maxActiveJobs + extraSlots;
+
+    const updatedSub = await this.checkAndResetMonthlyProceeds(
+      subscription,
+      manager,
+    );
 
     return {
       subscription: updatedSub,
@@ -178,7 +193,11 @@ export class SubscriptionsService {
    *
    * Trả về { canPost, unlocksAt, blockReason, currentActiveJobs, maxActiveJobs }
    */
-  async checkJobSlotLock(companyId: number): Promise<{
+  async checkJobSlotLock(
+    companyId: number,
+    excludeJobId?: number,
+    manager?: EntityManager,
+  ): Promise<{
     canPost: boolean;
     unlocksAt: Date | null;
     blockReason:
@@ -188,6 +207,7 @@ export class SubscriptionsService {
       | 'time_lock'
       | null;
     currentActiveJobs: number;
+    currentLockedJobs: number;
     maxActiveJobs: number;
     slotDetails: Array<{
       type: 'occupied' | 'locked' | 'available';
@@ -196,10 +216,18 @@ export class SubscriptionsService {
       unlocksAt?: Date;
     }>;
   }> {
-    const { package: pkg } = await this.getActiveSubscription(companyId);
+    const { package: pkg } = await this.getActiveSubscription(
+      companyId,
+      manager,
+    );
+
+    const jobRepo = manager ? manager.getRepository(JobEntity) : this.jobRepo;
+    const purchaseLogRepo = manager
+      ? manager.getRepository(CreditPurchaseLogEntity)
+      : this.purchaseLogRepo;
 
     // ── Unified Slot Logic (Detailed Slot Mapping) ──
-    const extraSlots = await this.purchaseLogRepo
+    const extraSlots = await purchaseLogRepo
       .createQueryBuilder('pl')
       .innerJoin('pl.product', 'p')
       .where('pl.company_id = :companyId', { companyId })
@@ -211,23 +239,38 @@ export class SubscriptionsService {
       pkg.maxActiveJobs === -1 ? -1 : pkg.maxActiveJobs + extraSlots;
 
     // 1. Lấy danh sách các tin đang chiếm dụng slot (pending/published)
-    const activeJobs = await this.jobRepo.find({
-      where: {
-        companyId,
-        status: In([JobStatus.PENDING, JobStatus.PUBLISHED]),
-      },
-      select: ['id', 'title', 'status', 'publishedAt'],
-      order: { publishedAt: 'ASC' },
-    });
-
-    // 2. Lấy danh sách các tin đã đóng nhưng vẫn còn trong thời gian lock
-    const lockedJobs = await this.jobRepo
+    const activeJobsQuery = jobRepo
       .createQueryBuilder('j')
       .where('j.company_id = :companyId', { companyId })
-      .andWhere("j.status NOT IN ('pending', 'published')")
+      .andWhere('j.status IN (:...statuses)', {
+        statuses: [JobStatus.PENDING, JobStatus.PUBLISHED],
+      });
+
+    if (excludeJobId) {
+      activeJobsQuery.andWhere('j.id != :excludeJobId', { excludeJobId });
+    }
+
+    const activeJobs = await activeJobsQuery
+      .select(['j.id', 'j.title', 'j.status', 'j.publishedAt'])
+      .orderBy('j.publishedAt', 'ASC')
+      .getMany();
+
+    // 2. Lấy danh sách các tin đã đóng nhưng vẫn còn trong thời gian lock
+    const lockedJobsQuery = jobRepo
+      .createQueryBuilder('j')
+      .where('j.company_id = :companyId', { companyId })
+      .andWhere('j.status NOT IN (:...activeStatuses)', {
+        activeStatuses: [JobStatus.PENDING, JobStatus.PUBLISHED],
+      })
       .andWhere(`j.published_at + (INTERVAL '1 day' * :days) > NOW()`, {
         days: pkg.jobDurationDays,
-      })
+      });
+
+    if (excludeJobId) {
+      lockedJobsQuery.andWhere('j.id != :excludeJobId', { excludeJobId });
+    }
+
+    const lockedJobs = await lockedJobsQuery
       .orderBy('j.published_at', 'ASC')
       .getMany();
 
@@ -279,17 +322,33 @@ export class SubscriptionsService {
         (a, b) => (a.unlocksAt?.getTime() || 0) - (b.unlocksAt?.getTime() || 0),
       )[0];
 
+    let blockReason:
+      | 'has_published'
+      | 'has_pending'
+      | 'quota_full'
+      | 'time_lock'
+      | null = null;
+
+    if (!canPost) {
+      if (effectiveMaxJobs === 1 && pkg.name === 'free') {
+        if (activeJobs.some((j) => j.status === JobStatus.PUBLISHED)) {
+          blockReason = 'has_published';
+        } else if (activeJobs.some((j) => j.status === JobStatus.PENDING)) {
+          blockReason = 'has_pending';
+        } else {
+          blockReason = 'time_lock';
+        }
+      } else {
+        blockReason = 'quota_full';
+      }
+    }
+
     return {
       canPost,
       unlocksAt: firstLock?.unlocksAt || null,
-      blockReason: canPost
-        ? null
-        : pkg.name === 'free'
-          ? activeJobs.some((j) => j.status === JobStatus.PUBLISHED)
-            ? 'has_published'
-            : 'time_lock'
-          : 'quota_full',
+      blockReason,
       currentActiveJobs: activeJobs.length,
+      currentLockedJobs: lockedJobs.length,
       maxActiveJobs: effectiveMaxJobs,
       slotDetails, // Thông tin chi tiết cho UI
     };
@@ -498,7 +557,12 @@ export class SubscriptionsService {
 
   private async checkAndResetMonthlyProceeds(
     subscription: CompanySubscriptionEntity,
+    manager?: EntityManager,
   ): Promise<CompanySubscriptionEntity> {
+    const subRepo = manager
+      ? manager.getRepository(CompanySubscriptionEntity)
+      : this.subscriptionRepo;
+
     if (
       subscription.proceedsResetAt &&
       new Date() > subscription.proceedsResetAt
@@ -509,7 +573,7 @@ export class SubscriptionsService {
         nextReset = new Date(nextReset.getTime() + 30 * 24 * 60 * 60 * 1000);
       }
 
-      await this.subscriptionRepo.update(subscription.id, {
+      await subRepo.update(subscription.id, {
         usedFreeProceeds: 0,
         proceedsResetAt: nextReset,
       });

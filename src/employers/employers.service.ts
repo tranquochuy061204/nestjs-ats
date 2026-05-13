@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { EmployerEntity } from './entities/employer.entity';
 import { CompanyEntity } from '../companies/entities/company.entity';
 import { UserEntity, UserRole } from '../users/entities/user.entity';
@@ -19,7 +18,6 @@ import { SupabaseService } from '../storage/supabase.service';
 import { MailService } from '../mail/mail.service';
 import { sanitizeFilename } from '../common/utils/string.util';
 import { generateVerificationToken } from '../common/utils/crypto.util';
-import { AUTH_CONFIG } from '../common/constants/auth.constant';
 
 @Injectable()
 export class EmployersService {
@@ -224,15 +222,9 @@ export class EmployersService {
       // Tạo verification token trước khi tạo user
       const verificationToken = generateVerificationToken();
 
-      // Hash password trước khi lưu DB (bảo mật)
-      const hashedPassword = await bcrypt.hash(
-        dto.password,
-        AUTH_CONFIG.SALT_ROUNDS,
-      );
-
       const newUser = queryRunner.manager.create(UserEntity, {
         email: dto.email,
-        password: hashedPassword,
+        password: dto.password,
         role: UserRole.EMPLOYER,
         emailVerificationToken: verificationToken,
         isEmailVerified: false,
