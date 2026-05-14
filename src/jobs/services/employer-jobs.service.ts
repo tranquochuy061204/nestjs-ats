@@ -12,7 +12,7 @@ import { JobStatusHistoryEntity } from '../entities/job-status-history.entity';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
 import { JobFilterDto } from '../dto/job-filter.dto';
-import { JobSkillsService } from '../job-skills.service';
+import { JobSkillsService } from './job-skills.service';
 import { EmployersService } from '../../employers/employers.service';
 import { EmployerEntity } from '../../employers/entities/employer.entity';
 import { CompanyStatus } from '../../companies/entities/company.entity';

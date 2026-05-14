@@ -9,7 +9,7 @@ import { AdminJobsController } from './controllers/admin-jobs.controller';
 import { CandidateJobsController } from './controllers/candidate-jobs.controller';
 
 // Services
-import { JobSkillsService } from './job-skills.service';
+import { JobSkillsService } from './services/job-skills.service';
 import { PublicJobsService } from './services/public-jobs.service';
 import { EmployerJobsService } from './services/employer-jobs.service';
 import { AdminJobsService } from './services/admin-jobs.service';

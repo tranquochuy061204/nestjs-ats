@@ -34,6 +34,7 @@ export class PaymentsService {
   async createVipOrder(
     companyId: number,
     req: Request,
+    userId?: number,
   ): Promise<CreateOrderResult> {
     const vipPkg: SubscriptionPackageEntity | null =
       await this.subscriptionsService.getPackageByName('vip');
@@ -43,6 +44,7 @@ export class PaymentsService {
     const order = await this.orderRepo.save(
       this.orderRepo.create({
         companyId,
+        userId: userId ?? null,
         orderType: PaymentOrderType.SUBSCRIPTION,
         packageId: null, // sẽ resolve sau
         creditAmount: null,
@@ -77,6 +79,7 @@ export class PaymentsService {
     companyId: number,
     packSlug: string,
     req: Request,
+    userId?: number,
   ): Promise<CreateOrderResult> {
     const packs: CreditPackageEntity[] =
       await this.creditsService.getTopupPacks();
@@ -89,6 +92,7 @@ export class PaymentsService {
     const order = await this.orderRepo.save(
       this.orderRepo.create({
         companyId,
+        userId: userId ?? null,
         orderType: PaymentOrderType.CREDIT_TOPUP,
         packageId: null,
         creditAmount: totalCredit,
@@ -297,9 +301,10 @@ export class PaymentsService {
           order.companyId,
           packSlug,
           order.id,
+          order.userId ?? undefined,
         );
         this.logger.log(
-          `Credit topup ${order.creditAmount} for company ${order.companyId}`,
+          `Credit topup ${order.creditAmount} for company ${order.companyId} by user ${order.userId ?? 'system'}`,
         );
       }
     }

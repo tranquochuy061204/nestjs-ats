@@ -122,6 +122,7 @@ export class CreditsService {
     companyId: number,
     packSlug: string,
     paymentOrderId?: number,
+    userId?: number,
   ): Promise<CreditTransactionEntity> {
     const pack = await this.packageRepo.findOne({ where: { slug: packSlug } });
     if (!pack) throw new BadRequestException('Gói nạp không tồn tại');
@@ -157,6 +158,7 @@ export class CreditsService {
         description,
         referenceType: paymentOrderId ? 'payment_order' : null,
         referenceId: paymentOrderId ?? null,
+        createdBy: userId ?? null,
       });
 
       return manager.save(CreditTransactionEntity, tx);
@@ -391,15 +393,69 @@ export class CreditsService {
     });
   }
 
-  async getTransactionHistory(companyId: number, page = 1, limit = 20) {
+  async getTransactionHistory(
+    companyId: number,
+    page = 1,
+    limit = 20,
+    type?: string,
+  ) {
     const wallet = await this.getWallet(companyId);
-    const [data, total] = await this.txRepo.findAndCount({
-      where: { walletId: wallet.id },
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-    return { data, total, page, lastPage: Math.ceil(total / limit) };
+    const offset = (page - 1) * limit;
+
+    const typeFilter = type ? `AND tx.type = $4` : '';
+    const params: (number | string)[] = type
+      ? [wallet.id, limit, offset, type]
+      : [wallet.id, limit, offset];
+
+    const [rows, countResult] = await Promise.all([
+      this.dataSource.query<
+        {
+          id: number;
+          type: string;
+          amount: number;
+          balanceAfter: number;
+          description: string | null;
+          referenceType: string | null;
+          referenceId: number | null;
+          createdBy: number | null;
+          createdAt: Date;
+          actorName: string | null;
+          actorAvatar: string | null;
+        }[]
+      >(
+        `SELECT
+          tx.id,
+          tx.type,
+          tx.amount,
+          tx.balance_after    AS "balanceAfter",
+          tx.description,
+          tx.reference_type   AS "referenceType",
+          tx.reference_id     AS "referenceId",
+          tx.created_by       AS "createdBy",
+          tx.created_at       AS "createdAt",
+          emp.full_name       AS "actorName",
+          emp.avatar_url      AS "actorAvatar"
+        FROM credit_transaction tx
+        LEFT JOIN employer emp ON emp.user_id = tx.created_by
+        WHERE tx.wallet_id = $1
+        ${typeFilter}
+        ORDER BY tx.created_at DESC
+        LIMIT $2 OFFSET $3`,
+        params,
+      ),
+      this.dataSource.query<[{ count: string }]>(
+        `SELECT COUNT(*) FROM credit_transaction WHERE wallet_id = $1 ${type ? 'AND type = $2' : ''}`,
+        type ? [wallet.id, type] : [wallet.id],
+      ),
+    ]);
+
+    const total = parseInt(countResult[0].count, 10);
+    return {
+      data: rows,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   // ──────────────────────────────────────────────────────

@@ -55,7 +55,7 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Tạo đơn hàng mua gói VIP qua VNPay' })
   async createVipOrder(@Req() req: express.Request & { user: { id: number } }) {
     const companyId = await this.getCompanyId(req.user.id);
-    return this.paymentsService.createVipOrder(companyId, req);
+    return this.paymentsService.createVipOrder(companyId, req, req.user.id);
   }
 
   // ── Nạp Credit ────────────────────────────────────────
@@ -74,6 +74,7 @@ export class PaymentsController {
       companyId,
       dto.packSlug,
       req,
+      req.user.id,
     );
   }
 

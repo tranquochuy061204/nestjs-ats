@@ -99,9 +99,15 @@ export class CreditsController {
     @Req() req: Request & { user: { id: number } },
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('type') type?: string,
   ) {
     const companyId = await this.getCompanyId(req.user.id);
-    return this.creditsService.getTransactionHistory(companyId, page, limit);
+    return this.creditsService.getTransactionHistory(
+      companyId,
+      page,
+      limit,
+      type,
+    );
   }
 
   @Get('extra-slots')

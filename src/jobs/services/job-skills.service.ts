@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
-import { JobSkillTagEntity } from './entities/job-skill-tag.entity';
-import { SkillsMetadataService } from '../metadata/skills/skills-metadata.service';
+import { JobSkillTagEntity } from '../entities/job-skill-tag.entity';
+import { SkillsMetadataService } from '../../metadata/skills/skills-metadata.service';
 
 @Injectable()
 export class JobSkillsService {

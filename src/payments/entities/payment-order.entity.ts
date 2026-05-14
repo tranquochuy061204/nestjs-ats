@@ -33,6 +33,10 @@ export class PaymentOrderEntity {
   @Column({ name: 'company_id' })
   companyId: number;
 
+  /** User đã khởi tạo đơn hàng (dùng để track người nạp tiền / mua VIP) */
+  @Column({ name: 'user_id', type: 'int', nullable: true })
+  userId: number | null;
+
   /** 'subscription' | 'credit_topup' */
   @Column({ name: 'order_type', type: 'varchar', length: 20 })
   orderType: string;

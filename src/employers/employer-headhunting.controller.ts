@@ -8,10 +8,12 @@ import {
   Query,
   ParseIntPipe,
   ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ApiAuth } from '../common/decorators/api-auth.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { VerifiedEmailGuard } from '../common/guards/verified-email.guard';
 import { CandidateSearchService } from '../candidates/services/candidate-search.service';
 import { CandidateFilterDto } from '../candidates/dto/candidate-filter.dto';
 import { CreateJobInvitationDto } from '../jobs/dto/create-job-invitation.dto';
@@ -184,6 +186,7 @@ Thông tin nhạy cảm (phone, cvUrl, social links) được ẩn tự động.
   }
 
   @Post('invitations')
+  @UseGuards(VerifiedEmailGuard)
   @ApiOperation({ summary: 'Gửi thư mời ứng tuyển cho ứng viên' })
   @ApiResponse({ status: 201, description: 'Gửi thành công' })
   async sendInvitation(

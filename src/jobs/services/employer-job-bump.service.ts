@@ -10,6 +10,7 @@ import { DataSource, Repository } from 'typeorm';
 import { JobEntity, JobStatus } from '../entities/job.entity';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 import { CreditsService } from '../../credits/credits.service';
+import { EmployersService } from '../../employers/employers.service';
 import { BumpJobResult } from '../interfaces/job-bump.interface';
 
 @Injectable()
@@ -22,23 +23,31 @@ export class EmployerJobBumpService {
     private readonly subscriptionsService: SubscriptionsService,
     private readonly creditsService: CreditsService,
     private readonly dataSource: DataSource,
+    private readonly employersService: EmployersService,
   ) {}
 
   async bumpJob(employerUserId: number, jobId: number): Promise<BumpJobResult> {
+    // Lấy thông tin employer hiện tại để xác định công ty
+    const employer = await this.employersService.getProfile(employerUserId);
+
+    if (!employer.companyId) {
+      throw new ForbiddenException('Bạn phải thuộc về một công ty để đẩy tin');
+    }
+
     const job = await this.jobRepository.findOne({
       where: { id: jobId },
-      relations: ['company', 'employer'],
     });
 
     if (!job) {
       throw new NotFoundException('Không tìm thấy tin tuyển dụng');
     }
 
-    if (job.employer.userId !== employerUserId) {
+    // Chỉ cần thuộc cùng công ty (không bắt buộc phải là người tạo tin)
+    if (job.companyId !== employer.companyId) {
       throw new ForbiddenException('Bạn không có quyền thao tác trên tin này');
     }
 
-    if (job.status !== (JobStatus.PUBLISHED as string)) {
+    if (job.status !== JobStatus.PUBLISHED) {
       throw new BadRequestException(
         'Chỉ có thể đẩy tin đang được hiển thị (Published)',
       );
