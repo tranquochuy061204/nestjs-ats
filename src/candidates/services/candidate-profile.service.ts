@@ -11,6 +11,7 @@ import { CertificateEntity } from '../entities/certificate.entity';
 import { CandidateJobCategoryEntity } from '../entities/candidate-job-category.entity';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { STORAGE_PATHS } from '../../common/constants/storage-paths.constant';
+import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
 
 @Injectable()
 export class CandidateProfileService {
@@ -31,6 +32,8 @@ export class CandidateProfileService {
     private readonly certificateRepository: Repository<CertificateEntity>,
     @InjectRepository(CandidateJobCategoryEntity)
     private readonly candidateJobCategoryRepository: Repository<CandidateJobCategoryEntity>,
+    @InjectRepository(JobApplicationEntity)
+    private readonly jobApplicationRepository: Repository<JobApplicationEntity>,
     private readonly supabaseService: SupabaseService,
   ) {}
 
@@ -94,24 +97,49 @@ export class CandidateProfileService {
   async uploadCv(userId: number, file: Express.Multer.File) {
     const candidate = await this.findCandidateByUserId(userId);
 
+    const oldCvUrl = candidate.cvUrl ?? null;
     const uniqueId = Date.now();
     const filePath = `${STORAGE_PATHS.CANDIDATES.BASE}/${userId}/cv_${uniqueId}.pdf`;
-    const oldFilePath = candidate.cvUrl
-      ? `${STORAGE_PATHS.CANDIDATES.BASE}/${userId}/${candidate.cvUrl.split('/').pop()}`
-      : undefined;
 
-    const { result } = await this.supabaseService.atomicUploadAndUpdate(
+    // Upload new CV and update DB record
+    const { publicUrl } = await this.supabaseService.atomicUploadAndUpdate(
       file,
       filePath,
-      async (publicUrl) => {
-        candidate.cvUrl = publicUrl;
+      async (url) => {
+        candidate.cvUrl = url;
         await this.candidateRepository.save(candidate);
-        return { cvUrl: publicUrl };
+        return { cvUrl: url };
       },
-      oldFilePath,
+      // Don't pass oldFilePath here — we handle deletion manually below
+      // to check snapshot references first.
     );
 
-    return result;
+    // After successful DB update, clean up old file only if it is NOT
+    // referenced as a snapshot in any job_application record.
+    if (oldCvUrl) {
+      const oldFilePath = `${STORAGE_PATHS.CANDIDATES.BASE}/${userId}/${oldCvUrl.split('/').pop()}`;
+
+      const snapshotCount = await this.jobApplicationRepository.count({
+        where: { cvUrlSnapshot: oldCvUrl },
+      });
+
+      if (snapshotCount === 0) {
+        // Safe to delete — no recruiter is holding a reference to this file.
+        await this.supabaseService
+          .deleteFile(oldFilePath)
+          .catch((e: Error) =>
+            this.logger.error(
+              `Failed to delete old CV file (${oldFilePath}): ${e.message}`,
+            ),
+          );
+      } else {
+        this.logger.log(
+          `Old CV file kept: still referenced by ${snapshotCount} application snapshot(s). URL: ${oldCvUrl}`,
+        );
+      }
+    }
+
+    return { cvUrl: publicUrl };
   }
 
   async uploadAvatar(userId: number, file: Express.Multer.File) {

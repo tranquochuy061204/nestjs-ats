@@ -123,11 +123,19 @@ export class EmployerApplicationsService {
         take: 10,
       });
 
+      // Ẩn candidate.cvUrl (CV hiện tại) — chỉ expose cvUrlSnapshot (CV lúc nộp đơn)
+      const sanitizedItems = items.map((app) => {
+        if (!app.candidate) return app;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { cvUrl: _cvUrl, ...restCandidate } = app.candidate;
+        return { ...app, candidate: restCandidate };
+      });
+
       return {
         id: col.id,
         title: col.title,
         count: countMap.get(col.id) || 0,
-        items,
+        items: sanitizedItems,
       };
     });
 
@@ -209,7 +217,23 @@ export class EmployerApplicationsService {
       }
     }
 
-    return { ...application, profileViewsRemaining };
+    // Ẩn candidate.cvUrl (CV hiện tại có thể đã thay đổi) khỏi response.
+    // Nhà tuyển dụng chỉ được xem cvUrlSnapshot — CV tại thời điểm ứng viên nộp đơn.
+    const { candidate, ...restApplication } = application;
+    // Drop candidate.cvUrl to prevent exposing the current (possibly updated) CV.
+    // The recruiter must use application.cvUrlSnapshot instead.
+    let sanitizedCandidate: Omit<typeof candidate, 'cvUrl'> | null = null;
+    if (candidate) {
+      const cand = { ...candidate };
+      delete (cand as Partial<typeof cand>).cvUrl;
+      sanitizedCandidate = cand as Omit<typeof candidate, 'cvUrl'>;
+    }
+
+    return {
+      ...restApplication,
+      candidate: sanitizedCandidate,
+      profileViewsRemaining,
+    };
   }
 
   async manuallyTriggerAiScoring(
