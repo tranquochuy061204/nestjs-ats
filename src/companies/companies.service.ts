@@ -94,6 +94,14 @@ export class CompaniesService {
       company.slug = toSlug(dto.name);
     }
 
+    // Logic hardening: if it was idle but has a business license URL, transition to PENDING.
+    if (
+      company.status === CompanyStatus.IDLE &&
+      company.businessLicenseUrl !== null
+    ) {
+      company.status = CompanyStatus.PENDING;
+    }
+
     await this.companyRepo.save(company);
     return company;
   }

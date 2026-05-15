@@ -304,7 +304,7 @@ export class EmployerContactUnlockService {
     }
 
     const candidateIds = logs.map((log) => log.candidateId);
-    
+
     // Batch load relations to avoid huge JOINS / Cartesian products in pagination
     const candidates = await this.candidateRepo.find({
       where: { id: In(candidateIds) },
@@ -320,22 +320,25 @@ export class EmployerContactUnlockService {
 
     const candidateMap = new Map(candidates.map((c) => [c.id, c]));
 
-    const data = logs.map((log) => {
-      const candidate = candidateMap.get(log.candidateId);
-      if (!candidate) return null;
-      
-      if (candidate.user) {
-        const userRef = candidate.user as Partial<UserEntity> & Record<string, unknown>;
-        delete userRef.password;
-        delete userRef.emailVerificationToken;
-        delete userRef.resetPasswordToken;
-      }
-      return {
-        ...candidate,
-        unlockedAt: log.unlockedAt,
-        creditSpent: log.creditSpent,
-      };
-    }).filter(Boolean);
+    const data = logs
+      .map((log) => {
+        const candidate = candidateMap.get(log.candidateId);
+        if (!candidate) return null;
+
+        if (candidate.user) {
+          const userRef = candidate.user as Partial<UserEntity> &
+            Record<string, unknown>;
+          delete userRef.password;
+          delete userRef.emailVerificationToken;
+          delete userRef.resetPasswordToken;
+        }
+        return {
+          ...candidate,
+          unlockedAt: log.unlockedAt,
+          creditSpent: log.creditSpent,
+        };
+      })
+      .filter(Boolean);
 
     return {
       data,

@@ -12,8 +12,14 @@ import {
   RawFunnelStats,
   RawHeadhuntingStats,
   RawTopJob,
+  RawPublishedJob,
+  RawAppDetail,
+  RawInvitationDetail,
 } from '../interfaces/employer-dashboard.interface';
-import { DateRangeBuilder, DateRange } from '../../common/utils/date-range.util';
+import {
+  DateRangeBuilder,
+  DateRange,
+} from '../../common/utils/date-range.util';
 
 @Injectable()
 export class EmployerCompanyDashboardService {
@@ -43,15 +49,27 @@ export class EmployerCompanyDashboardService {
           )
         : DateRangeBuilder.getCurrentMonthRange();
 
-    const [jobStats, appStats, funnelStats, trendRows, headhunting, topJobs] =
-      await Promise.all([
-        this.queryJobStats(companyId, dto.expiringSoonDays),
-        this.queryAppStats(companyId, dateRange),
-        this.queryFunnelStats(companyId, dateRange),
-        this.queryTrend(companyId, dateRange),
-        this.queryHeadhuntingStats(employerId, dateRange),
-        this.queryTopJobs(companyId, dateRange),
-      ]);
+    const [
+      jobStats,
+      appStats,
+      funnelStats,
+      trendRows,
+      headhunting,
+      topJobs,
+      publishedJobsList,
+      applicationsList,
+      invitationsList,
+    ] = await Promise.all([
+      this.queryJobStats(companyId, dto.expiringSoonDays, dateRange),
+      this.queryAppStats(companyId, dateRange),
+      this.queryFunnelStats(companyId, dateRange),
+      this.queryTrend(companyId, dateRange, dto.granularity || 'day'),
+      this.queryHeadhuntingStats(employerId, dateRange),
+      this.queryTopJobs(companyId, dateRange),
+      this.queryPublishedJobsList(companyId, dateRange),
+      this.queryApplicationsList(companyId, dateRange),
+      this.queryInvitationsList(employerId, dateRange),
+    ]);
 
     const byStatus = {
       applied: parseInt(appStats.applied, 10),
@@ -67,6 +85,13 @@ export class EmployerCompanyDashboardService {
     return {
       jobs: {
         total: parseInt(jobStats.total, 10),
+        publishedInPeriod: parseInt(jobStats.published_in_period, 10),
+        publishedJobsList: publishedJobsList.map((j) => ({
+          id: parseInt(j.id, 10),
+          title: j.title,
+          status: j.status,
+          publishedAt: j.published_at,
+        })),
         byStatus: {
           draft: parseInt(jobStats.draft, 10),
           pending: parseInt(jobStats.pending, 10),
@@ -81,6 +106,13 @@ export class EmployerCompanyDashboardService {
       },
       applications: {
         total: parseInt(appStats.total, 10),
+        applicationsList: applicationsList.map((a) => ({
+          id: parseInt(a.id, 10),
+          candidateName: a.candidate_name,
+          jobTitle: a.job_title,
+          status: a.status,
+          appliedAt: a.created_at,
+        })),
         byStatus,
         conversionRate: {
           appliedToShortlisted: conversionRate(
@@ -101,11 +133,18 @@ export class EmployerCompanyDashboardService {
           ),
         },
         trend: {
-          data: fillTrendDays(trendRows, dateRange),
+          data: fillTrendDays(trendRows, dateRange, dto.granularity || 'day'),
         },
       },
       headhunting: {
         invitationsSent: parseInt(headhunting.invitations_sent, 10),
+        invitationsList: invitationsList.map((i) => ({
+          id: parseInt(i.id, 10),
+          candidateName: i.candidate_name,
+          jobTitle: i.job_title,
+          status: i.status,
+          sentAt: i.created_at,
+        })),
         accepted: parseInt(headhunting.accepted, 10),
         declined: parseInt(headhunting.declined, 10),
         pending: parseInt(headhunting.pending, 10),
@@ -126,15 +165,17 @@ export class EmployerCompanyDashboardService {
   private async queryJobStats(
     companyId: number,
     expiringSoonDays: number,
+    dateRange: DateRange,
   ): Promise<RawJobStats> {
     const rows = await this.dataSource.query<RawJobStats[]>(
       `SELECT
-        COUNT(*)                                                          AS total,
-        COUNT(*) FILTER (WHERE status = 'draft')                         AS draft,
-        COUNT(*) FILTER (WHERE status = 'pending')                       AS pending,
-        COUNT(*) FILTER (WHERE status = 'published')                     AS published,
-        COUNT(*) FILTER (WHERE status = 'closed')                        AS closed,
-        COUNT(*) FILTER (WHERE status = 'rejected')                      AS rejected,
+        COUNT(*) FILTER (WHERE created_at BETWEEN $3 AND $4)             AS total,
+        COUNT(*) FILTER (WHERE status = 'draft' AND created_at BETWEEN $3 AND $4) AS draft,
+        COUNT(*) FILTER (WHERE status = 'pending' AND created_at BETWEEN $3 AND $4) AS pending,
+        COUNT(*) FILTER (WHERE status = 'published' AND created_at BETWEEN $3 AND $4) AS published,
+        COUNT(*) FILTER (WHERE status = 'closed' AND created_at BETWEEN $3 AND $4) AS closed,
+        COUNT(*) FILTER (WHERE status = 'rejected' AND created_at BETWEEN $3 AND $4) AS rejected,
+        COUNT(*) FILTER (WHERE published_at BETWEEN $3 AND $4)           AS published_in_period,
         COUNT(*) FILTER (
           WHERE status = 'published'
             AND deadline IS NOT NULL
@@ -142,7 +183,7 @@ export class EmployerCompanyDashboardService {
         )                                                                 AS expiring_soon
       FROM job
       WHERE company_id = $2`,
-      [expiringSoonDays, companyId],
+      [expiringSoonDays, companyId, dateRange.startDate, dateRange.endDate],
     );
     return (
       rows[0] ?? {
@@ -152,8 +193,28 @@ export class EmployerCompanyDashboardService {
         published: '0',
         closed: '0',
         rejected: '0',
+        published_in_period: '0',
         expiring_soon: '0',
       }
+    );
+  }
+
+  /** [Q1.5] Published Jobs List in Period */
+  private async queryPublishedJobsList(
+    companyId: number,
+    dateRange: DateRange,
+  ): Promise<RawPublishedJob[]> {
+    return this.dataSource.query<RawPublishedJob[]>(
+      `SELECT
+        id::text,
+        title,
+        status,
+        published_at::text
+      FROM job
+      WHERE company_id = $1
+        AND published_at BETWEEN $2 AND $3
+      ORDER BY published_at DESC`,
+      [companyId, dateRange.startDate, dateRange.endDate],
     );
   }
 
@@ -224,22 +285,23 @@ export class EmployerCompanyDashboardService {
     );
   }
 
-  /** [Q4] Application trend — GROUP BY DATE */
   private async queryTrend(
     companyId: number,
     dateRange: DateRange,
+    granularity: 'day' | 'month' | 'quarter',
   ): Promise<RawTrendRow[]> {
+    const formatStr = granularity === 'quarter' ? 'YYYY-MM' : 'YYYY-MM-DD';
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
-        TO_CHAR(ja.applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+        TO_CHAR(ja.applied_at AT TIME ZONE 'Asia/Ho_Chi_Minh', $4) AS date,
         COUNT(*)::text                                          AS count
       FROM job_application ja
       INNER JOIN job j ON j.id = ja.job_id
       WHERE j.company_id = $1
         AND ja.applied_at BETWEEN $2 AND $3
-      GROUP BY TO_CHAR(ja.applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+      GROUP BY date
       ORDER BY date ASC`,
-      [companyId, dateRange.startDate, dateRange.endDate],
+      [companyId, dateRange.startDate, dateRange.endDate, formatStr],
     );
   }
 
@@ -294,6 +356,50 @@ export class EmployerCompanyDashboardService {
         dateRange.endDate,
         DASHBOARD_CONFIG.TOP_JOBS_LIMIT,
       ],
+    );
+  }
+
+  /** [Q7] Applications List in Period */
+  private async queryApplicationsList(
+    companyId: number,
+    dateRange: DateRange,
+  ): Promise<RawAppDetail[]> {
+    return this.dataSource.query<RawAppDetail[]>(
+      `SELECT
+        ja.id::text,
+        c.full_name AS candidate_name,
+        j.title AS job_title,
+        ja.status,
+        ja.applied_at::text AS created_at
+      FROM job_application ja
+      INNER JOIN job j ON j.id = ja.job_id
+      INNER JOIN candidate c ON c.id = ja.candidate_id
+      WHERE j.company_id = $1
+        AND ja.applied_at BETWEEN $2 AND $3
+      ORDER BY ja.applied_at DESC`,
+      [companyId, dateRange.startDate, dateRange.endDate],
+    );
+  }
+
+  /** [Q8] Invitations List in Period */
+  private async queryInvitationsList(
+    employerId: number,
+    dateRange: DateRange,
+  ): Promise<RawInvitationDetail[]> {
+    return this.dataSource.query<RawInvitationDetail[]>(
+      `SELECT
+        ji.id::text,
+        c.full_name AS candidate_name,
+        j.title AS job_title,
+        ji.status,
+        ji.created_at::text AS created_at
+      FROM job_invitation ji
+      INNER JOIN job j ON j.id = ji.job_id
+      INNER JOIN candidate c ON c.id = ji.candidate_id
+      WHERE ji.employer_id = $1
+        AND ji.created_at BETWEEN $2 AND $3
+      ORDER BY ji.created_at DESC`,
+      [employerId, dateRange.startDate, dateRange.endDate],
     );
   }
 

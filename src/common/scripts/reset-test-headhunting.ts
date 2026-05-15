@@ -15,7 +15,9 @@ async function bootstrap() {
       await manager.query('DELETE FROM contact_unlock_log');
 
       // 2. Reset headhunting usage in subscriptions
-      console.log('Resetting headhunting_views_used in company_subscription...');
+      console.log(
+        'Resetting headhunting_views_used in company_subscription...',
+      );
       await manager.query(`
         UPDATE company_subscription 
         SET headhunting_views_used = 0, 

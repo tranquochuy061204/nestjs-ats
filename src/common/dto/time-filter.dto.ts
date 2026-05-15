@@ -8,7 +8,10 @@ const TimeFilterSchema = z
   .object({
     year: z.coerce.number().int().min(2020).max(2030).optional(),
     granularity: z.nativeEnum(TimeGranularity).optional(),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
     month: z.coerce.number().int().min(1).max(12).optional(),
     quarter: z.nativeEnum(Quarter).optional(),
   })
@@ -50,7 +53,10 @@ export class TimeFilterDto extends createZodDto(TimeFilterSchema) {
   @ApiPropertyOptional({ description: 'Tháng (1-12) cho MONTH' })
   month?: number;
 
-  @ApiPropertyOptional({ enum: Quarter, description: 'Quý (Q1-Q4) cho QUARTER' })
+  @ApiPropertyOptional({
+    enum: Quarter,
+    description: 'Quý (Q1-Q4) cho QUARTER',
+  })
   quarter?: Quarter;
 
   getDateRange(): DateRange | null {

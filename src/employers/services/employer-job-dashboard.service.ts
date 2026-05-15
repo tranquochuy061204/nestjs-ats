@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { EmployerEntity } from '../entities/employer.entity';
 import { JobEntity } from '../../jobs/entities/job.entity';
-import { DASHBOARD_CONFIG } from '../../common/constants/dashboard.constant';
+
 import { conversionRate, fillTrendDays } from '../utils/dashboard.util';
 import {
   RawAppStats,
@@ -16,7 +16,10 @@ import {
   RawFunnelStats,
   RawInvitationStats,
 } from '../interfaces/employer-dashboard.interface';
-import { DateRangeBuilder, DateRange } from '../../common/utils/date-range.util';
+import {
+  DateRangeBuilder,
+  DateRange,
+} from '../../common/utils/date-range.util';
 import { DashboardFilterDto } from '../dto/dashboard-filter.dto';
 
 @Injectable()
@@ -63,7 +66,7 @@ export class EmployerJobDashboardService {
     const [appStats, funnelStats, trendRows, invStats] = await Promise.all([
       this.queryAppStatsByJob(jobId, dateRange),
       this.queryFunnelStatsByJob(jobId, dateRange),
-      this.queryTrendByJob(jobId, dateRange),
+      this.queryTrendByJob(jobId, dateRange, dto?.granularity || 'day'),
       this.queryInvitationsByJob(jobId, dateRange),
     ]);
 
@@ -108,7 +111,7 @@ export class EmployerJobDashboardService {
           ),
         },
         trend: {
-          data: fillTrendDays(trendRows, dateRange),
+          data: fillTrendDays(trendRows, dateRange, dto?.granularity || 'day'),
         },
       },
       invitations: {
@@ -191,17 +194,19 @@ export class EmployerJobDashboardService {
   private async queryTrendByJob(
     jobId: number,
     dateRange: DateRange,
+    granularity: 'day' | 'month' | 'quarter',
   ): Promise<RawTrendRow[]> {
+    const formatStr = granularity === 'quarter' ? 'YYYY-MM' : 'YYYY-MM-DD';
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
-        TO_CHAR(applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+        TO_CHAR(applied_at AT TIME ZONE 'Asia/Ho_Chi_Minh', $4) AS date,
         COUNT(*)::text                                       AS count
       FROM job_application
       WHERE job_id = $1
         AND applied_at BETWEEN $2 AND $3
-      GROUP BY TO_CHAR(applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+      GROUP BY date
       ORDER BY date ASC`,
-      [jobId, dateRange.startDate, dateRange.endDate],
+      [jobId, dateRange.startDate, dateRange.endDate, formatStr],
     );
   }
 

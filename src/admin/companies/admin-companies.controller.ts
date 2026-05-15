@@ -88,6 +88,10 @@ export class AdminCompaniesController {
     @Body() dto: AdminAdjustCreditDto,
     @Req() req: Request,
   ) {
-    return this.adminCompaniesService.adjustCredit(id, dto, (req.user as any).id);
+    return this.adminCompaniesService.adjustCredit(
+      id,
+      dto,
+      (req.user as any).id,
+    );
   }
 }

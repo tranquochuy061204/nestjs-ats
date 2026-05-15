@@ -23,7 +23,9 @@ const UpdateSubscriptionPackageSchema = z.object({
   freeAiScoring: z.coerce.boolean().optional(),
 });
 
-export class UpdateSubscriptionPackageDto extends createZodDto(UpdateSubscriptionPackageSchema) {
+export class UpdateSubscriptionPackageDto extends createZodDto(
+  UpdateSubscriptionPackageSchema,
+) {
   @ApiPropertyOptional({ description: 'Tên hiển thị của gói' })
   displayName?: string;
 

@@ -6,6 +6,30 @@ export interface RawJobStats {
   closed: string;
   rejected: string;
   expiring_soon: string;
+  published_in_period: string;
+}
+
+export interface RawPublishedJob {
+  id: string;
+  title: string;
+  status: string;
+  published_at: string;
+}
+
+export interface RawAppDetail {
+  id: string;
+  candidate_name: string;
+  job_title: string;
+  status: string;
+  created_at: string;
+}
+
+export interface RawInvitationDetail {
+  id: string;
+  candidate_name: string;
+  job_title: string;
+  status: string;
+  created_at: string;
 }
 
 export interface RawAppStats {

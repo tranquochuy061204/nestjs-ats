@@ -28,7 +28,6 @@ export class EmployerCandidateMatchingService {
     private readonly searchService: CandidateSearchService,
   ) {}
 
-
   async getSuggestedCandidates(
     employerUserId: number,
     jobId: number,

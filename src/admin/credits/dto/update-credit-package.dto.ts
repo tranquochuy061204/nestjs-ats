@@ -10,7 +10,9 @@ const UpdateCreditPackageSchema = z.object({
   isActive: z.coerce.boolean().optional(),
 });
 
-export class UpdateCreditPackageDto extends createZodDto(UpdateCreditPackageSchema) {
+export class UpdateCreditPackageDto extends createZodDto(
+  UpdateCreditPackageSchema,
+) {
   @ApiPropertyOptional({ description: 'Tên hiển thị gói nạp' })
   displayName?: string;
 
@@ -23,7 +25,9 @@ export class UpdateCreditPackageDto extends createZodDto(UpdateCreditPackageSche
   @ApiPropertyOptional({ description: 'Giá VNĐ' })
   priceVnd?: number;
 
-  @ApiPropertyOptional({ description: 'false = ẩn khỏi trang mua của nhà tuyển dụng' })
+  @ApiPropertyOptional({
+    description: 'false = ẩn khỏi trang mua của nhà tuyển dụng',
+  })
   isActive?: boolean;
 }
 
@@ -31,8 +35,12 @@ const CreateCreditPackageSchema = UpdateCreditPackageSchema.extend({
   slug: z.string().min(1),
 });
 
-export class CreateCreditPackageDto extends createZodDto(CreateCreditPackageSchema) {
-  @ApiPropertyOptional({ description: 'Slug định danh duy nhất (ví dụ: pack_500)' })
+export class CreateCreditPackageDto extends createZodDto(
+  CreateCreditPackageSchema,
+) {
+  @ApiPropertyOptional({
+    description: 'Slug định danh duy nhất (ví dụ: pack_500)',
+  })
   slug: string;
 
   @ApiPropertyOptional({ description: 'Tên hiển thị gói nạp' })
@@ -47,6 +55,8 @@ export class CreateCreditPackageDto extends createZodDto(CreateCreditPackageSche
   @ApiPropertyOptional({ description: 'Giá VNĐ' })
   priceVnd?: number;
 
-  @ApiPropertyOptional({ description: 'false = ẩn khỏi trang mua của nhà tuyển dụng' })
+  @ApiPropertyOptional({
+    description: 'false = ẩn khỏi trang mua của nhà tuyển dụng',
+  })
   isActive?: boolean;
 }

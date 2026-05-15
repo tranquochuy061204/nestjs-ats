@@ -1,3 +1,4 @@
+import dayjs from 'dayjs';
 import { RawTrendRow } from '../interfaces/employer-dashboard.interface';
 import { DateRange } from '../../common/utils/date-range.util';
 
@@ -10,10 +11,10 @@ export function conversionRate(
   return Math.round((numerator / denominator) * 1000) / 10; // 1 decimal
 }
 
-/** Fill các ngày thiếu trong khoảng trend với count = 0 */
 export function fillTrendDays(
   rawRows: RawTrendRow[],
   daysOrRange: number | DateRange,
+  granularity: 'day' | 'month' | 'quarter' = 'day',
 ): { date: string; count: number }[] {
   let startDate: Date;
   let endDate: Date;
@@ -29,17 +30,33 @@ export function fillTrendDays(
     endDate = daysOrRange.endDate;
   }
 
+  const isMonthly = granularity === 'quarter';
+  const formatStr = isMonthly ? 'YYYY-MM' : 'YYYY-MM-DD';
+
   const map = new Map(
-    rawRows.map((r) => [String(r.date).slice(0, 10), parseInt(r.count, 10)]),
+    rawRows.map((r) => [
+      String(r.date).slice(0, isMonthly ? 7 : 10),
+      parseInt(r.count, 10),
+    ]),
   );
 
   const result: { date: string; count: number }[] = [];
-  const current = new Date(startDate);
+  let current = dayjs(startDate);
+  const end = dayjs(endDate);
 
-  while (current <= endDate) {
-    const dateStr = current.toISOString().slice(0, 10);
-    result.push({ date: dateStr, count: map.get(dateStr) ?? 0 });
-    current.setUTCDate(current.getUTCDate() + 1);
+  if (isMonthly) {
+    current = current.startOf('month');
+    while (current.isBefore(end, 'month') || current.isSame(end, 'month')) {
+      const dateStr = current.format(formatStr);
+      result.push({ date: dateStr, count: map.get(dateStr) ?? 0 });
+      current = current.add(1, 'month');
+    }
+  } else {
+    while (current.isBefore(end, 'day') || current.isSame(end, 'day')) {
+      const dateStr = current.format(formatStr);
+      result.push({ date: dateStr, count: map.get(dateStr) ?? 0 });
+      current = current.add(1, 'day');
+    }
   }
 
   return result;

@@ -56,7 +56,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     response.status(status).json({
       statusCode: status,
-      message: message === 'Internal server error' && exception instanceof Error ? exception.message : message,
+      message:
+        message === 'Internal server error' && exception instanceof Error
+          ? exception.message
+          : message,
       errors: errors,
       timestamp: new Date().toISOString(),
       path: request.url,

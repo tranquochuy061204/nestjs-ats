@@ -4,7 +4,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
 // Entities
-import { CompanyEntity } from '../../companies/entities/company.entity';
+import {
+  CompanyEntity,
+  CompanyStatus,
+} from '../../companies/entities/company.entity';
 import {
   CompanySubscriptionEntity,
   SubscriptionStatus,
@@ -73,7 +76,14 @@ export class AdminCompaniesService {
       .orderBy(sortCol, order);
 
     if (status) {
-      qb.andWhere('c.status = :status', { status });
+      if (status === CompanyStatus.PENDING) {
+        qb.andWhere(
+          '(c.status = :status OR (c.status = :idle AND c.businessLicenseUrl IS NOT NULL))',
+          { status, idle: CompanyStatus.IDLE },
+        );
+      } else {
+        qb.andWhere('c.status = :status', { status });
+      }
     }
 
     if (search) {

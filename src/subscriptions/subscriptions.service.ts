@@ -48,13 +48,23 @@ export class SubscriptionsService {
 
     const subscription = await subRepo.findOne({
       where: { companyId, status: SubscriptionStatus.ACTIVE },
-      relations: ['package'],
       order: { createdAt: 'DESC' },
       lock: manager ? { mode: 'pessimistic_write' } : undefined,
     });
 
     if (!subscription) {
       return this.assignFreePackage(companyId);
+    }
+
+    // Load package manually to prevent Postgres error: "FOR UPDATE cannot be applied to the nullable side of an outer join"
+    if (subscription.packageId) {
+      const pkg = await this.packageRepo.findOne({
+        where: { id: subscription.packageId },
+      });
+      if (!pkg) {
+        throw new Error('Subscription package not found');
+      }
+      subscription.package = pkg;
     }
 
     // Check xem VIP có hết hạn không

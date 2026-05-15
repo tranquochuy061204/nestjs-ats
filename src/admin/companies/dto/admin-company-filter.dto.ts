@@ -9,11 +9,16 @@ const AdminCompanyFilterSchema = z.object({
   status: z.nativeEnum(CompanyStatus).optional(),
   hasVip: z.coerce.boolean().optional(),
   search: z.string().optional(),
-  sortBy: z.enum(['createdAt', 'name', 'verifiedAt']).optional().default('createdAt'),
+  sortBy: z
+    .enum(['createdAt', 'name', 'verifiedAt'])
+    .optional()
+    .default('createdAt'),
   order: z.enum(['ASC', 'DESC']).optional().default('DESC'),
 });
 
-export class AdminCompanyFilterDto extends createZodDto(AdminCompanyFilterSchema) {
+export class AdminCompanyFilterDto extends createZodDto(
+  AdminCompanyFilterSchema,
+) {
   @ApiPropertyOptional({ default: 1 })
   page: number;
 

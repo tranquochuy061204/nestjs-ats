@@ -187,12 +187,16 @@ export class EmployerApplicationsService {
         this.profileViewRepo
           .createQueryBuilder('pv')
           .innerJoin('pv.job', 'job')
-          .where('job.company_id = :companyId', { companyId: employer.companyId })
+          .where('job.company_id = :companyId', {
+            companyId: employer.companyId,
+          })
           .getCount(),
         this.profileViewRepo
           .createQueryBuilder('pv')
           .innerJoin('pv.job', 'job')
-          .where('job.company_id = :companyId', { companyId: employer.companyId })
+          .where('job.company_id = :companyId', {
+            companyId: employer.companyId,
+          })
           .andWhere('pv.candidate_id = :candidateId', {
             candidateId: application.candidateId,
           })
