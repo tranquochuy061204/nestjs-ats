@@ -293,7 +293,7 @@ export class EmployerCompanyDashboardService {
     const formatStr = granularity === 'quarter' ? 'YYYY-MM' : 'YYYY-MM-DD';
     return this.dataSource.query<RawTrendRow[]>(
       `SELECT
-        TO_CHAR(ja.applied_at AT TIME ZONE 'Asia/Ho_Chi_Minh', $4) AS date,
+        TO_CHAR(ja.applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', $4) AS date,
         COUNT(*)::text                                          AS count
       FROM job_application ja
       INNER JOIN job j ON j.id = ja.job_id

@@ -127,10 +127,13 @@ export class AdminStatsService {
         .clone()
         .select('u.role', 'role')
         .addSelect('COUNT(*)', 'count')
-        .where('u.created_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
+        .where(
+          "(u.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') BETWEEN :start AND :end",
+          {
+            start: startDate,
+            end: endDate,
+          },
+        )
         .groupBy('u.role')
         .getRawMany<{ role: string; count: string }>(),
 
@@ -138,19 +141,25 @@ export class AdminStatsService {
         .clone()
         .select('u.status', 'status')
         .addSelect('COUNT(*)', 'count')
-        .where('u.created_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
+        .where(
+          "(u.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') BETWEEN :start AND :end",
+          {
+            start: startDate,
+            end: endDate,
+          },
+        )
         .groupBy('u.status')
         .getRawMany<{ status: string; count: string }>(),
 
       qb
         .clone()
-        .where('u.created_at BETWEEN :start AND :end', {
-          start: startDate,
-          end: endDate,
-        })
+        .where(
+          "(u.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') BETWEEN :start AND :end",
+          {
+            start: startDate,
+            end: endDate,
+          },
+        )
         .getCount(),
     ]);
 
@@ -164,10 +173,13 @@ export class AdminStatsService {
 
     const latestUsers = await qb
       .clone()
-      .where('u.created_at BETWEEN :start AND :end', {
-        start: startDate,
-        end: endDate,
-      })
+      .where(
+        "(u.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') BETWEEN :start AND :end",
+        {
+          start: startDate,
+          end: endDate,
+        },
+      )
       .orderBy('u.created_at', 'DESC')
       .limit(100)
       .getMany();
@@ -176,7 +188,7 @@ export class AdminStatsService {
       users.map((u) => ({
         type: 'users' as const,
         title: u.email,
-        subtitle: `Tham gia: ${u.created_at ? new Date(u.created_at).toLocaleDateString('vi-VN') : 'N/A'}`,
+        subtitle: `Tham gia: ${u.created_at ? new Date(u.created_at.getTime() + 7 * 60 * 60 * 1000).toLocaleDateString('vi-VN') : 'N/A'}`,
         valueNode: u.status === UserStatus.ACTIVE ? 'Hoạt động' : 'Bị khóa',
         subItems: [
           {
@@ -418,16 +430,27 @@ export class AdminStatsService {
 
     const rows = await this.paymentRepo
       .createQueryBuilder('p')
-      .select(`DATE_TRUNC('${trunc}', p.paid_at)`, 'period')
+      .select(
+        `DATE_TRUNC('${trunc}', p.paid_at AT TIME ZONE 'Asia/Ho_Chi_Minh')`,
+        'period',
+      )
       .addSelect('SUM(p.amount)', 'revenue')
       .addSelect('COUNT(*)', 'orders')
       .where('p.payment_status = :s', { s: PaymentOrderStatus.COMPLETED })
-      .andWhere('p.paid_at BETWEEN :from AND :to', {
-        from: startDate,
-        to: endDate,
-      })
-      .groupBy(`DATE_TRUNC('${trunc}', p.paid_at)`)
-      .orderBy(`DATE_TRUNC('${trunc}', p.paid_at)`, 'ASC')
+      .andWhere(
+        "(p.paid_at AT TIME ZONE 'Asia/Ho_Chi_Minh') BETWEEN :from AND :to",
+        {
+          from: startDate,
+          to: endDate,
+        },
+      )
+      .groupBy(
+        `DATE_TRUNC('${trunc}', p.paid_at AT TIME ZONE 'Asia/Ho_Chi_Minh')`,
+      )
+      .orderBy(
+        `DATE_TRUNC('${trunc}', p.paid_at AT TIME ZONE 'Asia/Ho_Chi_Minh')`,
+        'ASC',
+      )
       .getRawMany<{ period: string; revenue: string; orders: string }>();
 
     const getMapKey = (date: Date | string) => {
@@ -472,15 +495,26 @@ export class AdminStatsService {
 
     const rows = await this.userRepo
       .createQueryBuilder('u')
-      .select(`DATE_TRUNC('${trunc}', u.created_at)`, 'period')
+      .select(
+        `DATE_TRUNC('${trunc}', u.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')`,
+        'period',
+      )
       .addSelect('COUNT(*)', 'newUsers')
       .addSelect('u.role', 'role')
-      .where('u.created_at BETWEEN :from AND :to', {
-        from: startDate,
-        to: endDate,
-      })
-      .groupBy(`DATE_TRUNC('${trunc}', u.created_at), u.role`)
-      .orderBy(`DATE_TRUNC('${trunc}', u.created_at)`, 'ASC')
+      .where(
+        "(u.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') BETWEEN :from AND :to",
+        {
+          from: startDate,
+          to: endDate,
+        },
+      )
+      .groupBy(
+        `DATE_TRUNC('${trunc}', u.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), u.role`,
+      )
+      .orderBy(
+        `DATE_TRUNC('${trunc}', u.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')`,
+        'ASC',
+      )
       .getRawMany<{ period: string; newUsers: string; role: string }>();
 
     type GrowthPoint = {
