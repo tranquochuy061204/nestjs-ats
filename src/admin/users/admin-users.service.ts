@@ -52,7 +52,13 @@ export class AdminUsersService {
         'u.created_at',
       ])
       .leftJoin('u.employer', 'emp')
-      .addSelect(['emp.id', 'emp.fullName'])
+      .addSelect([
+        'emp.id',
+        'emp.fullName',
+        'emp.phoneContact',
+        'emp.avatarUrl',
+        'emp.isAdminCompany',
+      ])
       .leftJoin('emp.company', 'company')
       .addSelect(['company.id', 'company.name', 'company.status'])
       .leftJoin('u.candidate', 'cand')
@@ -79,24 +85,44 @@ export class AdminUsersService {
       .take(limit)
       .getManyAndCount();
 
+    const roleStats = await this.userRepo
+      .createQueryBuilder('u')
+      .select('u.role', 'role')
+      .addSelect('COUNT(u.id)::int', 'count')
+      .groupBy('u.role')
+      .getRawMany<{ role: UserRole; count: number }>();
+
+    const stats = {
+      total: roleStats.reduce((acc, curr) => acc + curr.count, 0),
+      candidates:
+        roleStats.find((r) => r.role === UserRole.CANDIDATE)?.count || 0,
+      employers:
+        roleStats.find((r) => r.role === UserRole.EMPLOYER)?.count || 0,
+    };
+
     return {
       data: data.map((u) => this.mapUserResponse(u)),
       pagination: buildPaginationMeta(total, page, limit),
+      stats,
     };
   }
 
   async getUserById(id: number) {
     const user = await this.userRepo.findOne({
       where: { id },
-      relations: ['employer', 'employer.company', 'candidate'],
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        status: true,
-        isEmailVerified: true,
-        created_at: true,
-      },
+      relations: [
+        'employer',
+        'employer.company',
+        'candidate',
+        'candidate.workExperiences',
+        'candidate.educations',
+        'candidate.skills',
+        'candidate.skills.skillMetadata',
+        'candidate.certificates',
+        'candidate.projects',
+      ],
+      // Remove select to fetch all joined columns or keep it minimal and add all candidate columns?
+      // It's easier to remove `select` so TypeORM fetches all columns of the joined entities.
     });
     if (!user) throw new NotFoundException('User not found');
     return this.mapUserResponse(user);
@@ -169,7 +195,12 @@ export class AdminUsersService {
 
     if (user.employer) {
       profile.type = 'employer';
+      profile.id = user.employer.id;
       profile.fullName = user.employer.fullName;
+      profile.phoneContact = user.employer.phoneContact;
+      profile.avatarUrl = user.employer.avatarUrl;
+      profile.isAdminCompany = user.employer.isAdminCompany;
+
       if (user.employer.company) {
         profile.companyId = user.employer.company.id;
         profile.companyName = user.employer.company.name;
@@ -177,7 +208,10 @@ export class AdminUsersService {
       }
     } else if (user.candidate) {
       profile.type = 'candidate';
-      profile.fullName = user.candidate.fullName;
+      profile.id = user.candidate.id;
+      // Copy all fields to support the candidate drawer
+      Object.assign(profile, user.candidate);
+      profile.contactUnlocked = true; // Admin views everything
     } else {
       profile.type = user.role; // admin
     }

@@ -21,7 +21,7 @@ import {
   CreditTransactionEntity,
   CreditTransactionType,
 } from '../../credits/entities/credit-transaction.entity';
-import { JobEntity } from '../../jobs/entities/job.entity';
+import { JobEntity, JobStatus } from '../../jobs/entities/job.entity';
 
 // DTOs
 import { AdminCompanyFilterDto } from './dto/admin-company-filter.dto';
@@ -114,14 +114,32 @@ export class AdminCompaniesService {
       }
     }
 
-    const [data, total] = await qb
+    const [items, total] = await qb
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
 
     return {
-      data,
+      data: items,
       pagination: buildPaginationMeta(total, page, limit),
+    };
+  }
+
+  async getAdminCompanyStats() {
+    const total = await this.companyRepo.count();
+
+    // Đếm các công ty có gói VIP đang active
+    const vip = await this.subscriptionRepo
+      .createQueryBuilder('cs')
+      .innerJoin('cs.package', 'p')
+      .where('cs.status = :status', { status: SubscriptionStatus.ACTIVE })
+      .andWhere("p.name = 'vip'")
+      .select('COUNT(DISTINCT cs.company_id)', 'count')
+      .getRawOne<{ count: string }>();
+
+    return {
+      total,
+      vip: parseInt(vip?.count || '0', 10),
     };
   }
 
@@ -131,7 +149,32 @@ export class AdminCompaniesService {
       relations: ['employers', 'images'],
     });
     if (!company) throw new NotFoundException('Company not found');
-    return company;
+
+    const [totalJobs, activeJobs, subscription, applicationsResult, wallet] =
+      await Promise.all([
+        this.jobRepo.count({ where: { companyId: id } }),
+        this.jobRepo.count({
+          where: { companyId: id, status: JobStatus.PUBLISHED },
+        }),
+        this.getCompanySubscription(id),
+        this.dataSource.query<{ count: string | number }[]>(
+          `SELECT COUNT(*)::int as count FROM job_application ja INNER JOIN job j ON j.id = ja.job_id WHERE j.company_id = $1`,
+          [id],
+        ),
+        this.walletRepo.findOne({ where: { companyId: id } }),
+      ]);
+
+    const stats = {
+      employeeCount: company.employers?.length || 0,
+      totalJobs,
+      activeJobs,
+      hasVip: !!subscription,
+      totalApplications: applicationsResult[0]?.count || 0,
+      creditSpent: wallet?.totalSpent || 0,
+      creditBalance: wallet?.balance || 0,
+    };
+
+    return { ...company, stats };
   }
 
   async getCompanySubscription(companyId: number) {

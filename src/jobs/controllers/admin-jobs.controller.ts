@@ -19,6 +19,13 @@ import { UserRole } from '../../users/entities/user.entity';
 export class AdminJobsController {
   constructor(private readonly adminJobsService: AdminJobsService) {}
 
+  @Get('stats')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Lấy thống kê tổng quan trạng thái tin tuyển dụng' })
+  getAdminJobStats() {
+    return this.adminJobsService.getAdminJobStats();
+  }
+
   @Get('all')
   @ApiAuth(UserRole.ADMIN)
   @ApiOperation({ summary: 'Lấy tất cả tin tuyển dụng trong hệ thống (Admin)' })

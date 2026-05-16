@@ -6,6 +6,11 @@ import { PAGINATION_DEFAULTS } from '../../common/constants/headhunting.constant
 import { VALIDATION_LIMITS } from '../../common/constants/validation.constant';
 import { Degree } from '../../common/enums/degree.enum';
 import { JobSortBy, SortOrder } from '../../common/enums/sort-order.enum';
+import { TimeGranularity, Quarter } from '../../common/enums/time-period.enum';
+import {
+  DateRange,
+  DateRangeBuilder,
+} from '../../common/utils/date-range.util';
 
 /** Coerce một query param thành number[] (hỗ trợ cả ?id=1&id=2 lẫn ?id=1,2) */
 const coerceNumberArray = () =>
@@ -81,6 +86,15 @@ const JobFilterSchema = z.object({
   sortOrder: z
     .enum(Object.values(SortOrder) as [SortOrder, ...SortOrder[]])
     .default(SortOrder.DESC),
+  // ─── Time Filtering ────────────────────────────────────────────────────────
+  year: z.coerce.number().int().min(2020).max(2030).optional(),
+  granularity: z.nativeEnum(TimeGranularity).optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  quarter: z.nativeEnum(Quarter).optional(),
 });
 
 export class JobFilterDto extends createZodDto(JobFilterSchema) {
@@ -160,4 +174,31 @@ export class JobFilterDto extends createZodDto(JobFilterSchema) {
     default: SortOrder.DESC,
   })
   sortOrder: SortOrder;
+  @ApiPropertyOptional({ description: 'Năm (2020-2030)' })
+  year?: number;
+
+  @ApiPropertyOptional({ enum: TimeGranularity, description: 'Độ chi tiết' })
+  granularity?: TimeGranularity;
+
+  @ApiPropertyOptional({ description: 'Ngày cụ thể (YYYY-MM-DD) cho DAY' })
+  date?: string;
+
+  @ApiPropertyOptional({ description: 'Tháng (1-12) cho MONTH' })
+  month?: number;
+
+  @ApiPropertyOptional({
+    enum: Quarter,
+    description: 'Quý (Q1-Q4) cho QUARTER',
+  })
+  quarter?: Quarter;
+
+  getDateRange(): DateRange | null {
+    if (!this.year || !this.granularity) return null;
+
+    return DateRangeBuilder.buildRange(
+      this.year,
+      this.granularity,
+      this.date || this.month || this.quarter,
+    );
+  }
 }

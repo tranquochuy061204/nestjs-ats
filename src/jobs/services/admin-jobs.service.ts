@@ -135,11 +135,67 @@ export class AdminJobsService {
       .leftJoinAndSelect('job.category', 'category');
 
     if (keyword) {
-      qb.andWhere('job.title ILIKE :keyword', { keyword: `%${keyword}%` });
+      qb.andWhere('(job.title ILIKE :keyword OR company.name ILIKE :keyword)', {
+        keyword: `%${keyword}%`,
+      });
     }
 
     if (status) {
       qb.andWhere('job.status = :status', { status });
+    }
+
+    if (filterDto.provinceId) {
+      qb.andWhere('job.province_id = :provinceId', {
+        provinceId: filterDto.provinceId,
+      });
+    }
+
+    if (filterDto.categoryId) {
+      qb.andWhere('job.category_id = :categoryId', {
+        categoryId: filterDto.categoryId,
+      });
+    }
+
+    if (filterDto.jobTypeId) {
+      qb.andWhere('job.job_type_id = :jobTypeId', {
+        jobTypeId: filterDto.jobTypeId,
+      });
+    }
+
+    if (filterDto.levelId) {
+      qb.andWhere('job.level_id = :levelId', { levelId: filterDto.levelId });
+    }
+
+    if (filterDto.requiredDegree) {
+      qb.andWhere('job.required_degree = :degree', {
+        degree: filterDto.requiredDegree,
+      });
+    }
+
+    if (filterDto.salaryMin) {
+      qb.andWhere('(job.salary_max >= :salaryMin OR job.hide_salary = true)', {
+        salaryMin: filterDto.salaryMin,
+      });
+    }
+
+    if (filterDto.salaryMax) {
+      qb.andWhere('(job.salary_min <= :salaryMax OR job.hide_salary = true)', {
+        salaryMax: filterDto.salaryMax,
+      });
+    }
+
+    if (filterDto.maxYearsRequired) {
+      qb.andWhere('job.years_of_experience <= :maxYears', {
+        maxYears: filterDto.maxYearsRequired,
+      });
+    }
+
+    const dateRange = filterDto.getDateRange?.();
+    if (dateRange) {
+      qb.andWhere('job.createdAt >= :startDate', {
+        startDate: dateRange.startDate,
+      });
+      qb.andWhere('job.createdAt <= :endDate', { endDate: dateRange.endDate });
     }
 
     qb.orderBy('job.createdAt', 'DESC');
@@ -194,5 +250,33 @@ export class AdminJobsService {
     });
 
     return { message: 'Đã đóng tin tuyển dụng' };
+  }
+
+  async getAdminJobStats() {
+    const qb = this.jobRepository.createQueryBuilder('job');
+
+    const [byStatus, total] = await Promise.all([
+      qb
+        .clone()
+        .select('job.status', 'status')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('job.status')
+        .getRawMany<{ status: string; count: string }>(),
+      qb.clone().getCount(),
+    ]);
+
+    const stats = byStatus.reduce((acc: Record<string, number>, curr) => {
+      acc[curr.status] = parseInt(curr.count, 10);
+      return acc;
+    }, {});
+
+    return {
+      total,
+      published: stats[JobStatus.PUBLISHED] || 0,
+      pending: stats[JobStatus.PENDING] || 0,
+      draft: stats[JobStatus.DRAFT] || 0,
+      rejected: stats[JobStatus.REJECTED] || 0,
+      closed: stats[JobStatus.CLOSED] || 0,
+    };
   }
 }

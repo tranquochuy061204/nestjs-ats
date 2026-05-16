@@ -35,6 +35,13 @@ export class AdminCompaniesController {
     return this.adminCompaniesService.getCompanies(filter);
   }
 
+  @Get('stats')
+  @ApiAuth(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Thống kê số lượng doanh nghiệp' })
+  getStats() {
+    return this.adminCompaniesService.getAdminCompanyStats();
+  }
+
   @Get(':id')
   @ApiAuth(UserRole.ADMIN)
   @ApiOperation({ summary: 'Chi tiết công ty' })

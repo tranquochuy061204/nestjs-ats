@@ -172,7 +172,29 @@ export class AdminVipService {
   // ─── Package Config ───────────────────────────────────────────────────────
 
   async getAllPackages() {
-    return this.packageRepo.find({ order: { price: 'ASC' } });
+    const packages = await this.packageRepo.find({ order: { price: 'ASC' } });
+
+    // Đếm số lượng công ty đang active cho từng gói
+    const stats = await this.subscriptionRepo
+      .createQueryBuilder('cs')
+      .select('cs.package_id', 'packageId')
+      .addSelect('COUNT(DISTINCT cs.company_id)', 'count')
+      .where('cs.status = :status', { status: SubscriptionStatus.ACTIVE })
+      .groupBy('cs.package_id')
+      .getRawMany<{ packageId: number; count: string }>();
+
+    const statsMap = stats.reduce(
+      (acc, curr) => {
+        acc[curr.packageId] = parseInt(curr.count, 10);
+        return acc;
+      },
+      {} as Record<number, number>,
+    );
+
+    return packages.map((pkg) => ({
+      ...pkg,
+      activeCompaniesCount: statsMap[pkg.id] || 0,
+    }));
   }
 
   async getPackageById(id: number) {
