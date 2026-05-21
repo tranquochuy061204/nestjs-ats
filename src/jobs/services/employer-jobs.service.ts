@@ -18,6 +18,8 @@ import { EmployerEntity } from '../../employers/entities/employer.entity';
 import { CompanyStatus } from '../../companies/entities/company.entity';
 import { getPaginatedResult } from '../../common/utils/pagination.util';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
+import { UpstashCacheService } from '../../common/cache/upstash-cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../common/cache/cache-keys.constant';
 
 @Injectable()
 export class EmployerJobsService {
@@ -32,6 +34,7 @@ export class EmployerJobsService {
     private readonly employersService: EmployersService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly dataSource: DataSource,
+    private readonly cacheService: UpstashCacheService,
   ) {}
 
   async createJob(employerUserId: number, createJobDto: CreateJobDto) {
@@ -94,6 +97,11 @@ export class EmployerJobsService {
         'Không thể tạo tin tuyển dụng. Vui lòng kiểm tra lại thông tin.',
       );
     }
+
+    // Invalidate danh sách job của employer này (tất cả filter variants)
+    await this.cacheService.delPattern(
+      CACHE_KEYS.EMPLOYER_JOBS_PATTERN(emp.companyId),
+    );
   }
 
   async updateJob(
@@ -269,6 +277,11 @@ export class EmployerJobsService {
       this.logger.error(e);
       throw new BadRequestException('Lỗi cập nhật. Vui lòng thử lại.');
     }
+
+    // Invalidate danh sách job sau khi cập nhật
+    await this.cacheService.delPattern(
+      CACHE_KEYS.EMPLOYER_JOBS_PATTERN(employer.companyId!),
+    );
   }
 
   async getEmployerJobs(employerUserId: number, filterDto: JobFilterDto) {
@@ -278,6 +291,17 @@ export class EmployerJobsService {
       return { data: [], total: 0, statusCounts: {} };
 
     const { page = 1, limit = 10, keyword, status } = filterDto;
+
+    // Cache key bao gồm companyId và hash của filter params
+    const filterHash = this.cacheService.hashKey({
+      page,
+      limit,
+      keyword,
+      status,
+    });
+    const cacheKey = CACHE_KEYS.EMPLOYER_JOBS(employer.companyId, filterHash);
+    const cached = await this.cacheService.get<unknown>(cacheKey);
+    if (cached) return cached;
 
     const baseWhere = { companyId: employer.companyId };
 
@@ -341,7 +365,10 @@ export class EmployerJobsService {
     qb.orderBy('job.createdAt', 'DESC');
 
     const paginated = await getPaginatedResult(qb, page, limit);
-    return { ...paginated, statusCounts };
+    const result = { ...paginated, statusCounts };
+
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.EMPLOYER_JOBS);
+    return result;
   }
 
   async getEmployerJobHistory(employerUserId: number, jobId: number) {

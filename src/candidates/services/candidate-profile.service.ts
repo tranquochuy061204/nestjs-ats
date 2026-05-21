@@ -12,6 +12,8 @@ import { CandidateJobCategoryEntity } from '../entities/candidate-job-category.e
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { STORAGE_PATHS } from '../../common/constants/storage-paths.constant';
 import { JobApplicationEntity } from '../../applications/entities/job-application.entity';
+import { UpstashCacheService } from '../../common/cache/upstash-cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../common/cache/cache-keys.constant';
 
 @Injectable()
 export class CandidateProfileService {
@@ -35,9 +37,14 @@ export class CandidateProfileService {
     @InjectRepository(JobApplicationEntity)
     private readonly jobApplicationRepository: Repository<JobApplicationEntity>,
     private readonly supabaseService: SupabaseService,
+    private readonly cacheService: UpstashCacheService,
   ) {}
 
   async getProfile(userId: number, reqCandidateId?: number) {
+    const cacheKey = CACHE_KEYS.CANDIDATE_PROFILE(userId);
+    const cached = await this.cacheService.get<CandidateEntity>(cacheKey);
+    if (cached) return cached;
+
     const qb = this.candidateRepository
       .createQueryBuilder('candidate')
       // Scalar relations (ManyToOne → single row join — very cheap)
@@ -65,6 +72,12 @@ export class CandidateProfileService {
       throw new NotFoundException('Candidate profile not found');
     }
 
+    await this.cacheService.set(
+      CACHE_KEYS.CANDIDATE_PROFILE(userId),
+      candidate,
+      CACHE_TTL.CANDIDATE_PROFILE,
+    );
+
     return candidate;
   }
 
@@ -76,7 +89,10 @@ export class CandidateProfileService {
     if (!candidate) throw new NotFoundException('Candidate profile not found');
 
     Object.assign(candidate, updateProfileDto);
-    return this.candidateRepository.save(candidate);
+    const saved = await this.candidateRepository.save(candidate);
+    // Invalidate cache sau khi cập nhật profile
+    await this.cacheService.del(CACHE_KEYS.CANDIDATE_PROFILE(userId));
+    return saved;
   }
 
   async updateVisibility(userId: number, isPublic: boolean) {
@@ -88,6 +104,8 @@ export class CandidateProfileService {
 
     candidate.isPublic = isPublic;
     await this.candidateRepository.save(candidate);
+    // Invalidate cache vì trạng thái public đã thay đổi
+    await this.cacheService.del(CACHE_KEYS.CANDIDATE_PROFILE(userId));
     return {
       message: isPublic ? 'Hồ sơ đã bật công khai' : 'Hồ sơ đã được ẩn',
       isPublic,

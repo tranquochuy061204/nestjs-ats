@@ -14,6 +14,8 @@ import { SubscriptionPackageEntity } from './entities/subscription-package.entit
 import { CreditPurchaseLogEntity } from '../credits/entities/credit-purchase-log.entity';
 import { ActiveSubscription } from './interfaces/subscriptions.interface';
 import { JobEntity, JobStatus } from '../jobs/entities/job.entity';
+import { UpstashCacheService } from '../common/cache/upstash-cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../common/cache/cache-keys.constant';
 
 @Injectable()
 export class SubscriptionsService {
@@ -29,6 +31,7 @@ export class SubscriptionsService {
     @InjectRepository(JobEntity)
     private readonly jobRepo: Repository<JobEntity>,
     private readonly dataSource: DataSource,
+    private readonly cacheService: UpstashCacheService,
   ) {}
 
   // ──────────────────────────────────────────────────────
@@ -39,6 +42,34 @@ export class SubscriptionsService {
    * Lấy subscription active của company. Tự động tạo Free nếu chưa có.
    */
   async getActiveSubscription(
+    companyId: number,
+    manager?: EntityManager,
+  ): Promise<ActiveSubscription> {
+    // Không cache khi chạy trong transaction (manager !== undefined)
+    // vì cần đọc row mới nhất với pessimistic lock
+    if (!manager) {
+      const cacheKey = CACHE_KEYS.SUB_ACTIVE(companyId);
+      const cached = await this.cacheService.get<ActiveSubscription>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    const result = await this._fetchActiveSubscription(companyId, manager);
+
+    if (!manager) {
+      await this.cacheService.set(
+        CACHE_KEYS.SUB_ACTIVE(companyId),
+        result,
+        CACHE_TTL.SUBSCRIPTION,
+      );
+    }
+
+    return result;
+  }
+
+  /** Inner fetch — always hits DB, used by cache wrapper and transactions */
+  private async _fetchActiveSubscription(
     companyId: number,
     manager?: EntityManager,
   ): Promise<ActiveSubscription> {
@@ -518,7 +549,10 @@ export class SubscriptionsService {
         proceedsResetAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
       });
 
-      return manager.save(CompanySubscriptionEntity, newSub);
+      const saved = await manager.save(CompanySubscriptionEntity, newSub);
+      // Invalidate cache sau khi VIP được kích hoạt
+      await this.cacheService.del(CACHE_KEYS.SUB_ACTIVE(companyId));
+      return saved;
     });
   }
 
@@ -560,6 +594,8 @@ export class SubscriptionsService {
       status: SubscriptionStatus.EXPIRED,
     });
     await this.assignFreePackage(expired.companyId);
+    // Invalidate cache vì subscription đã thay đổi (VIP → Free)
+    await this.cacheService.del(CACHE_KEYS.SUB_ACTIVE(expired.companyId));
     this.logger.log(
       `VIP expired for company ${expired.companyId}, fell back to Free`,
     );

@@ -6,15 +6,23 @@ import {
   CreateCreditPackageDto,
   UpdateCreditPackageDto,
 } from './dto/update-credit-package.dto';
+import { UpstashCacheService } from '../../common/cache/upstash-cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../common/cache/cache-keys.constant';
 
 @Injectable()
 export class AdminCreditsService {
   constructor(
     @InjectRepository(CreditPackageEntity)
     private readonly packageRepo: Repository<CreditPackageEntity>,
+    private readonly cacheService: UpstashCacheService,
   ) {}
 
   async getAllPackages() {
+    const cached = await this.cacheService.get<unknown[]>(
+      CACHE_KEYS.CREDIT_PACKAGES,
+    );
+    if (cached) return cached;
+
     const packages = await this.packageRepo.find({
       order: { priceVnd: 'ASC' },
     });
@@ -41,10 +49,17 @@ export class AdminCreditsService {
       {} as Record<string, number>,
     );
 
-    return packages.map((pkg) => ({
+    const result = packages.map((pkg) => ({
       ...pkg,
       purchasedCount: statsMap[pkg.slug] || 0,
     }));
+
+    await this.cacheService.set(
+      CACHE_KEYS.CREDIT_PACKAGES,
+      result,
+      CACHE_TTL.CREDIT_PACKAGES,
+    );
+    return result;
   }
 
   async getPackageById(id: number) {
@@ -56,16 +71,23 @@ export class AdminCreditsService {
   async updatePackage(id: number, dto: UpdateCreditPackageDto) {
     const pkg = await this.getPackageById(id);
     Object.assign(pkg, dto);
-    return this.packageRepo.save(pkg);
+    const saved = await this.packageRepo.save(pkg);
+    // Invalidate cache vì cấu hình gói đã thay đổi
+    await this.cacheService.del(CACHE_KEYS.CREDIT_PACKAGES);
+    return saved;
   }
 
   async createPackage(dto: CreateCreditPackageDto) {
     const pkg = this.packageRepo.create(dto);
-    return this.packageRepo.save(pkg);
+    const saved = await this.packageRepo.save(pkg);
+    await this.cacheService.del(CACHE_KEYS.CREDIT_PACKAGES);
+    return saved;
   }
 
   async deletePackage(id: number) {
     const pkg = await this.getPackageById(id);
-    return this.packageRepo.remove(pkg);
+    await this.packageRepo.remove(pkg);
+    await this.cacheService.del(CACHE_KEYS.CREDIT_PACKAGES);
+    return { message: `Credit package #${id} deleted` };
   }
 }

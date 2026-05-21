@@ -22,6 +22,8 @@ import { buildPaginationMeta } from '../dto/admin-pagination.dto';
 // Services
 import { AdminAuditLogsService } from '../audit-logs/admin-audit-logs.service';
 import { AuditLogAction } from '../audit-logs/entities/audit-log.entity';
+import { UpstashCacheService } from '../../common/cache/upstash-cache.service';
+import { CACHE_KEYS } from '../../common/cache/cache-keys.constant';
 
 @Injectable()
 export class AdminVipService {
@@ -31,6 +33,7 @@ export class AdminVipService {
     @InjectRepository(CompanySubscriptionEntity)
     private readonly subscriptionRepo: Repository<CompanySubscriptionEntity>,
     private readonly auditLogsService: AdminAuditLogsService,
+    private readonly cacheService: UpstashCacheService,
   ) {}
 
   // ─── Subscription List ────────────────────────────────────────────────────
@@ -165,6 +168,9 @@ export class AdminVipService {
       oldValues: { status: sub.status },
       newValues: { status: SubscriptionStatus.CANCELLED },
     });
+
+    // Invalidate cache của công ty vì subscription đã thay đổi
+    await this.cacheService.del(CACHE_KEYS.SUB_ACTIVE(sub.companyId));
 
     return { message: `Subscription #${id} đã được hủy` };
   }

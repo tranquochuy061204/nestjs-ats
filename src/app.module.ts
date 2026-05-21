@@ -36,6 +36,7 @@ import { StorageModule } from './storage/storage.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { MailModule } from './mail/mail.module';
 import { AiProviderModule } from './common/ai/ai-provider.module';
+import { CacheModule } from './common/cache/cache.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { AiProviderModule } from './common/ai/ai-provider.module';
     NotificationsModule,
     AiProviderModule,
     MailModule,
+    CacheModule,
 
     // Core Business
     AuthModule,

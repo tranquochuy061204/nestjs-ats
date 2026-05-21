@@ -31,6 +31,8 @@ import { buildPaginationMeta } from '../dto/admin-pagination.dto';
 // Services
 import { AdminAuditLogsService } from '../audit-logs/admin-audit-logs.service';
 import { AuditLogAction } from '../audit-logs/entities/audit-log.entity';
+import { UpstashCacheService } from '../../common/cache/upstash-cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../common/cache/cache-keys.constant';
 
 @Injectable()
 export class AdminCompaniesService {
@@ -49,6 +51,7 @@ export class AdminCompaniesService {
     private readonly jobRepo: Repository<JobEntity>,
     private readonly dataSource: DataSource,
     private readonly auditLogsService: AdminAuditLogsService,
+    private readonly cacheService: UpstashCacheService,
   ) {}
 
   async getCompanies(filter: AdminCompanyFilterDto) {
@@ -68,6 +71,12 @@ export class AdminCompaniesService {
       verifiedAt: 'c.verifiedAt',
     };
     const sortCol = sortColMap[sortBy] ?? 'c.createdAt';
+
+    // Xử lý cache
+    const filterHash = this.cacheService.hashKey(filter);
+    const cacheKey = CACHE_KEYS.ADMIN_COMPANIES(filterHash);
+    const cached = await this.cacheService.get<unknown>(cacheKey);
+    if (cached) return cached;
 
     const qb = this.companyRepo
       .createQueryBuilder('c')
@@ -119,13 +128,20 @@ export class AdminCompaniesService {
       .take(limit)
       .getManyAndCount();
 
-    return {
+    const result = {
       data: items,
       pagination: buildPaginationMeta(total, page, limit),
     };
+
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.ADMIN_COMPANIES);
+    return result;
   }
 
   async getAdminCompanyStats() {
+    const cacheKey = CACHE_KEYS.ADMIN_COMPANIES_STATS;
+    const cached = await this.cacheService.get<unknown>(cacheKey);
+    if (cached) return cached;
+
     const total = await this.companyRepo.count();
 
     // Đếm các công ty có gói VIP đang active
@@ -137,10 +153,13 @@ export class AdminCompaniesService {
       .select('COUNT(DISTINCT cs.company_id)', 'count')
       .getRawOne<{ count: string }>();
 
-    return {
+    const result = {
       total,
       vip: parseInt(vip?.count || '0', 10),
     };
+
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.ADMIN_COMPANIES);
+    return result;
   }
 
   async getCompanyById(id: number) {

@@ -10,7 +10,7 @@ const config: DataSourceOptions = {
   synchronize: false,
   migrationsRun: true,
   migrationsTableName: 'migrations',
-  logging: ['query', 'error'],
+  logging: ['error'],
   extra: {
     timezone: 'Asia/Ho_Chi_Minh',
   },

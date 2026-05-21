@@ -29,6 +29,8 @@ import {
 import { TimeFilterDto } from '../../common/dto/time-filter.dto';
 import { DateRangeBuilder } from '../../common/utils/date-range.util';
 import { TimeGranularity } from '../../common/enums/time-period.enum';
+import { UpstashCacheService } from '../../common/cache/upstash-cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../common/cache/cache-keys.constant';
 
 @Injectable()
 export class AdminStatsService {
@@ -49,6 +51,7 @@ export class AdminStatsService {
     private readonly walletRepo: Repository<CreditWalletEntity>,
     @InjectRepository(CompanySubscriptionEntity)
     private readonly subscriptionRepo: Repository<CompanySubscriptionEntity>,
+    private readonly cacheService: UpstashCacheService,
   ) {}
 
   async getOverview(timeFilter?: TimeFilterDto) {
@@ -61,6 +64,13 @@ export class AdminStatsService {
           )
         : DateRangeBuilder.getCurrentMonthRange();
     const { startDate, endDate } = dateRange;
+
+    // Cache key dựa trên filter params (TTL-only — dữ liệu analytics, không cần real-time)
+    const cacheKey = CACHE_KEYS.ADMIN_OVERVIEW(
+      this.cacheService.hashKey({ startDate, endDate }),
+    );
+    const cached = await this.cacheService.get<unknown>(cacheKey);
+    if (cached) return cached;
 
     const [
       users,
@@ -82,7 +92,7 @@ export class AdminStatsService {
       this.getPhase1Metrics(startDate, endDate),
     ]);
 
-    return {
+    const result = {
       users,
       companies,
       jobs,
@@ -115,6 +125,9 @@ export class AdminStatsService {
       phase1Metrics,
       period: { startDate, endDate },
     };
+
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.ADMIN_STATS);
+    return result;
   }
 
   // ─── User Stats ───────────────────────────────────────────────────────────

@@ -18,6 +18,8 @@ import { SupabaseService } from '../storage/supabase.service';
 import { MailService } from '../mail/mail.service';
 import { sanitizeFilename } from '../common/utils/string.util';
 import { generateVerificationToken } from '../common/utils/crypto.util';
+import { UpstashCacheService } from '../common/cache/upstash-cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../common/cache/cache-keys.constant';
 
 @Injectable()
 export class EmployersService {
@@ -32,6 +34,7 @@ export class EmployersService {
     private readonly dataSource: DataSource,
     private readonly supabaseService: SupabaseService,
     private readonly mailService: MailService,
+    private readonly cacheService: UpstashCacheService,
   ) {}
 
   async setupCompany(userId: number, dto: SetupCompanyDto) {
@@ -84,6 +87,10 @@ export class EmployersService {
   }
 
   async getProfile(userId: number) {
+    const cacheKey = CACHE_KEYS.EMPLOYER_PROFILE(userId);
+    const cached = await this.cacheService.get<EmployerEntity>(cacheKey);
+    if (cached) return cached;
+
     const employer = await this.employerRepo.findOne({
       where: { userId },
       relations: ['company'],
@@ -95,6 +102,7 @@ export class EmployersService {
       );
     }
 
+    await this.cacheService.set(cacheKey, employer, CACHE_TTL.EMPLOYER_PROFILE);
     return employer;
   }
 
@@ -108,6 +116,8 @@ export class EmployersService {
 
     Object.assign(employer, dto);
     await this.employerRepo.save(employer);
+    // Invalidate cache sau khi cập nhật
+    await this.cacheService.del(CACHE_KEYS.EMPLOYER_PROFILE(userId));
     return employer;
   }
 
@@ -137,6 +147,9 @@ export class EmployersService {
         ? `employers/avatars/${employer.avatarUrl.split('/').pop()}`
         : undefined,
     );
+
+    // Invalidate cache vì avatar URL đã thay đổi
+    await this.cacheService.del(CACHE_KEYS.EMPLOYER_PROFILE(userId));
 
     return {
       message: 'Cập nhật ảnh đại diện thành công',
@@ -333,6 +346,8 @@ export class EmployersService {
     member.companyId = null;
     member.isAdminCompany = false;
     await this.employerRepo.save(member);
+    // Invalidate cache của thành viên bị gỡ
+    await this.cacheService.del(CACHE_KEYS.EMPLOYER_PROFILE(member.userId));
 
     return { message: 'Đã gỡ thành viên khỏi công ty thành công' };
   }
